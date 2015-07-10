@@ -30,9 +30,13 @@ import (
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/client"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/fields"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/kubelet"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/kubelet/metrics"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/master/ports"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/util"
+	"github.com/GoogleCloudPlatform/kubernetes/test/e2e/cirbuf"
 	cadvisor "github.com/google/cadvisor/info/v1"
 )
 
@@ -234,9 +238,6 @@ type containerResourceUsage struct {
 // interval (and #containers) increases, the size of kubelet's response
 // could be sigificant. E.g., the 60s interval stats for ~20 containers is
 // ~1.5MB. Don't hammer the node with frequent, heavy requests.
-// TODO: Implement a constant, lightweight resource monitor, which polls
-// kubelet every few second, stores the data, and reports meaningful statistics
-// numbers over a longer period (e.g., max/mean cpu usage in the last hour).
 //
 // cadvisor records cumulative cpu usage in nanoseconds, so we need to have two
 // stats points to compute the cpu usage over the interval. Assuming cadvisor
@@ -267,14 +268,7 @@ func getOneTimeResourceUsageOnNode(c *client.Client, nodeName string, cpuInterva
 		}
 		first := info.Stats[0]
 		last := info.Stats[len(info.Stats)-1]
-		usageMap[name] = &containerResourceUsage{
-			Name:                    name,
-			Timestamp:               last.Timestamp,
-			CPUUsageInCores:         float64(last.Cpu.Usage.Total-first.Cpu.Usage.Total) / float64(last.Timestamp.Sub(first.Timestamp).Nanoseconds()),
-			MemoryUsageInBytes:      int64(last.Memory.Usage),
-			MemoryWorkingSetInBytes: int64(last.Memory.WorkingSet),
-			CPUInterval:             last.Timestamp.Sub(first.Timestamp),
-		}
+		usageMap[name] = computeContainerResourceUsage(name, first, last)
 	}
 	return usageMap, nil
 }
@@ -357,4 +351,167 @@ func GetKubeletPods(c *client.Client, node string) (*api.PodList, error) {
 		return &api.PodList{}, err
 	}
 	return result, nil
+}
+
+func computeContainerResourceUsage(name string, oldStats, newStats *cadvisor.ContainerStats) *containerResourceUsage {
+	return &containerResourceUsage{
+		Name:                    name,
+		Timestamp:               newStats.Timestamp,
+		CPUUsageInCores:         float64(newStats.Cpu.Usage.Total-oldStats.Cpu.Usage.Total) / float64(newStats.Timestamp.Sub(oldStats.Timestamp).Nanoseconds()),
+		MemoryUsageInBytes:      int64(newStats.Memory.Usage),
+		MemoryWorkingSetInBytes: int64(newStats.Memory.WorkingSet),
+		CPUInterval:             newStats.Timestamp.Sub(oldStats.Timestamp),
+	}
+}
+
+// resourceCollector periodically polls the node, collect stats for a given
+// list of containers, computes and cache resource usage up to
+// maxEntriesPerContainer for each container.
+type resourceCollector struct {
+	node            string
+	containers      []string
+	client          *client.Client
+	buffers         map[string]*cirbuf.CircularBuffer
+	pollingInterval time.Duration
+	stopCh          chan struct{}
+}
+
+func newResourceCollector(c *client.Client, nodeName string, containerNames []string, maxEntriesPerContainer int, pollingInterval time.Duration) *resourceCollector {
+	buffers := make(map[string]*cirbuf.CircularBuffer, 0)
+	for _, name := range containerNames {
+		buffers[name] = cirbuf.NewCircularBuffer(maxEntriesPerContainer)
+	}
+	return &resourceCollector{
+		node:            nodeName,
+		containers:      containerNames,
+		client:          c,
+		buffers:         buffers,
+		pollingInterval: pollingInterval,
+	}
+}
+
+// Start starts a goroutine to poll the node every pollingInerval.
+func (r *resourceCollector) Start() {
+	r.stopCh = make(chan struct{}, 1)
+	// Keep the last observed stats for comparison.
+	oldStats := make(map[string]*cadvisor.ContainerStats)
+	go util.Until(func() { r.collectStats(oldStats) }, r.pollingInterval, r.stopCh)
+}
+
+// Stop sends a signal to terminate the stats collecting goroutine.
+func (r *resourceCollector) Stop() {
+	close(r.stopCh)
+}
+
+// collectStats gets the latest stats from kubelet's /stats/container, computes
+// the resource usage, and pushes it to the buffer.
+func (r *resourceCollector) collectStats(oldStats map[string]*cadvisor.ContainerStats) {
+	infos, err := getContainerInfo(r.client, r.node, &kubelet.StatsRequest{
+		ContainerName: "/",
+		NumStats:      1,
+		Subcontainers: true,
+	})
+	if err != nil {
+		Logf("Error getting container info on %q, err: %v", r.node, err)
+		return
+	}
+	for _, name := range r.containers {
+		info, ok := infos[name]
+		if !ok || len(info.Stats) < 1 {
+			Logf("Missing info/stats for container %q on node %q", name, r.node)
+			return
+		}
+		if _, ok := oldStats[name]; ok {
+			r.buffers[name].Push(computeContainerResourceUsage(name, oldStats[name], info.Stats[0]))
+		}
+		oldStats[name] = info.Stats[0]
+	}
+}
+
+// LogLatest logs the latest resource usage of each container.
+func (r *resourceCollector) LogLatest() {
+	stats := make(map[string]*containerResourceUsage)
+	for _, name := range r.containers {
+		s := r.buffers[name].GetLatest()
+		if s == nil {
+			Logf("Resource usage on node %q is not ready yet", r.node)
+			return
+		}
+		stats[name] = s.(*containerResourceUsage)
+	}
+	Logf("\n%s", formatResourceUsageStats(r.node, stats))
+}
+
+// GetBasicCPUStats returns the min, max, and average of the cpu usage in cores
+// for containerName. This method examines all data currently in the buffer.
+func (r *resourceCollector) GetBasicCPUStats(containerName string) (float64, float64, float64) {
+	var min, max, sum float64
+	usages := r.buffers[containerName].List()
+	for i := range usages {
+		u := usages[i].(*containerResourceUsage)
+		sum += u.CPUUsageInCores
+		if i == 0 {
+			max = min
+			sum = min
+			continue
+		}
+		if u.CPUUsageInCores < min {
+			min = u.CPUUsageInCores
+		}
+		if u.CPUUsageInCores > max {
+			max = u.CPUUsageInCores
+		}
+	}
+	return min, max, sum / float64(len(usages))
+}
+
+// resourceMonitor manages a resourceCollector per node.
+type resourceMonitor struct {
+	client                 *client.Client
+	containers             []string
+	pollingInterval        time.Duration
+	maxEntriesPerContainer int
+	collectors             map[string]*resourceCollector
+}
+
+func newResourceMonitor(c *client.Client, containerNames []string, maxEntriesPerContainer int, pollingInterval time.Duration) *resourceMonitor {
+	return &resourceMonitor{
+		containers:             containerNames,
+		client:                 c,
+		pollingInterval:        pollingInterval,
+		maxEntriesPerContainer: maxEntriesPerContainer,
+	}
+}
+
+func (r *resourceMonitor) Start() {
+	nodes, err := r.client.Nodes().List(labels.Everything(), fields.Everything())
+	if err != nil {
+		Failf("resourceMonitor: unable to get list of nodes: %v", err)
+	}
+	r.collectors = make(map[string]*resourceCollector, 0)
+	for _, node := range nodes.Items {
+		collector := newResourceCollector(r.client, node.Name, r.containers, maxEntriesPerContainer, pollInterval)
+		r.collectors[node.Name] = collector
+		collector.Start()
+	}
+}
+
+func (r *resourceMonitor) Stop() {
+	for _, collector := range r.collectors {
+		collector.Stop()
+	}
+}
+
+func (r *resourceMonitor) LogLatest() {
+	for _, collector := range r.collectors {
+		collector.LogLatest()
+	}
+}
+
+func (r *resourceMonitor) LogCPUSummary(containerName string) {
+	for name, collector := range r.collectors {
+		min, max, avg := collector.GetBasicCPUStats(containerName)
+		Logf("cpu usage summary of container %q on node %q: min %.3f, max %.3f, avg %.3f",
+			containerName, name, min, max, avg)
+	}
 }

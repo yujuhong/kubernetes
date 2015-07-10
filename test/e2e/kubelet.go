@@ -34,8 +34,10 @@ import (
 const (
 	// Interval to poll /runningpods on a node
 	pollInterval = 1 * time.Second
-	// Interval used compute cpu usage of a container
-	cpuIntervalInSeconds = 60
+	// Interval to poll /stats/container on a node
+	containerStatsPollingInterval = 5 * time.Second
+	// Max resource usage entries per container
+	maxEntriesPerContainer = 100
 )
 
 // getPodMatches returns a set of pod names on the given node that matches the
@@ -91,6 +93,7 @@ var _ = Describe("Clean up pods on node", func() {
 	var numNodes int
 	var nodeNames util.StringSet
 	framework := NewFramework("kubelet-delete")
+	var resourceMonitor *resourceMonitor
 
 	BeforeEach(func() {
 		nodes, err := framework.Client.Nodes().List(labels.Everything(), fields.Everything())
@@ -100,7 +103,12 @@ var _ = Describe("Clean up pods on node", func() {
 		for _, node := range nodes.Items {
 			nodeNames.Insert(node.Name)
 		}
-		logOneTimeResourceUsageSummary(framework.Client, nodeNames.List(), cpuIntervalInSeconds)
+		resourceMonitor = newResourceMonitor(framework.Client, targetContainers, maxEntriesPerContainer, containerStatsPollingInterval)
+		resourceMonitor.Start()
+	})
+
+	AfterEach(func() {
+		resourceMonitor.Stop()
 	})
 
 	type DeleteTest struct {
@@ -117,7 +125,6 @@ var _ = Describe("Clean up pods on node", func() {
 			"kubelet should be able to delete %d pods per node in %v.", itArg.podsPerNode, itArg.timeout)
 		It(name, func() {
 			totalPods := itArg.podsPerNode * numNodes
-
 			By(fmt.Sprintf("Creating a RC of %d pods and wait until all pods of this RC are running", totalPods))
 			rcName := fmt.Sprintf("cleanup%d-%s", totalPods, string(util.NewUUID()))
 
@@ -134,7 +141,7 @@ var _ = Describe("Clean up pods on node", func() {
 			// transition to the running status.
 			Expect(waitTillNPodsRunningOnNodes(framework.Client, nodeNames, rcName, framework.Namespace.Name, totalPods,
 				time.Second*30)).NotTo(HaveOccurred())
-			logOneTimeResourceUsageSummary(framework.Client, nodeNames.List(), cpuIntervalInSeconds)
+			resourceMonitor.LogLatest()
 
 			By("Deleting the RC")
 			DeleteRC(framework.Client, framework.Namespace.Name, rcName)
@@ -150,6 +157,8 @@ var _ = Describe("Clean up pods on node", func() {
 				itArg.timeout)).NotTo(HaveOccurred())
 			Logf("Deleting %d pods on %d nodes completed in %v after the RC was deleted", totalPods, len(nodeNames),
 				time.Since(start))
+			resourceMonitor.LogLatest()
+			resourceMonitor.LogCPUSummary("/kubelet")
 		})
 	}
 })
