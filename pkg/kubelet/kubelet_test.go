@@ -45,6 +45,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/container"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/network"
+	"k8s.io/kubernetes/pkg/kubelet/pleg"
 	"k8s.io/kubernetes/pkg/runtime"
 	"k8s.io/kubernetes/pkg/types"
 	"k8s.io/kubernetes/pkg/util"
@@ -316,12 +317,12 @@ func TestSyncLoopTimeUpdate(t *testing.T) {
 		t.Errorf("Unexpected sync loop time: %s, expected 0", loopTime1)
 	}
 
-	kubelet.syncLoopIteration(make(chan PodUpdate), kubelet)
+	kubelet.syncLoopIteration(make(chan PodUpdate), kubelet, make(chan *pleg.PodLifecycleEvent))
 	loopTime2 := kubelet.LatestLoopEntryTime()
 	if loopTime2.IsZero() {
 		t.Errorf("Unexpected sync loop time: 0, expected non-zero value.")
 	}
-	kubelet.syncLoopIteration(make(chan PodUpdate), kubelet)
+	kubelet.syncLoopIteration(make(chan PodUpdate), kubelet, make(chan *pleg.PodLifecycleEvent))
 	loopTime3 := kubelet.LatestLoopEntryTime()
 	if !loopTime3.After(loopTime1) {
 		t.Errorf("Sync Loop Time was not updated correctly. Second update timestamp should be greater than first update timestamp")

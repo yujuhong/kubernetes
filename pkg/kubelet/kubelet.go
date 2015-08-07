@@ -35,6 +35,7 @@ import (
 
 	"github.com/golang/glog"
 	cadvisorApi "github.com/google/cadvisor/info/v1"
+
 	"k8s.io/kubernetes/pkg/api"
 	apierrors "k8s.io/kubernetes/pkg/api/errors"
 	"k8s.io/kubernetes/pkg/api/resource"
@@ -51,6 +52,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/envvars"
 	"k8s.io/kubernetes/pkg/kubelet/metrics"
 	"k8s.io/kubernetes/pkg/kubelet/network"
+	"k8s.io/kubernetes/pkg/kubelet/pleg"
 	"k8s.io/kubernetes/pkg/kubelet/rkt"
 	kubeletTypes "k8s.io/kubernetes/pkg/kubelet/types"
 	kubeletUtil "k8s.io/kubernetes/pkg/kubelet/util"
@@ -317,6 +319,8 @@ func NewMainKubelet(
 			dockerExecHandler,
 			oomAdjuster,
 			procFs)
+		klet.containerRuntimeName = "docker"
+		klet.pleg = pleg.NewDockerPLEG(pleg.NewCadvisorEventWatcher(cadvisorInterface), klet.containerRuntime.(*dockertools.DockerManager), 1000, time.Second*30)
 	case "rkt":
 		conf := &rkt.Config{
 			Path:               rktPath,
@@ -333,6 +337,7 @@ func NewMainKubelet(
 			return nil, err
 		}
 		klet.containerRuntime = rktRuntime
+		klet.containerRuntimeName = "rkt"
 
 		// No Docker daemon to put in a container.
 		dockerDaemonContainer = ""
@@ -499,6 +504,11 @@ type Kubelet struct {
 
 	// Container runtime.
 	containerRuntime kubecontainer.Runtime
+
+	// Name of the container runtime (e.g., "docker" or "rkt")
+	containerRuntimeName string
+
+	pleg pleg.PodLifecycleEventGenerator
 
 	// nodeStatusUpdateFrequency specifies how often kubelet posts node status to master.
 	// Note: be cautious when changing the constant, it must work with nodeMonitorGracePeriod
@@ -771,6 +781,8 @@ func (kl *Kubelet) Run(updates <-chan PodUpdate) {
 
 	// Run the system oom watcher forever.
 	kl.statusManager.Start()
+	// Start the pod lifecycle event generator.
+	kl.pleg.Start()
 	kl.syncLoop(updates, kl)
 }
 
@@ -1787,12 +1799,13 @@ func (kl *Kubelet) canAdmitPod(pods []*api.Pod, pod *api.Pod) (bool, string, str
 // state every sync-frequency seconds. Never returns.
 func (kl *Kubelet) syncLoop(updates <-chan PodUpdate, handler SyncHandler) {
 	glog.Info("Starting kubelet main sync loop.")
+	plegCh := kl.pleg.Watch()
 	for {
-		kl.syncLoopIteration(updates, handler)
+		kl.syncLoopIteration(updates, handler, plegCh)
 	}
 }
 
-func (kl *Kubelet) syncLoopIteration(updates <-chan PodUpdate, handler SyncHandler) {
+func (kl *Kubelet) syncLoopIteration(updates <-chan PodUpdate, handler SyncHandler, plegCh <-chan *pleg.PodLifecycleEvent) {
 	kl.syncLoopMonitor.Store(time.Now())
 	if !kl.containerRuntimeUp() {
 		time.Sleep(5 * time.Second)
@@ -1804,12 +1817,14 @@ func (kl *Kubelet) syncLoopIteration(updates <-chan PodUpdate, handler SyncHandl
 		glog.Infof("Skipping pod synchronization, network is not configured")
 		return
 	}
+
 	select {
 	case u, ok := <-updates:
 		if !ok {
 			glog.Errorf("Update channel is closed. Exiting the sync loop.")
 			return
 		}
+
 		switch u.Op {
 		case ADD:
 			glog.V(2).Infof("SyncLoop (ADD): %q", kubeletUtil.FormatPodNames(u.Pods))
@@ -1823,6 +1838,14 @@ func (kl *Kubelet) syncLoopIteration(updates <-chan PodUpdate, handler SyncHandl
 		case SET:
 			// TODO: Do we want to support this?
 			glog.Errorf("Kubelet does not support snapshot update")
+		}
+	case e := <-plegCh:
+		if pod, ok := kl.podManager.GetPodByUID(e.ID); ok {
+			glog.V(2).Infof("SyncLoop (PLEG): %q, event: %#v", kubeletUtil.FormatPodName(pod), e)
+			handler.HandlePodSyncs([]*api.Pod{pod})
+		} else {
+			// If the pod no longer exists, ignore the event.
+			glog.V(4).Infof("SyncLoop (PLEG): ignore irrelevant event: %#v", e)
 		}
 	case <-time.After(kl.resyncInterval):
 		// Periodically syncs all the pods and performs cleanup tasks.
