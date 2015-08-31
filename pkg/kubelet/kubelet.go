@@ -1852,6 +1852,11 @@ func (kl *Kubelet) syncLoopIteration(updates <-chan PodUpdate, handler SyncHandl
 			glog.Errorf("Kubelet does not support snapshot update")
 		}
 	case e := <-plegCh:
+		if e.Type == pleg.ContainerStarted || e.Type == pleg.NetworkSetupCompleted {
+			// Ignore "succeeded" events for now until pod workers can properly
+			// filter out their expectations.
+			break
+		}
 		if pod, ok := kl.podManager.GetPodByUID(e.ID); ok {
 			glog.V(2).Infof("SyncLoop (PLEG): %q, event: %#v", kubeletUtil.FormatPodName(pod), e)
 			handler.HandlePodSyncs([]*api.Pod{pod})
@@ -1861,6 +1866,11 @@ func (kl *Kubelet) syncLoopIteration(updates <-chan PodUpdate, handler SyncHandl
 		}
 	case <-time.After(kl.resyncInterval):
 		// Periodically syncs all the pods and performs cleanup tasks.
+		// We keep the periodic sync because some periodic tasks that pod
+		// worker does still rely on this trigger, e.g., probing and
+		// pastActiveDeadline. Once these two are handled properly, we can
+		// either disable periodic sync or set a much higher period (e.g., 1
+		// minute).
 		glog.V(4).Infof("SyncLoop (periodic sync)")
 		handler.HandlePodSyncs(kl.podManager.GetPods())
 		if err := handler.HandlePodCleanups(); err != nil {
