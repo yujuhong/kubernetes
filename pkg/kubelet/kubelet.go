@@ -92,6 +92,16 @@ const (
 
 	// system default DNS resolver configuration
 	ResolvConfDefault = "/etc/resolv.conf"
+
+	// Capacity of the channel for recieving pod lifecycle events. This number
+	// is a bit arbitrary and may be adjusted in the future.
+	plegChannelCapacity = 1000
+
+	// Relisting is used to discover missing container events.
+	plegRelistPeriod = time.Second * 30
+	// We use a shorter relist period for rkt for now because rkt relies solely
+	// on reslisting to discover events.
+	rktPLEGRelistPeriod = time.Second * 10
 )
 
 var (
@@ -320,7 +330,8 @@ func NewMainKubelet(
 			oomAdjuster,
 			procFs)
 		klet.containerRuntimeName = "docker"
-		klet.pleg = pleg.NewDockerPLEG(pleg.NewCadvisorEventWatcher(cadvisorInterface), klet.containerRuntime.(*dockertools.DockerManager), 1000, time.Second*30)
+		klet.pleg = pleg.NewDockerPLEG(pleg.NewCadvisorEventWatcher(cadvisorInterface), klet.containerRuntime.(*dockertools.DockerManager),
+			plegChannelCapacity, plegRelistPeriod)
 	case "rkt":
 		conf := &rkt.Config{
 			Path:               rktPath,
@@ -338,6 +349,7 @@ func NewMainKubelet(
 		}
 		klet.containerRuntime = rktRuntime
 		klet.containerRuntimeName = "rkt"
+		klet.pleg = pleg.NewGenericPLEG(klet.containerRuntime, plegChannelCapacity, rktPLEGRelistPeriod)
 
 		// No Docker daemon to put in a container.
 		dockerDaemonContainer = ""
