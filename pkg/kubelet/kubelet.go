@@ -1872,7 +1872,7 @@ func (kl *Kubelet) syncLoopIteration(updates <-chan PodUpdate, handler SyncHandl
 		// either disable periodic sync or set a much higher period (e.g., 1
 		// minute).
 		glog.V(4).Infof("SyncLoop (periodic sync)")
-		handler.HandlePodSyncs(kl.podManager.GetPods())
+		// handler.HandlePodSyncs(kl.podManager.GetPods())
 		if err := handler.HandlePodCleanups(); err != nil {
 			glog.Errorf("Failed cleaning pods: %v", err)
 		}
