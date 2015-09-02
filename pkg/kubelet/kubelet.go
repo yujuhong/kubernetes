@@ -1859,6 +1859,11 @@ func (kl *Kubelet) syncLoopIteration(updates <-chan PodUpdate, handler SyncHandl
 		}
 		if pod, ok := kl.podManager.GetPodByUID(e.ID); ok {
 			glog.V(2).Infof("SyncLoop (PLEG): %q, event: %#v", kubeletUtil.FormatPodName(pod), e)
+			// Force the container runtime cache to update.
+			err := kl.runtimeCache.ForceUpdateIfOlder(time.Now())
+			if err != nil {
+				glog.Errorf("SyncLoop: unable to update runtime cache")
+			}
 			handler.HandlePodSyncs([]*api.Pod{pod})
 		} else {
 			// If the pod no longer exists, ignore the event.

@@ -19,6 +19,8 @@ package container
 import (
 	"sync"
 	"time"
+
+	"github.com/golang/glog"
 )
 
 var (
@@ -93,6 +95,7 @@ func (r *runtimeCache) ForceUpdateIfOlder(minExpectedCacheTime time.Time) error 
 	r.Lock()
 	defer r.Unlock()
 	if r.cacheTime.Before(minExpectedCacheTime) {
+		glog.Infof("RCACHE: ForceUpdateIfOlder: cache timestamp:%v , minexpected: %v", r.cacheTime, minExpectedCacheTime)
 		return r.updateCache()
 	}
 	return nil
@@ -103,6 +106,7 @@ func (r *runtimeCache) updateCache() error {
 	if err != nil {
 		return err
 	}
+	glog.Infof("RCACHE: updateCache: Updating cache, new timestamp %v", timestamp)
 	r.writePodsIfNewer(pods, timestamp)
 	return nil
 }
@@ -119,6 +123,7 @@ func (r *runtimeCache) getPodsWithTimestamp() ([]*Pod, time.Time, error) {
 // cached ones.
 func (r *runtimeCache) writePodsIfNewer(pods []*Pod, timestamp time.Time) {
 	if timestamp.After(r.cacheTime) {
+		glog.Infof("RCACHE: writePodsIfNewer: Updating cache")
 		r.pods, r.cacheTime = pods, timestamp
 	}
 }

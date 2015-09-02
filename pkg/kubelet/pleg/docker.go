@@ -266,6 +266,21 @@ func (d *DockerPLEG) handleContainerStopped(e *ContainerEvent) {
 		glog.Errorf("DockerPLEG: Unable to examine container %q: %v", e.ID, err)
 		return
 	}
+
+	// DEBUGGING ONLY
+	pods, err := d.runtime.GetPods(false)
+	for _, p := range pods {
+		if p.ID == result.Pod.ID {
+			for _, c := range p.Containers {
+				if types.UID(e.ID) == c.ID {
+					glog.Errorf("DockerPLEG: dead container is still in docker ps %v", e.ID)
+				}
+				break
+			}
+			break
+		}
+	}
+
 	pod := result.Pod
 	container := result.Pod.Containers[0]
 	if result.IsInfraContainer {
