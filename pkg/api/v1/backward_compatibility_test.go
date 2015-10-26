@@ -154,7 +154,7 @@ func TestCompatibility_v1_PodSecurityContext(t *testing.T) {
 			},
 		},
 		{
-			name: "reseting defaults for pre-v1.1 mirror pods",
+			name: "not applying defaults for pre-v1.1 mirror pods",
 			input: `
 {
 	"kind":"Pod",
@@ -185,31 +185,68 @@ func TestCompatibility_v1_PodSecurityContext(t *testing.T) {
 			},
 		},
 		{
+			name: "restoring value for v1.1+ mirror pods",
+			input: `
+{
+	"kind":"Pod",
+	"apiVersion":"v1",
+	"metadata":{
+		"name":"my-pod-name",
+		"namespace":"my-pod-namespace",
+		"annotations": {
+			"kubernetes.io/config.mirror": "mirror"
+		}
+	},
+	"spec": {
+		"terminationGracePeriodSeconds": 90,
+		"containers":[{
+			"name":"a",
+			"image":"my-container-image",
+			"resources": {
+				"limits": {
+					"cpu": "300m"
+				},
+				"requests": {
+					"cpu": "200m"
+				}
+			}
+		}]
+	}
+}
+`,
+			expectedKeys: map[string]string{
+				"spec.terminationGracePeriodSeconds":    "90",
+				"spec.containers[0].resources.limits":   "map[cpu:300m]",
+				"spec.containers[0].resources.requests": "map[cpu:200m]",
+			},
+		},
+
+		{
 			name: "preserving defaults for v1.1+ mirror pods",
 			input: `
-		{
-			"kind":"Pod",
-			"apiVersion":"v1",
-			"metadata":{
-				"name":"my-pod-name",
-				"namespace":"my-pod-namespace",
-				"annotations": {
-					"kubernetes.io/config.mirror": "cbe924f710c7e26f7693d6a341bcfad0"
-				}
-			},
-			"spec": {
-				"containers":[{
-					"name":"a",
-					"image":"my-container-image",
-					"resources": {
-						"limits": {
-							"cpu": "100m"
-						}
-					}
-				}]
-			}
+{
+	"kind":"Pod",
+	"apiVersion":"v1",
+	"metadata":{
+		"name":"my-pod-name",
+		"namespace":"my-pod-namespace",
+		"annotations": {
+			"kubernetes.io/config.mirror": "cbe924f710c7e26f7693d6a341bcfad0"
 		}
-		`,
+	},
+	"spec": {
+		"containers":[{
+			"name":"a",
+			"image":"my-container-image",
+			"resources": {
+				"limits": {
+					"cpu": "100m"
+				}
+			}
+		}]
+	}
+}
+`,
 			expectedKeys: map[string]string{
 				"spec.terminationGracePeriodSeconds":    "30",
 				"spec.containers[0].resources.requests": "map[cpu:100m]",

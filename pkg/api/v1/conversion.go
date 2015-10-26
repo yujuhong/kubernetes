@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 
@@ -30,6 +31,9 @@ const (
 
 	// Value used to identify mirror pods from pre-v1.1 kubelet.
 	mirrorAnnotationValue_1_0 = "mirror"
+
+	// Annotation key used to store the serialized v1 pod.
+	annotationPod_1_0 = "conversion.v1.api.kubernetes.io/pod"
 )
 
 func addConversionFuncs() {
@@ -400,26 +404,49 @@ func convert_v1_PodSpec_To_api_PodSpec(in *PodSpec, out *api.PodSpec, s conversi
 	return nil
 }
 
+// TODO: Remove the custom conversion function after we drop support v1.0 kubelets.
 func convert_api_Pod_To_v1_Pod(in *api.Pod, out *Pod, s conversion.Scope) error {
 	if err := autoconvert_api_Pod_To_v1_Pod(in, out, s); err != nil {
 		return err
 	}
-	// We need to reset certain fields for mirror pods from pre-v1.1 kubelet
+	// We need to restore certain fields for mirror pods from pre-v1.1 kubelet
 	// (#15960).
-	// TODO: Remove this code after we drop support v1.0 kubelets.
 	if value, ok := in.Annotations[mirrorAnnotationKey]; ok && value == mirrorAnnotationValue_1_0 {
-		// Reset the TerminationGracePeriodSeconds.
-		out.Spec.TerminationGracePeriodSeconds = nil
-		// Reset the resource requests.
-		for i := range out.Spec.Containers {
-			out.Spec.Containers[i].Resources.Requests = nil
+		if s, ok := in.Annotations[annotationPod_1_0]; ok {
+			if !ok {
+				return fmt.Errorf("missing the original pod in the annotations for mirror pod %+v", in)
+			}
+			pod := &Pod{}
+			if err := json.Unmarshal([]byte(s), pod); err != nil {
+				return err
+			}
+			// Restore the TerminationGracePeriodSeconds.
+			out.Spec.TerminationGracePeriodSeconds = pod.Spec.TerminationGracePeriodSeconds
+			// Restore the resource requests.
+			for i := range out.Spec.Containers {
+				out.Spec.Containers[i].Resources.Requests = pod.Spec.Containers[i].Resources.Requests
+			}
 		}
 	}
 	return nil
 }
 
+// TODO: Remove the custom conversion function after we drop support v1.0 kubelets.
 func convert_v1_Pod_To_api_Pod(in *Pod, out *api.Pod, s conversion.Scope) error {
-	return autoconvert_v1_Pod_To_api_Pod(in, out, s)
+	// We need to store the original, versioend pod before applying defaults for
+	// mirror pods from pre-v1.1 kubelet (#15960).
+	if value, ok := in.Annotations[mirrorAnnotationKey]; ok && value == mirrorAnnotationValue_1_0 {
+		b, err := json.Marshal(in)
+		if err != nil {
+			return err
+		}
+		in.Annotations[annotationPod_1_0] = string(b)
+	}
+	if err := autoconvert_v1_Pod_To_api_Pod(in, out, s); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func convert_api_ServiceSpec_To_v1_ServiceSpec(in *api.ServiceSpec, out *ServiceSpec, s conversion.Scope) error {
