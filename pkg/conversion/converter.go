@@ -495,15 +495,6 @@ func (c *Converter) callCustom(sv, dv, custom reflect.Value, scope *scope) error
 // one is registered.
 func (c *Converter) convert(sv, dv reflect.Value, scope *scope) error {
 	dt, st := dv.Type(), sv.Type()
-	// Apply default values.
-	if fv, ok := c.defaultingFuncs[st]; ok {
-		if c.Debug != nil {
-			c.Debug.Logf("Applying defaults for '%v'", st)
-		}
-		args := []reflect.Value{sv.Addr()}
-		fv.Call(args)
-	}
-
 	// Convert sv to dv.
 	if fv, ok := c.conversionFuncs[typePair{st, dt}]; ok {
 		if c.Debug != nil {
