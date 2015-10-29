@@ -32,6 +32,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/cadvisor/events"
+	cadvisorApi "github.com/google/cadvisor/info/v1"
+	cadvisorApiv2 "github.com/google/cadvisor/info/v2"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/capabilities"
 	"k8s.io/kubernetes/pkg/client/chaosclient"
@@ -152,6 +155,9 @@ type KubeletServer struct {
 
 	// Pull images one at a time.
 	SerializeImagePulls bool
+
+	// Mock cadvisor (for debugging).
+	MockCadvisor bool
 }
 
 // bootstrapping interface for kubelet, targets the initialization protocol
@@ -329,6 +335,7 @@ func (s *KubeletServer) AddFlags(fs *pflag.FlagSet) {
 	fs.Float32Var(&s.KubeAPIQPS, "kube-api-qps", s.KubeAPIQPS, "QPS to use while talking with kubernetes apiserver")
 	fs.IntVar(&s.KubeAPIBurst, "kube-api-burst", s.KubeAPIBurst, "Burst to use while talking with kubernetes apiserver")
 	fs.BoolVar(&s.SerializeImagePulls, "serialize-image-pulls", s.SerializeImagePulls, "Pull images one at a time. We recommend *not* changing the default value on nodes that run docker daemon with version < 1.9 or an Aufs storage backend. Issue #10959 has more details. [default=true]")
+	fs.BoolVar(&s.MockCadvisor, "mock-cadvisor", s.MockCadvisor, "If true, mock cadvisor")
 }
 
 // UnsecuredKubeletConfig returns a KubeletConfig suitable for being run, or an error if the server setup
@@ -395,11 +402,42 @@ func (s *KubeletServer) UnsecuredKubeletConfig() (*KubeletConfig, error) {
 		manifestURLHeader.Set(pieces[0], pieces[1])
 	}
 
+	var ci cadvisor.Interface = nil
+	if s.MockCadvisor {
+		mockCadvisor := &cadvisor.Mock{}
+		mockCadvisor.On("Start").Return(nil)
+		mockCadvisor.On("WatchEvents").Return(&events.EventChannel{}, nil)
+		const mb = 1024 * 1024
+		mockCadvisor.On("MachineInfo").Return(&cadvisorApi.MachineInfo{
+			MachineID:      "123",
+			SystemUUID:     "abc",
+			BootID:         "1b3",
+			NumCores:       2,
+			MemoryCapacity: 4000 * mb,
+		}, nil)
+		mockCadvisor.On("VersionInfo").Return(&cadvisorApi.VersionInfo{
+			KernelVersion:      "3.16.0-0.bpo.4-amd64",
+			ContainerOsVersion: "Debian GNU/Linux 7 (wheezy)",
+			DockerVersion:      "1.5.0",
+		}, nil)
+		mockCadvisor.On("DockerImagesFsInfo").Return(cadvisorApiv2.FsInfo{
+			Usage:     400 * mb,
+			Capacity:  5000 * mb,
+			Available: 4600 * mb,
+		}, nil)
+		mockCadvisor.On("RootFsInfo").Return(cadvisorApiv2.FsInfo{
+			Usage:     100 * mb,
+			Capacity:  5000 * mb,
+			Available: 4900 * mb,
+		}, nil)
+		ci = mockCadvisor
+	}
+
 	return &KubeletConfig{
 		Address:                   s.Address,
 		AllowPrivileged:           s.AllowPrivileged,
 		Auth:                      nil, // default does not enforce auth[nz]
-		CAdvisorInterface:         nil, // launches background processes, not set here
+		CAdvisorInterface:         ci,
 		CgroupRoot:                s.CgroupRoot,
 		Cloud:                     nil, // cloud provider might start background processes
 		ClusterDNS:                s.ClusterDNS,
