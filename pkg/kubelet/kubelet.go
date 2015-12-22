@@ -1877,18 +1877,10 @@ func (kl *Kubelet) cleanupOrphanedVolumes(pods []*api.Pod, runningPods []*kubeco
 func (kl *Kubelet) cleanupTerminatedPods(pods []*api.Pod, runningPods []*kubecontainer.Pod) error {
 	var terminating []*api.Pod
 	for _, pod := range pods {
-		if pod.DeletionTimestamp != nil {
-			found := false
-			for _, runningPod := range runningPods {
-				if runningPod.ID == pod.UID {
-					found = true
-					break
-				}
-			}
-			if found {
-				glog.V(5).Infof("Keeping terminated pod %q, still running", format.Pod(pod))
-				continue
-			}
+		// Pod deletion timestamp is set and is already terminated. There should be
+		// no pod worker responsible for updating the status. Forcilbly trigger
+		// a status update and hence pod deletion for them.
+		if pod.DeletionTimestamp != nil && (pod.Status.Phase == api.PodFailed || pod.Status.Phase == api.PodSucceeded) {
 			terminating = append(terminating, pod)
 		}
 	}

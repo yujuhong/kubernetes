@@ -147,7 +147,7 @@ func (m *manager) SetPodStatus(pod *api.Pod, status api.PodStatus) {
 	m.podStatusesLock.Lock()
 	defer m.podStatusesLock.Unlock()
 
-	m.updateStatusInternal(pod, status)
+	m.updateStatusInternal(pod, status, false)
 }
 
 func (m *manager) SetContainerReadiness(pod *api.Pod, containerID kubecontainer.ContainerID, ready bool) {
@@ -206,7 +206,7 @@ func (m *manager) SetContainerReadiness(pod *api.Pod, containerID kubecontainer.
 		status.Conditions = append(status.Conditions, readyCondition)
 	}
 
-	m.updateStatusInternal(pod, status)
+	m.updateStatusInternal(pod, status, false)
 }
 
 func (m *manager) TerminatePods(pods []*api.Pod) bool {
@@ -214,12 +214,7 @@ func (m *manager) TerminatePods(pods []*api.Pod) bool {
 	m.podStatusesLock.Lock()
 	defer m.podStatusesLock.Unlock()
 	for _, pod := range pods {
-		for i := range pod.Status.ContainerStatuses {
-			pod.Status.ContainerStatuses[i].State = api.ContainerState{
-				Terminated: &api.ContainerStateTerminated{},
-			}
-		}
-		if sent := m.updateStatusInternal(pod, pod.Status); !sent {
+		if sent := m.updateStatusInternal(pod, api.PodStatus{}, true); !sent {
 			glog.V(4).Infof("Termination notice for %q was dropped because the status channel is full", format.Pod(pod))
 			allSent = false
 		}
@@ -230,7 +225,7 @@ func (m *manager) TerminatePods(pods []*api.Pod) bool {
 // updateStatusInternal updates the internal status cache, and queues an update to the api server if
 // necessary. Returns whether an update was triggered.
 // This method IS NOT THREAD SAFE and must be called from a locked function.
-func (m *manager) updateStatusInternal(pod *api.Pod, status api.PodStatus) bool {
+func (m *manager) updateStatusInternal(pod *api.Pod, status api.PodStatus, forceUpdate bool) bool {
 	var oldStatus api.PodStatus
 	cachedStatus, isCached := m.podStatuses[pod.UID]
 	if isCached {
@@ -241,31 +236,34 @@ func (m *manager) updateStatusInternal(pod *api.Pod, status api.PodStatus) bool 
 		oldStatus = pod.Status
 	}
 
-	// Set ReadyCondition.LastTransitionTime.
-	if readyCondition := api.GetPodReadyCondition(status); readyCondition != nil {
-		// Need to set LastTransitionTime.
-		lastTransitionTime := unversioned.Now()
-		oldReadyCondition := api.GetPodReadyCondition(oldStatus)
-		if oldReadyCondition != nil && readyCondition.Status == oldReadyCondition.Status {
-			lastTransitionTime = oldReadyCondition.LastTransitionTime
+	if forceUpdate {
+		status = oldStatus
+	} else {
+		// Set ReadyCondition.LastTransitionTime.
+		if readyCondition := api.GetPodReadyCondition(status); readyCondition != nil {
+			// Need to set LastTransitionTime.
+			lastTransitionTime := unversioned.Now()
+			oldReadyCondition := api.GetPodReadyCondition(oldStatus)
+			if oldReadyCondition != nil && readyCondition.Status == oldReadyCondition.Status {
+				lastTransitionTime = oldReadyCondition.LastTransitionTime
+			}
+			readyCondition.LastTransitionTime = lastTransitionTime
 		}
-		readyCondition.LastTransitionTime = lastTransitionTime
-	}
 
-	// ensure that the start time does not change across updates.
-	if oldStatus.StartTime != nil && !oldStatus.StartTime.IsZero() {
-		status.StartTime = oldStatus.StartTime
-	} else if status.StartTime.IsZero() {
-		// if the status has no start time, we need to set an initial time
-		now := unversioned.Now()
-		status.StartTime = &now
-	}
-
-	// The intent here is to prevent concurrent updates to a pod's status from
-	// clobbering each other so the phase of a pod progresses monotonically.
-	if isCached && isStatusEqual(&cachedStatus.status, &status) && pod.DeletionTimestamp == nil {
-		glog.V(3).Infof("Ignoring same status for pod %q, status: %+v", format.Pod(pod), status)
-		return false // No new status.
+		// ensure that the start time does not change across updates.
+		if oldStatus.StartTime != nil && !oldStatus.StartTime.IsZero() {
+			status.StartTime = oldStatus.StartTime
+		} else if status.StartTime.IsZero() {
+			// if the status has no start time, we need to set an initial time
+			now := unversioned.Now()
+			status.StartTime = &now
+		}
+		// The intent here is to prevent concurrent updates to a pod's status from
+		// clobbering each other so the phase of a pod progresses monotonically.
+		if isCached && isStatusEqual(&cachedStatus.status, &status) {
+			glog.V(3).Infof("Ignoring same status for pod %q, status: %+v", format.Pod(pod), status)
+			return false // No new status.
+		}
 	}
 
 	newStatus := versionedPodStatus{
