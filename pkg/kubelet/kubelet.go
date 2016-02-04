@@ -441,7 +441,9 @@ func NewMainKubelet(
 		klet.livenessManager,
 		klet.runner,
 		containerRefManager,
-		recorder)
+		recorder,
+		klet.podCache,
+	)
 
 	if err := klet.volumePluginMgr.InitPlugins(volumePlugins, &volumeHost{klet}); err != nil {
 		return nil, err
@@ -2056,7 +2058,6 @@ func (kl *Kubelet) HandlePodCleanups() error {
 	// Stop the workers for no-longer existing pods.
 	// TODO: is here the best place to forget pod workers?
 	kl.podWorkers.ForgetNonExistingPodWorkers(desiredPods)
-	kl.probeManager.CleanupPods(activePods)
 
 	runningPods, err := kl.runtimeCache.GetPods()
 	if err != nil {
@@ -2328,6 +2329,23 @@ func (kl *Kubelet) syncLoopIteration(updates <-chan kubetypes.PodUpdate, handler
 			// runtime can be updated?
 		}
 		handler.HandlePodSyncs([]*api.Pod{pod})
+
+		switch e.Type {
+		case pleg.ContainerStarted:
+			c, ok := e.Data.(*kubecontainer.Container)
+			if !ok {
+				glog.Errorf("Unable to get container from event %+v", e)
+				break
+			}
+			kl.probeManager.AddPod(pod, c)
+		case pleg.ContainerDied:
+			c, ok := e.Data.(*kubecontainer.Container)
+			if !ok {
+				glog.Errorf("Unable to get container from event %+v", e)
+				break
+			}
+			kl.probeManager.RemovePod(pod, c)
+		}
 	case <-syncCh:
 		podsToSync := kl.getPodsToSync()
 		if len(podsToSync) == 0 {
@@ -2403,7 +2421,6 @@ func (kl *Kubelet) HandlePodAdditions(pods []*api.Pod) {
 		}
 		mirrorPod, _ := kl.podManager.GetMirrorPodByPod(pod)
 		kl.dispatchWork(pod, kubetypes.SyncPodCreate, mirrorPod, start)
-		kl.probeManager.AddPod(pod)
 	}
 }
 
@@ -2435,7 +2452,6 @@ func (kl *Kubelet) HandlePodDeletions(pods []*api.Pod) {
 		if err := kl.deletePod(pod); err != nil {
 			glog.V(2).Infof("Failed to delete pod %q, err: %v", format.Pod(pod), err)
 		}
-		kl.probeManager.RemovePod(pod)
 	}
 }
 

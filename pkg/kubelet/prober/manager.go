@@ -28,7 +28,6 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/util/format"
 	"k8s.io/kubernetes/pkg/types"
 	"k8s.io/kubernetes/pkg/util"
-	"k8s.io/kubernetes/pkg/util/sets"
 )
 
 // Manager manages pod probing. It creates a probe "worker" for every container that specifies a
@@ -39,15 +38,12 @@ import (
 type Manager interface {
 	// AddPod creates new probe workers for every container probe. This should be called for every
 	// pod created.
-	AddPod(pod *api.Pod)
+
+	AddPod(pod *api.Pod, container *kubecontainer.Container)
 
 	// RemovePod handles cleaning up the removed pod state, including terminating probe workers and
 	// deleting cached results.
-	RemovePod(pod *api.Pod)
-
-	// CleanupPods handles cleaning up pods which should no longer be running.
-	// It takes a list of "active pods" which should not be cleaned up.
-	CleanupPods(activePods []*api.Pod)
+	RemovePod(pod *api.Pod, container *kubecontainer.Container)
 
 	// UpdatePodStatus modifies the given PodStatus with the appropriate Ready state for each
 	// container based on container running status, cached probe results and worker states.
@@ -63,7 +59,7 @@ type manager struct {
 	// Lock for accessing & mutating workers
 	workerLock sync.RWMutex
 
-	// The statusManager cache provides pod IP and container IDs for probing.
+	// The statusManager is required to set the readiness of a container.
 	statusManager status.Manager
 
 	// readinessManager manages the results of readiness probes
@@ -74,6 +70,9 @@ type manager struct {
 
 	// prober executes the probe actions.
 	prober *prober
+
+	// runtimeCache provides the internal pod status for pod IP.
+	runtimeCache kubecontainer.Cache
 }
 
 func NewManager(
@@ -81,7 +80,9 @@ func NewManager(
 	livenessManager results.Manager,
 	runner kubecontainer.ContainerCommandRunner,
 	refManager *kubecontainer.RefManager,
-	recorder record.EventRecorder) Manager {
+	recorder record.EventRecorder,
+	cache kubecontainer.Cache,
+) Manager {
 
 	prober := newProber(runner, refManager, recorder)
 	readinessManager := results.NewManager()
@@ -91,6 +92,7 @@ func NewManager(
 		readinessManager: readinessManager,
 		livenessManager:  livenessManager,
 		workers:          make(map[probeKey]*worker),
+		runtimeCache:     cache,
 	}
 }
 
@@ -127,14 +129,15 @@ func (t probeType) String() string {
 	}
 }
 
-func (m *manager) AddPod(pod *api.Pod) {
+func (m *manager) AddPod(pod *api.Pod, container *kubecontainer.Container) {
 	m.workerLock.Lock()
 	defer m.workerLock.Unlock()
 
-	key := probeKey{podUID: pod.UID}
+	key := probeKey{podUID: pod.UID, containerName: container.Name}
 	for _, c := range pod.Spec.Containers {
-		key.containerName = c.Name
-
+		if c.Name != container.Name {
+			continue
+		}
 		if c.ReadinessProbe != nil {
 			key.probeType = readiness
 			if _, ok := m.workers[key]; ok {
@@ -142,11 +145,10 @@ func (m *manager) AddPod(pod *api.Pod) {
 					format.Pod(pod), c.Name)
 				return
 			}
-			w := newWorker(m, readiness, pod, c)
+			w := newWorker(m, readiness, pod, c, container.ID)
 			m.workers[key] = w
 			go w.run()
 		}
-
 		if c.LivenessProbe != nil {
 			key.probeType = liveness
 			if _, ok := m.workers[key]; ok {
@@ -154,40 +156,22 @@ func (m *manager) AddPod(pod *api.Pod) {
 					format.Pod(pod), c.Name)
 				return
 			}
-			w := newWorker(m, liveness, pod, c)
+			w := newWorker(m, liveness, pod, c, container.ID)
 			m.workers[key] = w
 			go w.run()
 		}
+		break
 	}
 }
 
-func (m *manager) RemovePod(pod *api.Pod) {
+func (m *manager) RemovePod(pod *api.Pod, container *kubecontainer.Container) {
 	m.workerLock.RLock()
 	defer m.workerLock.RUnlock()
 
-	key := probeKey{podUID: pod.UID}
-	for _, c := range pod.Spec.Containers {
-		key.containerName = c.Name
-		for _, probeType := range [...]probeType{readiness, liveness} {
-			key.probeType = probeType
-			if worker, ok := m.workers[key]; ok {
-				close(worker.stop)
-			}
-		}
-	}
-}
-
-func (m *manager) CleanupPods(activePods []*api.Pod) {
-	desiredPods := make(map[types.UID]sets.Empty)
-	for _, pod := range activePods {
-		desiredPods[pod.UID] = sets.Empty{}
-	}
-
-	m.workerLock.RLock()
-	defer m.workerLock.RUnlock()
-
-	for key, worker := range m.workers {
-		if _, ok := desiredPods[key.podUID]; !ok {
+	key := probeKey{podUID: pod.UID, containerName: container.Name}
+	for _, probeType := range [...]probeType{readiness, liveness} {
+		key.probeType = probeType
+		if worker, ok := m.workers[key]; ok {
 			close(worker.stop)
 		}
 	}

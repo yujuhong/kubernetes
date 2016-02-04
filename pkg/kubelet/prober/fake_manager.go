@@ -18,6 +18,7 @@ package prober
 
 import (
 	"k8s.io/kubernetes/pkg/api"
+	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/types"
 )
 
@@ -26,10 +27,9 @@ type FakeManager struct{}
 var _ Manager = FakeManager{}
 
 // Unused methods.
-func (_ FakeManager) AddPod(_ *api.Pod)        {}
-func (_ FakeManager) RemovePod(_ *api.Pod)     {}
-func (_ FakeManager) CleanupPods(_ []*api.Pod) {}
-func (_ FakeManager) Start()                   {}
+func (_ FakeManager) AddPod(_ *api.Pod, _ *kubecontainer.Container)    {}
+func (_ FakeManager) RemovePod(_ *api.Pod, _ *kubecontainer.Container) {}
+func (_ FakeManager) Start()                                           {}
 
 func (_ FakeManager) UpdatePodStatus(_ types.UID, podStatus *api.PodStatus) {
 	for i := range podStatus.ContainerStatuses {

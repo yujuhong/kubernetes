@@ -70,7 +70,7 @@ func newProber(
 }
 
 // probe probes the container.
-func (pb *prober) probe(probeType probeType, pod *api.Pod, status api.PodStatus, container api.Container, containerID kubecontainer.ContainerID) (results.Result, error) {
+func (pb *prober) probe(probeType probeType, pod *api.Pod, status kubecontainer.PodStatus, container api.Container, containerID kubecontainer.ContainerID) (results.Result, error) {
 	var probeSpec *api.Probe
 	switch probeType {
 	case readiness:
@@ -113,7 +113,7 @@ func (pb *prober) probe(probeType probeType, pod *api.Pod, status api.PodStatus,
 
 // runProbeWithRetries tries to probe the container in a finite loop, it returns the last result
 // if it never succeeds.
-func (pb *prober) runProbeWithRetries(p *api.Probe, pod *api.Pod, status api.PodStatus, container api.Container, containerID kubecontainer.ContainerID, retries int) (probe.Result, string, error) {
+func (pb *prober) runProbeWithRetries(p *api.Probe, pod *api.Pod, status kubecontainer.PodStatus, container api.Container, containerID kubecontainer.ContainerID, retries int) (probe.Result, string, error) {
 	var err error
 	var result probe.Result
 	var output string
@@ -126,7 +126,7 @@ func (pb *prober) runProbeWithRetries(p *api.Probe, pod *api.Pod, status api.Pod
 	return result, output, err
 }
 
-func (pb *prober) runProbe(p *api.Probe, pod *api.Pod, status api.PodStatus, container api.Container, containerID kubecontainer.ContainerID) (probe.Result, string, error) {
+func (pb *prober) runProbe(p *api.Probe, pod *api.Pod, status kubecontainer.PodStatus, container api.Container, containerID kubecontainer.ContainerID) (probe.Result, string, error) {
 	timeout := time.Duration(p.TimeoutSeconds) * time.Second
 	if p.Exec != nil {
 		glog.V(4).Infof("Exec-Probe Pod: %v, Container: %v, Command: %v", pod, container, p.Exec.Command)
@@ -136,7 +136,7 @@ func (pb *prober) runProbe(p *api.Probe, pod *api.Pod, status api.PodStatus, con
 		scheme := strings.ToLower(string(p.HTTPGet.Scheme))
 		host := p.HTTPGet.Host
 		if host == "" {
-			host = status.PodIP
+			host = status.IP
 		}
 		port, err := extractPort(p.HTTPGet.Port, container)
 		if err != nil {
@@ -152,8 +152,8 @@ func (pb *prober) runProbe(p *api.Probe, pod *api.Pod, status api.PodStatus, con
 		if err != nil {
 			return probe.Unknown, "", err
 		}
-		glog.V(4).Infof("TCP-Probe PodIP: %v, Port: %v, Timeout: %v", status.PodIP, port, timeout)
-		return pb.tcp.Probe(status.PodIP, port, timeout)
+		glog.V(4).Infof("TCP-Probe PodIP: %v, Port: %v, Timeout: %v", status.IP, port, timeout)
+		return pb.tcp.Probe(status.IP, port, timeout)
 	}
 	glog.Warningf("Failed to find probe builder for container: %v", container)
 	return probe.Unknown, "", fmt.Errorf("Missing probe handler for %s:%s", format.Pod(pod), container.Name)

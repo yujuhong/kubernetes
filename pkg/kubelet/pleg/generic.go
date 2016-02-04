@@ -113,16 +113,16 @@ func (g *GenericPLEG) Start() {
 	go util.Until(g.relist, g.relistPeriod, util.NeverStop)
 }
 
-func generateEvent(podID types.UID, cid string, oldState, newState plegContainerState) *PodLifecycleEvent {
-	glog.V(7).Infof("GenericPLEG: %v/%v: %v -> %v", podID, cid, oldState, newState)
+func generateEvent(podID types.UID, container *kubecontainer.Container, oldState, newState plegContainerState) *PodLifecycleEvent {
+	glog.V(7).Infof("GenericPLEG: %v/%v: %v -> %v", podID, container.ID.ID, oldState, newState)
 	if newState == oldState {
 		return nil
 	}
 	switch newState {
 	case plegContainerRunning:
-		return &PodLifecycleEvent{ID: podID, Type: ContainerStarted, Data: cid}
+		return &PodLifecycleEvent{ID: podID, Type: ContainerStarted, Data: container}
 	case plegContainerExited:
-		return &PodLifecycleEvent{ID: podID, Type: ContainerDied, Data: cid}
+		return &PodLifecycleEvent{ID: podID, Type: ContainerDied, Data: container}
 	case plegContainerUnknown:
 		// Don't generate any event if the status is unknown.
 		return nil
@@ -135,7 +135,7 @@ func generateEvent(podID types.UID, cid string, oldState, newState plegContainer
 			// need to do it again.
 			return nil
 		default:
-			return &PodLifecycleEvent{ID: podID, Type: ContainerDied, Data: cid}
+			return &PodLifecycleEvent{ID: podID, Type: ContainerDied, Data: container}
 		}
 	default:
 		panic(fmt.Sprintf("unrecognized container state: %v", newState))
@@ -177,7 +177,7 @@ func (g *GenericPLEG) relist() {
 		// Get all containers in the old and the new pod.
 		allContainers := getContainersFromPods(oldPod, pod)
 		for _, container := range allContainers {
-			e := computeEvent(oldPod, pod, &container.ID)
+			e := computeEvent(oldPod, pod, container)
 			updateEvents(eventsByPodID, e)
 		}
 	}
@@ -234,16 +234,16 @@ func getContainersFromPods(pods ...*kubecontainer.Pod) []*kubecontainer.Containe
 	return containers
 }
 
-func computeEvent(oldPod, newPod *kubecontainer.Pod, cid *kubecontainer.ContainerID) *PodLifecycleEvent {
+func computeEvent(oldPod, newPod *kubecontainer.Pod, container *kubecontainer.Container) *PodLifecycleEvent {
 	var pid types.UID
 	if oldPod != nil {
 		pid = oldPod.ID
 	} else if newPod != nil {
 		pid = newPod.ID
 	}
-	oldState := getContainerState(oldPod, cid)
-	newState := getContainerState(newPod, cid)
-	return generateEvent(pid, cid.ID, oldState, newState)
+	oldState := getContainerState(oldPod, &container.ID)
+	newState := getContainerState(newPod, &container.ID)
+	return generateEvent(pid, container, oldState, newState)
 }
 
 func (g *GenericPLEG) cacheEnabled() bool {

@@ -29,8 +29,7 @@ import (
 
 // worker handles the periodic probing of its assigned container. Each worker has a go-routine
 // associated with it which runs the probe loop until the container permanently terminates, or the
-// stop channel is closed. The worker uses the probe Manager's statusManager to get up-to-date
-// container IDs.
+// stop channel is closed.
 type worker struct {
 	// Channel for stopping the probe, it should be closed to trigger a stop.
 	stop chan struct{}
@@ -40,6 +39,8 @@ type worker struct {
 
 	// The container to probe (read-only)
 	container api.Container
+
+	containerID kubecontainer.ContainerID
 
 	// Describes the probe configuration (read-only)
 	spec *api.Probe
@@ -54,8 +55,6 @@ type worker struct {
 	resultsManager results.Manager
 	probeManager   *manager
 
-	// The last known container ID for this worker.
-	containerID kubecontainer.ContainerID
 	// The last probe result for this worker.
 	lastResult results.Result
 	// How many times in a row the probe has returned the same result.
@@ -67,7 +66,9 @@ func newWorker(
 	m *manager,
 	probeType probeType,
 	pod *api.Pod,
-	container api.Container) *worker {
+	container api.Container,
+	containerID kubecontainer.ContainerID,
+) *worker {
 
 	w := &worker{
 		stop:         make(chan struct{}),
@@ -75,6 +76,7 @@ func newWorker(
 		container:    container,
 		probeType:    probeType,
 		probeManager: m,
+		containerID:  containerID,
 	}
 
 	switch probeType {
@@ -93,15 +95,14 @@ func newWorker(
 
 // run periodically probes the container.
 func (w *worker) run() {
-	probeTicker := time.NewTicker(time.Duration(w.spec.PeriodSeconds) * time.Second)
+	time.Sleep(time.Duration(int64(w.spec.InitialDelaySeconds)) * time.Second)
+
+	probeTicker := time.NewTicker(time.Duration(int64(w.spec.PeriodSeconds)) * time.Second)
 
 	defer func() {
 		// Clean up.
 		probeTicker.Stop()
-		if !w.containerID.IsEmpty() {
-			w.resultsManager.Remove(w.containerID)
-		}
-
+		w.resultsManager.Remove(w.containerID)
 		w.probeManager.removeWorker(w.pod.UID, w.container.Name, w.probeType)
 	}()
 
@@ -121,55 +122,15 @@ probeLoop:
 // Returns whether the worker should continue.
 func (w *worker) doProbe() (keepGoing bool) {
 	defer runtime.HandleCrash(func(_ interface{}) { keepGoing = true })
-
-	status, ok := w.probeManager.statusManager.GetPodStatus(w.pod.UID)
-	if !ok {
-		// Either the pod has not been created yet, or it was already deleted.
-		glog.V(3).Infof("No status for pod: %v", format.Pod(w.pod))
+	status, err := w.probeManager.runtimeCache.Get(w.pod.UID)
+	if err != nil {
+		glog.V(4).Infof("Probe: unable to get pod status for %q/%q: %v", format.Pod(w.pod), w.containerID.ID, err)
 		return true
 	}
-
-	// Worker should terminate if pod is terminated.
-	if status.Phase == api.PodFailed || status.Phase == api.PodSucceeded {
-		glog.V(3).Infof("Pod %v %v, exiting probe worker",
-			format.Pod(w.pod), status.Phase)
-		return false
-	}
-
-	c, ok := api.GetContainerStatus(status.ContainerStatuses, w.container.Name)
-	if !ok {
-		// Either the container has not been created yet, or it was deleted.
-		glog.V(3).Infof("Non-existant container probed: %v - %v",
-			format.Pod(w.pod), w.container.Name)
-		return true // Wait for more information.
-	}
-
-	if w.containerID.String() != c.ContainerID {
-		if !w.containerID.IsEmpty() {
-			w.resultsManager.Remove(w.containerID)
-		}
-		w.containerID = kubecontainer.ParseContainerID(c.ContainerID)
-		w.resultsManager.Set(w.containerID, w.initialValue, w.pod)
-	}
-
-	if c.State.Running == nil {
-		glog.V(3).Infof("Non-running container probed: %v - %v",
-			format.Pod(w.pod), w.container.Name)
-		if !w.containerID.IsEmpty() {
-			w.resultsManager.Set(w.containerID, results.Failure, w.pod)
-		}
-		// Abort if the container will not be restarted.
-		return c.State.Terminated == nil ||
-			w.pod.Spec.RestartPolicy != api.RestartPolicyNever
-	}
-
-	if int(time.Since(c.State.Running.StartedAt.Time).Seconds()) < w.spec.InitialDelaySeconds {
-		return true
-	}
-
-	result, err := w.probeManager.prober.probe(w.probeType, w.pod, status, w.container, w.containerID)
+	result, err := w.probeManager.prober.probe(w.probeType, w.pod, *status, w.container, w.containerID)
 	if err != nil {
 		// Prober error, throw away the result.
+		glog.V(4).Infof("Probe: failed probing for pod %q/%q: %v", format.Pod(w.pod), w.containerID.ID, err)
 		return true
 	}
 
