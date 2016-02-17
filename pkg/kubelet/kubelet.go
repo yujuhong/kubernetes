@@ -2078,9 +2078,9 @@ func (kl *Kubelet) HandlePodCleanups() error {
 	// Remove any orphaned mirror pods.
 	kl.podManager.DeleteOrphanedMirrorPods()
 
-	if err := kl.cleanupTerminatedPods(allPods, runningPods); err != nil {
-		glog.Errorf("Failed to cleanup terminated pods: %v", err)
-	}
+	//	if err := kl.cleanupTerminatedPods(allPods, runningPods); err != nil {
+	//		glog.Errorf("Failed to cleanup terminated pods: %v", err)
+	//	}
 
 	// Clear out any old bandwith rules
 	if err = kl.cleanupBandwidthLimits(allPods); err != nil {
@@ -2336,6 +2336,10 @@ func (kl *Kubelet) syncLoopIteration(updates <-chan kubetypes.PodUpdate, handler
 
 func (kl *Kubelet) dispatchWork(pod *api.Pod, syncType kubetypes.SyncPodType, mirrorPod *api.Pod, start time.Time) {
 	if kl.podIsTerminated(pod) {
+		if pod.DeletionTimestamp != nil {
+			// Force a status update to trigger pod deletion.
+			kl.statusManager.TerminatePod(pod)
+		}
 		return
 	}
 	// Run the sync in an async worker.

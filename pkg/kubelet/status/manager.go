@@ -87,6 +87,8 @@ type Manager interface {
 	// return false
 	TerminatePods(pods []*api.Pod) bool
 
+	TerminatePod(pod *api.Pod)
+
 	// RemoveOrphanedStatuses scans the status cache and removes any entries for pods not included in
 	// the provided podUIDs.
 	RemoveOrphanedStatuses(podUIDs map[types.UID]bool)
@@ -209,17 +211,15 @@ func (m *manager) SetContainerReadiness(pod *api.Pod, containerID kubecontainer.
 	m.updateStatusInternal(pod, status, false)
 }
 
-func (m *manager) TerminatePods(pods []*api.Pod) bool {
-	allSent := true
+func (m *manager) TerminatePod(pod *api.Pod) {
 	m.podStatusesLock.Lock()
 	defer m.podStatusesLock.Unlock()
-	for _, pod := range pods {
-		if sent := m.updateStatusInternal(pod, api.PodStatus{}, true); !sent {
-			glog.V(4).Infof("Termination notice for %q was dropped because the status channel is full", format.Pod(pod))
-			allSent = false
+	for i := range pod.Status.ContainerStatuses {
+		pod.Status.ContainerStatuses[i].State = api.ContainerState{
+			Terminated: &api.ContainerStateTerminated{},
 		}
 	}
-	return allSent
+	m.updateStatusInternal(pod, pod.Status, true)
 }
 
 // updateStatusInternal updates the internal status cache, and queues an update to the api server if
@@ -265,6 +265,7 @@ func (m *manager) updateStatusInternal(pod *api.Pod, status api.PodStatus, force
 			return false // No new status.
 		}
 	}
+	glog.V(3).Infof("STATUS DIFF of pod %q: %+v", format.Pod(pod), util.ObjectDiff(&cachedStatus.status, &status))
 
 	newStatus := versionedPodStatus{
 		status:       status,
@@ -276,10 +277,12 @@ func (m *manager) updateStatusInternal(pod *api.Pod, status api.PodStatus, force
 
 	select {
 	case m.podStatusChannel <- podStatusSyncRequest{pod.UID, newStatus}:
+		glog.V(3).Infof("STATUS: sending status for pod %q: %+v", format.Pod(pod), newStatus)
 		return true
 	default:
 		// Let the periodic syncBatch handle the update if the channel is full.
 		// We can't block, since we hold the mutex lock.
+		glog.V(3).Infof("STATUS: status channel FULL for pod %q: %+v", format.Pod(pod), newStatus)
 		return false
 	}
 }
