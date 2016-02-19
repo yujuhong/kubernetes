@@ -2000,6 +2000,10 @@ func waitForPodsWithLabel(c *client.Client, ns string, label labels.Selector) (p
 
 // Delete a Replication Controller and all pods it spawned
 func DeleteRC(c *client.Client, ns, name string) error {
+	return DeleteRCWithOptions(c, ns, name, 0, api.NewDeleteOptions(0))
+}
+
+func DeleteRCWithOptions(c *client.Client, ns, name string, timeout time.Duration, options *api.DeleteOptions) error {
 	By(fmt.Sprintf("deleting replication controller %s in namespace %s", name, ns))
 	rc, err := c.ReplicationControllers(ns).Get(name)
 	if err != nil {
@@ -2018,7 +2022,7 @@ func DeleteRC(c *client.Client, ns, name string) error {
 		return err
 	}
 	startTime := time.Now()
-	err = reaper.Stop(ns, name, 0, api.NewDeleteOptions(0))
+	err = reaper.Stop(ns, name, timeout, options)
 	if apierrs.IsNotFound(err) {
 		Logf("RC %s was already deleted: %v", name, err)
 		return nil
