@@ -4303,4 +4303,29 @@ func TestGetPodsToSync(t *testing.T) {
 	}
 }
 
+func TestPodCIDRCapacity(t *testing.T) {
+	tests := []struct {
+		cidr     string
+		expected int
+		err      bool
+	}{
+		{cidr: "1.1.1.1/30", expected: 4, err: false},
+		{cidr: "1.2.3.4/22", expected: 1024, err: false},
+		{cidr: "1.2.3.4/100", err: true},
+	}
+	for _, tt := range tests {
+		actual, err := getPodCIDRCapacity(tt.cidr)
+		if tt.err && err == nil {
+			t.Errorf("expected error for CIDR %q, got none", tt.cidr)
+			continue
+		} else if !tt.err && err != nil {
+			t.Errorf("unexpected error for CIDR %q: %v", tt.cidr, err)
+			continue
+		}
+		if actual != tt.expected {
+			t.Errorf("expected %d addresses for cidr %q, got %d addresses", tt.expected, tt.cidr, actual)
+		}
+	}
+}
+
 // TODO(random-liu): Add unit test for convertStatusToAPIStatus (issue #20478)

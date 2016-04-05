@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -2853,6 +2854,15 @@ func (kl *Kubelet) setNodeAddress(node *api.Node) error {
 	return nil
 }
 
+func getPodCIDRCapacity(cidr string) (int, error) {
+	_, ipnet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return 0, err
+	}
+	ones, bits := ipnet.Mask.Size()
+	return int(math.Exp2(float64(bits - ones))), nil
+}
+
 func (kl *Kubelet) setNodeStatusMachineInfo(node *api.Node) {
 	// TODO: Post NotReady if we cannot get MachineInfo from cAdvisor. This needs to start
 	// cAdvisor locally, e.g. for test-cmd.sh, and in integration test.
@@ -2863,15 +2873,12 @@ func (kl *Kubelet) setNodeStatusMachineInfo(node *api.Node) {
 		node.Status.Capacity = api.ResourceList{
 			api.ResourceCPU:    *resource.NewMilliQuantity(0, resource.DecimalSI),
 			api.ResourceMemory: resource.MustParse("0Gi"),
-			api.ResourcePods:   *resource.NewQuantity(int64(kl.maxPods), resource.DecimalSI),
 		}
 		glog.Errorf("Error getting machine info: %v", err)
 	} else {
 		node.Status.NodeInfo.MachineID = info.MachineID
 		node.Status.NodeInfo.SystemUUID = info.SystemUUID
 		node.Status.Capacity = cadvisor.CapacityFromMachineInfo(info)
-		node.Status.Capacity[api.ResourcePods] = *resource.NewQuantity(
-			int64(kl.maxPods), resource.DecimalSI)
 		if node.Status.NodeInfo.BootID != "" &&
 			node.Status.NodeInfo.BootID != info.BootID {
 			// TODO: This requires a transaction, either both node status is updated
@@ -2881,6 +2888,20 @@ func (kl *Kubelet) setNodeStatusMachineInfo(node *api.Node) {
 		}
 		node.Status.NodeInfo.BootID = info.BootID
 	}
+	// Set the ResourcePods.
+	// If pod CIDR is set, ResourcesPod should be the minimum of the CIDR
+	// capacity and the maxPods.
+	podCap := kl.maxPods
+	cidr := kl.runtimeState.podCIDR()
+	if len(cidr) != 0 {
+		num, err := getPodCIDRCapacity(cidr)
+		if err != nil {
+			glog.Errorf("Unable to calculate the available IP addresses for CIDR %s: %v", cidr, err)
+		} else if num < podCap {
+			podCap = num
+		}
+	}
+	node.Status.Capacity[api.ResourcePods] = *resource.NewQuantity(int64(podCap), resource.DecimalSI)
 
 	// Set Allocatable.
 	node.Status.Allocatable = make(api.ResourceList)
