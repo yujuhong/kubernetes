@@ -44,6 +44,8 @@ type resourceTest struct {
 	podsPerNode int
 	cpuLimits   framework.ContainersCPUSummary
 	memLimits   framework.ResourceUsagePerContainer
+	// A list of containers to track on the node.
+	containers []string
 }
 
 func logPodsOnNodes(c *client.Client, nodeNames []string) {
@@ -185,11 +187,23 @@ func verifyCPULimits(expected framework.ContainersCPUSummary, actual framework.N
 	}
 }
 
+func inList(c string, list []string) bool {
+	for i := range list {
+		if list[i] == c {
+			return true
+		}
+	}
+	return false
+}
+
 // Slow by design (1 hour)
 var _ = framework.KubeDescribe("Kubelet [Serial] [Slow]", func() {
 	var nodeNames sets.String
 	f := framework.NewDefaultFramework("kubelet-perf")
 	var rm *framework.ResourceMonitor
+
+	// A list of containers for which we want to collect resource usage.
+	var containers []string
 
 	BeforeEach(func() {
 		nodes := framework.ListSchedulableNodesOrDie(f.Client)
@@ -197,8 +211,23 @@ var _ = framework.KubeDescribe("Kubelet [Serial] [Slow]", func() {
 		for _, node := range nodes.Items {
 			nodeNames.Insert(node.Name)
 		}
-		rm = framework.NewResourceMonitor(f.Client, framework.TargetContainers(), containerStatsPollingPeriod)
-		rm.Start()
+		// Fail if there is no node to tst.
+		if len(nodes.Items) == 0 {
+			framework.Failf("No nodes to test")
+		}
+		containers = []string{
+			framework.RootContainerName,
+			stats.SystemContainerKubelet,
+		}
+		// Assume all nodes run the same contianer runtime. Only check
+		// container runtime stats if the runtime is docker.
+		if strings.HasPrefix(nodes.Items[0].Status.NodeInfo.ContainerRuntimeVersion, "docker") {
+			containers = append(containers, stats.SystemContainerRuntime)
+		}
+		rm = framework.NewResourceMonitor(f.Client, containers, containerStatsPollingPeriod)
+		if err := rm.Start(); err != nil {
+			framework.Failf("Failed to start the resource monitor: %v", err)
+		}
 	})
 
 	AfterEach(func() {
@@ -226,6 +255,7 @@ var _ = framework.KubeDescribe("Kubelet [Serial] [Slow]", func() {
 					stats.SystemContainerKubelet: &framework.ContainerResourceUsage{MemoryRSSInBytes: 70 * 1024 * 1024},
 					stats.SystemContainerRuntime: &framework.ContainerResourceUsage{MemoryRSSInBytes: 85 * 1024 * 1024},
 				},
+				containers: containers,
 			},
 			{
 				podsPerNode: 35,
@@ -238,10 +268,12 @@ var _ = framework.KubeDescribe("Kubelet [Serial] [Slow]", func() {
 				memLimits: framework.ResourceUsagePerContainer{
 					stats.SystemContainerRuntime: &framework.ContainerResourceUsage{MemoryRSSInBytes: 100 * 1024 * 1024},
 				},
+				containers: containers,
 			},
 			{
 				// TODO(yujuhong): Set the limits after collecting enough data.
-				podsPerNode: 100,
+				podsPerNode: 10,
+				containers:  containers,
 			},
 		}
 		for _, testArg := range rTests {
@@ -250,6 +282,18 @@ var _ = framework.KubeDescribe("Kubelet [Serial] [Slow]", func() {
 			name := fmt.Sprintf(
 				"resource tracking for %d pods per node", podsPerNode)
 			It(name, func() {
+				// filter out limits for containers that are not applicable in
+				// the current setting.
+				for c, _ := range itArg.cpuLimits {
+					if !inList(c, itArg.containers) {
+						delete(itArg.cpuLimits, c)
+					}
+				}
+				for c, _ := range itArg.memLimits {
+					if !inList(c, itArg.containers) {
+						delete(itArg.memLimits, c)
+					}
+				}
 				runResourceTrackingTest(f, podsPerNode, nodeNames, rm, itArg.cpuLimits, itArg.memLimits)
 			})
 		}

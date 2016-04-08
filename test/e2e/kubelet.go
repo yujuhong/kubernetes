@@ -22,6 +22,7 @@ import (
 	"time"
 
 	client "k8s.io/kubernetes/pkg/client/unversioned"
+	"k8s.io/kubernetes/pkg/kubelet/api/v1alpha1/stats"
 	"k8s.io/kubernetes/pkg/util"
 	"k8s.io/kubernetes/pkg/util/sets"
 	"k8s.io/kubernetes/pkg/util/wait"
@@ -100,8 +101,10 @@ var _ = framework.KubeDescribe("kubelet", func() {
 		for _, node := range nodes.Items {
 			nodeNames.Insert(node.Name)
 		}
-		resourceMonitor = framework.NewResourceMonitor(f.Client, framework.TargetContainers(), containerStatsPollingInterval)
-		resourceMonitor.Start()
+		resourceMonitor = framework.NewResourceMonitor(f.Client, []string{stats.SystemContainerKubelet}, containerStatsPollingInterval)
+		if err := resourceMonitor.Start(); err != nil {
+			framework.Failf("Failed to start the resource monitor: %v", err)
+		}
 	})
 
 	AfterEach(func() {

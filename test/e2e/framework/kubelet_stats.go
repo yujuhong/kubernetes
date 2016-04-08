@@ -319,7 +319,7 @@ func getSystemContainerStats(summary *stats.Summary) map[string]*stats.Container
 
 	// Create a root container stats using information available in
 	// stats.NodeStats. This is necessary since it is a different type.
-	statsMap[rootContainerName] = &stats.ContainerStats{
+	statsMap[RootContainerName] = &stats.ContainerStats{
 		CPU:    summary.Node.CPU,
 		Memory: summary.Node.Memory,
 	}
@@ -327,13 +327,13 @@ func getSystemContainerStats(summary *stats.Summary) map[string]*stats.Container
 }
 
 const (
-	rootContainerName = "/"
+	RootContainerName = "/"
 )
 
 // A list of containers for which we want to collect resource usage.
 func TargetContainers() []string {
 	return []string{
-		rootContainerName,
+		RootContainerName,
 		stats.SystemContainerRuntime,
 		stats.SystemContainerKubelet,
 		stats.SystemContainerMisc,
@@ -595,11 +595,11 @@ func NewResourceMonitor(c *client.Client, containerNames []string, pollingInterv
 	}
 }
 
-func (r *ResourceMonitor) Start() {
+func (r *ResourceMonitor) Start() error {
 	// It should be OK to monitor unschedulable Nodes
 	nodes, err := r.client.Nodes().List(api.ListOptions{})
 	if err != nil {
-		Failf("ResourceMonitor: unable to get list of nodes: %v", err)
+		return fmt.Errorf("resourceMonitor: unable to get list of nodes: %v", err)
 	}
 	r.collectors = make(map[string]*resourceCollector, 0)
 	for _, node := range nodes.Items {
@@ -607,6 +607,7 @@ func (r *ResourceMonitor) Start() {
 		r.collectors[node.Name] = collector
 		collector.Start()
 	}
+	return nil
 }
 
 func (r *ResourceMonitor) Stop() {
@@ -698,9 +699,9 @@ func (r *ResourceMonitor) FormatCPUSummary(summary NodesCPUSummary) string {
 	// CPU usage of containers on node "e2e-test-foo-minion-0vj7":
 	// container        5th%  50th% 90th% 95th%
 	// "/"              0.051 0.159 0.387 0.455
-	// "/runtime        0.000 0.000 0.146 0.166
-	// "/kubelet"       0.036 0.053 0.091 0.154
-	// "/misc"          0.001 0.001 0.001 0.002
+	// "runtime        0.000 0.000 0.146 0.166
+	// "kubelet"       0.036 0.053 0.091 0.154
+	// "misc"          0.001 0.001 0.001 0.002
 	var summaryStrings []string
 	var header []string
 	header = append(header, "container")
@@ -711,7 +712,7 @@ func (r *ResourceMonitor) FormatCPUSummary(summary NodesCPUSummary) string {
 		buf := &bytes.Buffer{}
 		w := tabwriter.NewWriter(buf, 1, 0, 1, ' ', 0)
 		fmt.Fprintf(w, "%s\n", strings.Join(header, "\t"))
-		for _, containerName := range TargetContainers() {
+		for _, containerName := range r.containers {
 			var s []string
 			s = append(s, fmt.Sprintf("%q", containerName))
 			data, ok := containers[containerName]
@@ -739,7 +740,7 @@ func (r *ResourceMonitor) GetCPUSummary() NodesCPUSummary {
 	result := make(NodesCPUSummary)
 	for nodeName, collector := range r.collectors {
 		result[nodeName] = make(ContainersCPUSummary)
-		for _, containerName := range TargetContainers() {
+		for _, containerName := range r.containers {
 			data := collector.GetBasicCPUStats(containerName)
 			result[nodeName][containerName] = data
 		}
