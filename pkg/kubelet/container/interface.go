@@ -131,8 +131,14 @@ type Sandbox struct {
 type SandboxStatus struct {
 	// State of the sandbox.
 	State SandboxState
+	// Network contains network status if network is handled by the runtime.
+	Network *SandboxNetworkStatus
 	// Status specific to a Linux sandbox.
 	Linux *LinuxSandboxStatus
+}
+
+type SandboxNetworkStatus struct {
+	IP string
 }
 
 // Namespaces contains paths to the namespaces.

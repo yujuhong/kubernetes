@@ -13,8 +13,8 @@ cost, and also slowed down feature velocity for the following reasons.
   2. **High-level interface discourage code sharing and reuse among runtimes**.
      E.g, each runtime implements an all-encompassing `SyncPod()` function that
      (re-)starts pods/containers and manage lifecycle hooks.
-  3. **Pod Spec is susceptible to incorrect intrepretations**. E.g., `rkt`  does
-     not support container-level oeprations and assume immutable pods.
+  3. **Pod Spec is susceptible to inconsistent interpretations**. E.g., `rkt`
+     does not support container-level operations and assume immutable pods.
   4. **Pod Spec is evolving rapidly**. New features are being added constantly.
      Any pod-level change or addition requires changing of all container
      runtime shims. E.g., init containers and volume containers.
@@ -30,54 +30,54 @@ The non-goals include
  - proposing *how* to integrate with new runtimes, i.e., where the shim
    resides. The discussion of adopting a client-server architecture is tracked
    by [#13768](https://issues.k8s.io/13768), where benefits and shortcomings of
-   such an architecture is disscussed.
+   such an architecture is discussed.
  - adding support to Windows containers. Windows container support is a
    parallel effort and is tracked by [#22623](https://issues.k8s.io/22623). The
    new interface will leave room for future integration, but will
  - re-defining Kubelet's internal interfaces. These interfaces, though, may affect
-   Kubelet's maintainability, is not relevant to runtime integrations.
+   Kubelet's maintainability, is not relevant to runtime integration's.
 
 ## Requirements
 
  * Support existing integrated container runtimes
  * Support hypervisor-based container runtimes
 
-## Contianer Runtime Interface
+## Container Runtime Interface
 
 The main idea of the proposal is to adopt an imperative container-level
 interface, which allows Kubelet to control the lifecycles of the containers
-inside a pod, across all container runtimes. A separate *sandbox* is concept is
-defined to represent the environement in which a group of containers in a pod 
-will be created and run. The container runtimes may interpret the sandbox
+inside a pod, across all container runtimes. A separate PodSandbox is concept
+is defined to represent the environment in which a group of containers in a
+pod will be created and run. The container runtimes may interpret the sandbox
 concept differently based on how it operates internally. For runtimes relying
 on hypervisor, sandbox represents a virtual machine. For others, it can be a
 container holding the namespaces.
 
-In short, a sandbox should have the following features.
+In short, a PodSandbox should have the following features.
 
  * **Isolation**: E.g., Linux namespaces or a full virtual machine, or even
    support additional security features.
  * **Resource requirements**: A sandbox should implement pod-level resource
    requirements.
 
-A container in a sandbox maps to a application in the Pod Spec. For Linux
+A container in a PodSandbox maps to a application in the Pod Spec. For Linux
 containers, they are expected to share at least network and IPC namespaces,
 with sharing more namespaces discussed in [#1615](https://issues.k8s.io/1615).
 
 
 Below is an example of the proposed interfaces.
 ```go
-// SandboxManger contains basic operations for sandbox.
-type SandboxManager interface {
-	Create(config *SandboxConfig) (string, error)
+// PodSandboxManager contains basic operations for sandbox.
+type PodSandboxManager interface {
+	Create(config *PodSandboxConfig) (string, error)
 	Delete(id string) (string, error)
-	List(filter SandboxFilter) []SandboxListItem
-	Inspect(id string) Sandbox
+	List(filter PodSandboxFilter) []PodSandboxListItem
+	Inspect(id string) PodSandbox
 }
 
 // ContainerRuntime contains basic operations for containers.
 type ContainerRuntime interface {
-    Create(config *ContainerConfig, sandboxConfig *SandboxConfig, sandboxIDng) (string, error)
+    Create(config *ContainerConfig, sandboxConfig *PodSandboxConfig, sandboxIDng) (string, error)
     Start(id string) error
     Stop(id string, timeout int) error
     Remove(id string) error
@@ -98,7 +98,7 @@ type ImageOperations interface {
 	Inspect(image ImageSpec) (Image, error)
 }
 
-type SandboxMetricsGetter interface {
+type PodSandboxMetricsGetter interface {
     ContainerMetrics(id string) (ContainerMetrics, error)
 }
 
@@ -127,15 +127,16 @@ To delete a pod:
   stop container C --> remove container C --> delete sandbox Foo
 ```
 
-Kubelet is reponsible for creating, starting the containers based on the
+Kubelet is responsible for creating, starting the containers based on the
 pod-level restart policy. E.g., if container C dies unexpectedly, Kubelet
 will simply create and start the container again in sandbox Foo.
 
 Kubelet is also responsible for gracefully terminating all the containers
-in the sandbox before deleting the sandbox. If Kubelet chooses to delete the sandbox
-with running containers in it, those containers may be forcibly deleted.
+in the sandbox before deleting the sandbox. If Kubelet chooses to delete
+the sandbox with running containers in it, those containers may be forcibly
+deleted.
 
-### Updates to Sandbox or Containers
+### Updates to PodSandbox or Containers
 
 Kubernetes support updates only to a very limited set of fields in the Pod
 Spec.  These updates may require containers to be re-created by Kubelet. This
