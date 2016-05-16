@@ -11,8 +11,11 @@ cost, and also slowed down feature velocity for the following reasons.
      go into implementing a shim of significant size to support all pod
      features. This also adds maintenance overhead (e.g., `docker`).
   2. **High-level interface discourage code sharing and reuse among runtimes**.
-     E.g, each runtime implements an all-encompassing `SyncPod()` function that
-     (re-)starts pods/containers and manage lifecycle hooks.
+     E.g, each runtime today implements an all-encompassing `SyncPod()`
+     function, with the Pod Spec as the input argument. The runtime implements
+     logic to determine how to achieve the desired state based on the current
+     status, and (re-)starts pods/containers and manage lifecycle hooks
+     accordingly.
   3. **Pod Spec is susceptible to inconsistent interpretations**. E.g., `rkt`
      does not support container-level operations and assume immutable pods.
   4. **Pod Spec is evolving rapidly**. New features are being added constantly.
@@ -33,7 +36,8 @@ The non-goals include
    such an architecture is discussed.
  - adding support to Windows containers. Windows container support is a
    parallel effort and is tracked by [#22623](https://issues.k8s.io/22623). The
-   new interface will leave room for future integration, but will
+   new interface will not be augmented to support Windows containers, but it will
+   be made extensible such that the support can be added in the future.
  - re-defining Kubelet's internal interfaces. These interfaces, though, may affect
    Kubelet's maintainability, is not relevant to runtime integration's.
 
@@ -46,19 +50,19 @@ The non-goals include
 
 The main idea of the proposal is to adopt an imperative container-level
 interface, which allows Kubelet to control the lifecycles of the containers
-inside a pod, across all container runtimes. A separate PodSandbox is concept
+inside a pod, across all container runtimes. A separate PodSandbox concept
 is defined to represent the environment in which a group of containers in a
 pod will be created and run. The container runtimes may interpret the sandbox
 concept differently based on how it operates internally. For runtimes relying
-on hypervisor, sandbox represents a virtual machine. For others, it can be a
-container holding the namespaces.
+on hypervisor, sandbox represents a virtual machine. For others, it can be
+Linux namespaces.
 
 In short, a PodSandbox should have the following features.
 
  * **Isolation**: E.g., Linux namespaces or a full virtual machine, or even
    support additional security features.
- * **Resource requirements**: A sandbox should implement pod-level resource
-   requirements.
+ * **Compute resource Specifications**: A PodSandbox should implement pod-level
+   resource demands and restrictions.
 
 A container in a PodSandbox maps to a application in the Pod Spec. For Linux
 containers, they are expected to share at least network and IPC namespaces,
@@ -73,6 +77,7 @@ type PodSandboxManager interface {
 	Delete(id string) (string, error)
 	List(filter PodSandboxFilter) []PodSandboxListItem
 	Inspect(id string) PodSandbox
+    Metrics(id string) (PodSandboxMetrics, error)
 }
 
 // ContainerRuntime contains basic operations for containers.
@@ -96,19 +101,17 @@ type ImageOperations interface {
 	Pull(image ImageSpec, auth AuthConfig) error
 	Remove(image ImageSpec) error
 	Inspect(image ImageSpec) (Image, error)
+    Metrics(image ImageSpec) (ImageMetrics, error)
 }
 
 type PodSandboxMetricsGetter interface {
-    ContainerMetrics(id string) (ContainerMetrics, error)
+    PodSandboxMetrics(id string) (PodSandboxMetrics, error)
 }
 
 type ContainerMetricsGetter interface {
     ContainerMetrics(id string) (ContainerMetrics, error)
 }
 
-type ImageMetricsGetter interface {
-    ImageMetrics(id string) (ImageMetrics, error)
-}
 ```
 
 ### Pod Lifecycle
@@ -133,15 +136,15 @@ will simply create and start the container again in sandbox Foo.
 
 Kubelet is also responsible for gracefully terminating all the containers
 in the sandbox before deleting the sandbox. If Kubelet chooses to delete
-the sandbox with running containers in it, those containers may be forcibly
+the sandbox with running containers in it, those containers should be forcibly
 deleted.
 
 ### Updates to PodSandbox or Containers
 
 Kubernetes support updates only to a very limited set of fields in the Pod
 Spec.  These updates may require containers to be re-created by Kubelet. This
-can be achieved through the imperative container-level interface. On the other
-hand, sandbox update currently is not required.
+can be achieved through the proposed, imperative container-level interface.
+On the other hand, sandbox update currently is not required.
 
 
 ### Container Lifecycle Hooks
@@ -163,6 +166,9 @@ Illustration of the container lifecycle and hooks:
                |        |              |       |
  create --------> start ----------------> stop --------> remove
 ```
+**Minimum requirement for the environment**: In order for the lifecycle hooks
+to function as expected, the `Exec` call will need access to the mount
+namespaces.
 
 ## Alternatives
 
