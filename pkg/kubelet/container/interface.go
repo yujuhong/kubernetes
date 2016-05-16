@@ -22,24 +22,24 @@ import (
 	"k8s.io/kubernetes/pkg/api"
 )
 
-// SandboxManager provides basic operations to create/delete and examine the
-// Sandboxes.
-type SandboxManager interface {
+// PodSandboxManager provides basic operations to create/delete and examine the
+// PodSandboxes.
+type PodSandboxManager interface {
 	// Create creates a sandbox based on the given config, and returns the ID
 	// of the new sandbox.
-	Create(config *SandboxConfig) (string, error)
+	Create(config *PodSandboxConfig) (string, error)
 	// Delete deletes the sandbox with by its ID. If there are any running
 	// containers in the sandbox, they will be terminated as a side-effect.
 	Delete(id string) (string, error)
-	// List lists existing sandboxes, filtered by the given SandboxFilter.
-	List(filter SandboxFilter) []SandboxListItem
+	// List lists existing sandboxes, filtered by the given PodSandboxFilter.
+	List(filter PodSandboxFilter) []PodSandboxListItem
 	// Inspect gets the detailed config and status of the sandbox by ID.
-	Inspect(id string) Sandbox
+	Inspect(id string) PodSandbox
 }
 
-// SandboxConfig holds all the required and optional fields for creating a
+// PodSandboxConfig holds all the required and optional fields for creating a
 // sandbox.
-type SandboxConfig struct {
+type PodSandboxConfig struct {
 	// Name is the name of the sandbox.
 	Name string
 	// Hostname is the hostname of the sandbox.
@@ -56,12 +56,12 @@ type SandboxConfig struct {
 	// tools to store and retrieve arbitrary metadata.
 	Annotations map[string]string
 	// Linux contains configurations specific to Linux containers.
-	Linux *LinuxSandboxConfig
+	Linux *LinuxPodSandboxConfig
 }
 
-// LinuxSandboxConfig holds platform-specific configuraions for Linux
+// LinuxPodSandboxConfig holds platform-specific configuraions for Linux
 // containers.
-type LinuxSandboxConfig struct {
+type LinuxPodSandboxConfig struct {
 	// CgroupParent is the parent cgroup of the sandbox.
 	CgroupParent string
 	// NamespaceOptions contains configurations for the sanbox's namespaces.
@@ -88,17 +88,17 @@ type DNSOptions struct {
 	Searchs []string
 }
 
-type SandboxState string
+type PodSandboxState string
 
 const (
-	// SandboxActive means the sandbox is functioning properly.
-	SandboxActive SandboxState = "active"
-	// SandboxInactive means the sandbox is not functioning properly.
-	SandboxInactive SandboxState = "inactive"
+	// PodSandboxActive means the sandbox is functioning properly.
+	PodSandboxActive PodSandboxState = "active"
+	// PodSandboxInactive means the sandbox is not functioning properly.
+	PodSandboxInactive PodSandboxState = "inactive"
 )
 
-// SandboxFilter is used to filter a list of Sandboxes.
-type SandboxFilter struct {
+// PodSandboxFilter is used to filter a list of PodSandboxes.
+type PodSandboxFilter struct {
 	// Name of the sandbox.
 	Name string
 	// ID of the sandbox.
@@ -110,34 +110,34 @@ type SandboxFilter struct {
 	Annotations map[string]string
 }
 
-// SandboxListItem contains minimal information about a sandbox.
-type SandboxListItem struct {
+// PodSandboxListItem contains minimal information about a sandbox.
+type PodSandboxListItem struct {
 	ID    string
-	State SandboxState
+	State PodSandboxState
 }
 
-// Sandbox provides isolation with resource requirements in which containers
+// PodSandbox provides isolation with resource requirements in which containers
 // can be run.
-type Sandbox struct {
+type PodSandbox struct {
 	// ID of the sandbox.
 	ID string
 	// Config of the sandbox used to create the sandbox.
-	Config SandboxConfig
+	Config PodSandboxConfig
 	// Status of the sandbox.
-	Status SandboxStatus
+	Status PodSandboxStatus
 }
 
-// SandboxStatus contains the status of the sandbox.
-type SandboxStatus struct {
+// PodSandboxStatus contains the status of the sandbox.
+type PodSandboxStatus struct {
 	// State of the sandbox.
-	State SandboxState
+	State PodSandboxState
 	// Network contains network status if network is handled by the runtime.
-	Network *SandboxNetworkStatus
+	Network *PodSandboxNetworkStatus
 	// Status specific to a Linux sandbox.
-	Linux *LinuxSandboxStatus
+	Linux *LinuxPodSandboxStatus
 }
 
-type SandboxNetworkStatus struct {
+type PodSandboxNetworkStatus struct {
 	IP string
 }
 
@@ -148,7 +148,7 @@ type Namespaces struct {
 }
 
 // LinuxSandBoxStatus contains status specific to Linux sandboxes.
-type LinuxSandboxStatus struct {
+type LinuxPodSandboxStatus struct {
 	// Namespaces contains paths to the sandbox's namespaces.
 	Namespaces *Namespaces
 }
@@ -166,7 +166,7 @@ type Resources struct {
 type ContainerRuntime interface {
 	// Create creates a container in the sandbox, and returns the ID of hte
 	// created container.
-	Create(config *ContainerConfig, sandboxConfig *SandboxConfig, sandboxID string) (string, error)
+	Create(config *ContainerConfig, sandboxConfig *PodSandboxConfig, sandboxID string) (string, error)
 	// Start starts a created container.
 	Start(id string) error
 	// Stop stops a running container with a grace period (i.e., timeout).
@@ -293,4 +293,4 @@ type AuthConfig struct {
 	RegistryToken string
 }
 
-// TODO: Define metrics for Sandbox, Container, and Image.
+// TODO: Define metrics for PodSandbox, Container, and Image.
