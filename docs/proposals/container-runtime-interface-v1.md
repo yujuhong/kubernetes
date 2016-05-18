@@ -1,5 +1,7 @@
 # Redefine Container Runtime Interface
 
+The umbrella issue: [#22964](https://issues.k8s.io/22964)
+
 ## Motivation
 
 Kubelet employs a declarative pod-level interface, which acts as the sole
@@ -34,6 +36,9 @@ The non-goals include
    resides. The discussion of adopting a client-server architecture is tracked
    by [#13768](https://issues.k8s.io/13768), where benefits and shortcomings of
    such an architecture is discussed.
+ - versioning the new interface/API. We intend to provide API versioning for
+   to offer stability for runtime integrations, but this is out of scope for
+   this proposal.
  - adding support to Windows containers. Windows container support is a
    parallel effort and is tracked by [#22623](https://issues.k8s.io/22623). The
    new interface will not be augmented to support Windows containers, but it will
@@ -43,8 +48,8 @@ The non-goals include
 
 ## Requirements
 
- * Support existing integrated container runtimes
- * Support hypervisor-based container runtimes
+ * Support existing integrated container runtimes: `docker` and `rkt`.
+ * Support hypervisor-based container runtimes: `hyper`.
 
 ## Container Runtime Interface
 
@@ -76,8 +81,7 @@ type PodSandboxManager interface {
 	Create(config *PodSandboxConfig) (string, error)
 	Delete(id string) (string, error)
 	List(filter PodSandboxFilter) []PodSandboxListItem
-	Inspect(id string) PodSandbox
-    Metrics(id string) (PodSandboxMetrics, error)
+	Status(id string) PodSandboxStatus
 }
 
 // ContainerRuntime contains basic operations for containers.
@@ -87,7 +91,7 @@ type ContainerRuntime interface {
     Stop(id string, timeout int) error
     Remove(id string) error
     List(filter ContainerFilter) ([]ContainerListItem, error)
-    Inspect(id string) (Container, error)
+    Status(id string) (ContainerStatus, error)
 }
 
 // ContainerCommandExecutor provides methods to run commands in a container.
@@ -100,12 +104,8 @@ type ImageOperations interface {
 	List() ([]Image, error)
 	Pull(image ImageSpec, auth AuthConfig) error
 	Remove(image ImageSpec) error
-	Inspect(image ImageSpec) (Image, error)
+	Status(image ImageSpec) (Image, error)
     Metrics(image ImageSpec) (ImageMetrics, error)
-}
-
-type PodSandboxMetricsGetter interface {
-    PodSandboxMetrics(id string) (PodSandboxMetrics, error)
 }
 
 type ContainerMetricsGetter interface {
@@ -144,7 +144,7 @@ deleted.
 Kubernetes support updates only to a very limited set of fields in the Pod
 Spec.  These updates may require containers to be re-created by Kubelet. This
 can be achieved through the proposed, imperative container-level interface.
-On the other hand, sandbox update currently is not required.
+On the other hand, PodSandbox update currently is not required.
 
 
 ### Container Lifecycle Hooks
@@ -166,9 +166,22 @@ Illustration of the container lifecycle and hooks:
                |        |              |       |
  create --------> start ----------------> stop --------> remove
 ```
-**Minimum requirement for the environment**: In order for the lifecycle hooks
-to function as expected, the `Exec` call will need access to the mount
-namespaces.
+In order for the lifecycle hooks to function as expected, the `Exec` call
+will need access to the container's filesystem.
+
+### Extensibility
+
+There are several dimensions for container runtime extensibility.
+ - Host OS (e.g., Linux)
+ - PodSandbox isolation mechanism (e.g., namespaces or VM)
+ - PodSandbox OS (e.g., Linux)
+
+As mentioned previously, this proposal will only address the Linux based
+PodSandbox and containers. All Linux-specific configuration will be grouped
+into one field. A container runtime is required to enforce all configuration
+applicable to its platform, and should return an error otherwise. The only
+exception is the configuration that applies only to a certain PodSandbox
+isolation mechanism (e.g., namespaces).
 
 ## Alternatives
 
@@ -186,3 +199,12 @@ The interface contains only CreatePod(), StartPod(), StopPod() and RemovePod().
     overhead for the Kubernetes maintainers.
  - Cons: Higher integration cost and lower feature velocity.
 
+## Related Issues
+
+Features that may be implemented in Kubelet directly.
+ * `AttachContainer`: [#23355](https://issues.k8s.io/23355)
+ * `PortForward`: [#25113](https://issues.k8s.io/25113)
+
+Others:
+ * Log management (github issue to-be-filed)
+ * ...

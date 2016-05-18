@@ -19,7 +19,9 @@ package container
 import (
 	"io"
 
+	cadvisorapiv2 "github.com/google/cadvisor/info/v2"
 	"k8s.io/kubernetes/pkg/api"
+	"k8s.io/kubernetes/pkg/api/unversioned"
 )
 
 // PodSandboxManager provides basic operations to create/delete and examine the
@@ -33,8 +35,8 @@ type PodSandboxManager interface {
 	Delete(id string) (string, error)
 	// List lists existing sandboxes, filtered by the given PodSandboxFilter.
 	List(filter PodSandboxFilter) []PodSandboxListItem
-	// Inspect gets the detailed config and status of the sandbox by ID.
-	Inspect(id string) PodSandbox
+	// Status gets the status of the sandbox by ID.
+	Status(id string) PodSandboxStatus
 }
 
 // PodSandboxConfig holds all the required and optional fields for creating a
@@ -44,30 +46,48 @@ type PodSandboxConfig struct {
 	Name string
 	// Hostname is the hostname of the sandbox.
 	Hostname string
-	// DNSOptions the DNS configuration the sandbox.
-	DNSOptions *DNSOptions
+	// DNSOptions sets the DNS options for the sandbox.
+	DNSOptions DNSOptions
 	// PortMappings lists the port mappings for the sandbox.
 	PortMappings []PortMapping
 	// Mounts list the mounts to be added to the sandbox's filesystem.
 	Mounts []Mount
 	// Resources specifies the resource requirements for the sandbox.
-	Resources *Resources
+	// Note: On a Linux host, kubelet will create a pod-level cgroup and pass
+	// it as the cgroup parent for the PodSandbox. For some runtimes, this is
+	// sufficent to fulfill pod-level resource requirements, and this field
+	// will not be used. For others, e.g., hypervisor-based runtimes, explicit
+	// resource requirements for the sandbox are needed at creation time.
+	Resources PodSandboxResources
+	// Labels are key value pairs that may be used to scope and select individual resources.
+	Labels Labels
 	// Annotations is an unstructured key value map that may be set by external
 	// tools to store and retrieve arbitrary metadata.
 	Annotations map[string]string
-	// Linux contains configurations specific to Linux containers.
+
+	// Linux contains configurations specific to Linux hosts.
 	Linux *LinuxPodSandboxConfig
 }
 
+// Labels are key value pairs that may be used to scope and select individual resources.
+// Label keys are of the form:
+//     label-key ::= prefixed-name | name
+//     prefixed-name ::= prefix '/' name
+//     prefix ::= DNS_SUBDOMAIN
+//     name ::= DNS_LABEL
+// The prefix is optional.  If the prefix is not specified, the key is assumed to be private
+// to the user.  Other system components that wish to use labels must specify a prefix.  The
+// "kubernetes.io/" prefix is reserved for use by kubernetes components.
+type Labels map[string]string
+
 // LinuxPodSandboxConfig holds platform-specific configuraions for Linux
-// containers.
+// host platforms and Linux-based containers.
 type LinuxPodSandboxConfig struct {
 	// CgroupParent is the parent cgroup of the sandbox.
 	CgroupParent string
-	// NamespaceOptions contains configurations for the sanbox's namespaces.
+	// NamespaceOptions contains configurations for the sandbox's namespaces.
+	// This will be used only if the PodSandbox uses namespace for isolation.
 	NamespaceOptions NamespaceOptions
-	// SELinux is the SELinux context to be applied to all containers.
-	SELinux *api.SELinuxOptions
 }
 
 // NamespaceOptions provides options for Linux namespaces.
@@ -105,9 +125,8 @@ type PodSandboxFilter struct {
 	ID string
 	// State of the sandbox.
 	State string
-	// Annotations of the sandbox. A container needs to have all listed
-	// annotations to be sandbox a match.
-	Annotations map[string]string
+	// LabelSelector to select matches.
+	LabelSelector unversioned.LabelSelector
 }
 
 // PodSandboxListItem contains minimal information about a sandbox.
@@ -116,19 +135,10 @@ type PodSandboxListItem struct {
 	State PodSandboxState
 }
 
-// PodSandbox provides isolation with resource requirements in which containers
-// can be run.
-type PodSandbox struct {
+// PodSandboxStatus contains the status of the PodSandbox.
+type PodSandboxStatus struct {
 	// ID of the sandbox.
 	ID string
-	// Config of the sandbox used to create the sandbox.
-	Config PodSandboxConfig
-	// Status of the sandbox.
-	Status PodSandboxStatus
-}
-
-// PodSandboxStatus contains the status of the sandbox.
-type PodSandboxStatus struct {
 	// State of the sandbox.
 	State PodSandboxState
 	// Network contains network status if network is handled by the runtime.
@@ -137,6 +147,7 @@ type PodSandboxStatus struct {
 	Linux *LinuxPodSandboxStatus
 }
 
+// PodSandboxNetworkStatus is the status of the network for a PodSandbox.
 type PodSandboxNetworkStatus struct {
 	IP string
 }
@@ -153,8 +164,8 @@ type LinuxPodSandboxStatus struct {
 	Namespaces *Namespaces
 }
 
-// Resources contains the CPU/memory resource requirements.
-type Resources struct {
+// PodSandboxResources contains the CPU/memory resource requirements.
+type PodSandboxResources struct {
 	// CPU resource requirement.
 	CPU api.ResourceRequirements
 	// Memory resource requirement.
@@ -174,9 +185,11 @@ type ContainerRuntime interface {
 	// Remove removes the container.
 	Remove(id string) error
 	// List lists the existing containers that matches the ContainerFilter.
+	// The returned list should only include containers previously created
+	// by this ContainerManager.
 	List(filter ContainerFilter) ([]Container, error)
-	// Inspect returns the detailed status of the container.
-	Inspect(id string) (ContainerInspectResult, error)
+	// Status returns the status of the container.
+	Status(id string) (ContainerStatus, error)
 }
 
 // ContainerCommandExecutor provides methods to run a command in the container.
@@ -186,26 +199,11 @@ type ContainerCommandExecutor interface {
 	Exec(id string, cmd []string, streamOpts StreamOptions) error
 }
 
-// ContainerInspectResult contains the detailed config and status for a
-// container.
-type ContainerInspectResult struct {
-	// ID of the container.
-	ID string
-	// Config of the container.
-	Config ContainerConfig
-	// Status of the container.
-	// TODO: Re-examine ContainerStatus and consolidate the fields.
-	Status ContainerStatus
-}
-
 type ContainerConfig struct {
 	// Name of the container.
 	Name string
 	// Image to use.
 	Image ImageSpec
-	// RootFSPath is the path to the root filesystem. This field is optional.
-	// If not set, the runtime should create the root filesystem itself.
-	RootFSPath *string
 	// Command to execute (i.e., entrypoint for docker)
 	Command []string
 	// Args for the Command (i.e., command for docker)
@@ -214,29 +212,52 @@ type ContainerConfig struct {
 	WorkingDir string
 	// List of environment variable to set in the container
 	Env []KeyValue
+	// Mount specifies mounts for the container
+	Mounts []Mount
+	// Labels are key value pairs that may be used to scope and select individual resources.
+	Labels Labels
 	// Annotations is an unstructured key value map that may be set by external
 	// tools to store and retrieve arbitrary metadata.
 	Annotations map[string]string
-	// Mount specifies mounts for the container
-	Mounts []Mount
 	// Privileged runs the container in the privileged mode.
 	Privileged bool
 	// ReadOnlyRootFS sets the root filesystem of the container to be
 	// read-only.
 	ReadOnlyRootFS bool
-	// Linux contains configuration specific to Linux containers.
-	Linux *LinuxContainerConfig
 	// Path to store the container log on the host (i.e., outside of the
 	// sandbox).
 	LogPath string
+
+	// Linux contains configuration specific to Linux containers.
+	Linux *LinuxContainerConfig
 }
 
-// LinuxContainerConfig contains configurations speicifc to Linux containers.
+// LinuxContainerConfig contains platform-specific configuration for
+// Linux-based containers.
 type LinuxContainerConfig struct {
+	// Resources specification for the container.
+	Resources LinuxContainerResources
 	// AddCapabilities lists capabilities to add.
 	AddCapabilities []string
 	// DropCapabilities lists capabilities to drop.
 	DropCapabilities []string
+	// SELinux is the SELinux context to be applied.
+	SELinux *api.SELinuxOptions
+}
+
+// LinuxContainerResources specifies Linux specific configuration for
+// resources.
+// TODO: Consider using Resources from opencontainers/runtime-spec/specs-go
+// directly.
+type LinuxContainerResources struct {
+	// CPU CFS (Completely Fair Scheduler) period
+	CPUPeriod int64
+	// CPU CFS (Completely Fair Scheduler) quota
+	CPUQuota int64
+	// CPU shares (relative weight vs. other containers)
+	CPUShares int64
+	// Memory limit in bytes
+	MemoryLimitInBytes int64
 }
 
 // ContainerFilter is used to filter containers.
@@ -247,9 +268,8 @@ type ContainerFilter struct {
 	ID string
 	// State of the contianer.
 	State ContainerState
-	// Annotations of the container. A container needs to have all listed
-	// annotations to be considered a match.
-	Annotations map[string]string
+	// LabelSelector to select matches.
+	LabelSelector unversioned.LabelSelector
 }
 
 type StreamOptions struct {
@@ -265,17 +285,38 @@ type KeyValue struct {
 	Value string
 }
 
-// ImageManager offers basic image operations.
-// TODO: Need a better name.
-type ImageManager interface {
+type ContainerMetricsGetter interface {
+	// Metrics returns the stats of the container.
+	// TODO: Reuse cadvisor's api for now. Should re-evaluate whether we need
+	// all the fields.
+	Metrics(id string) (cadvisorapiv2.ContainerInfo, error)
+}
+
+// ImageOperations offers basic image operations.
+type ImageOperations interface {
 	// List lists the existing images.
 	List() ([]Image, error)
 	// Pull pulls an image with authentication config.
 	Pull(image ImageSpec, auth AuthConfig) error
 	// Remove removes an image.
 	Remove(image ImageSpec) error
-	// Inspect inspects an image.
-	Inspect(image ImageSpec) (Image, error)
+	// Status returns the status of an image.
+	Status(image ImageSpec) (Image, error)
+}
+
+// ImageMetricsGetter returns metrics about images.
+type ImageMetricsGetter interface {
+	// Metrics returns statistics about all the images currently available .
+	Metrics() (ImageFilesystemMetrics, error)
+}
+
+type ImageFilesystemMetrics struct {
+	// Filesystem usage in bytes.
+	Capacity uint64
+	// Bytes available for non-root use.
+	Available uint64
+	// Number of bytes used on this filesystem.
+	Usage uint64
 }
 
 // AuthConfig contains authorization information for connecting to a registry.
@@ -292,5 +333,3 @@ type AuthConfig struct {
 	// RegistryToken is a bearer token to be sent to a registry
 	RegistryToken string
 }
-
-// TODO: Define metrics for PodSandbox, Container, and Image.
