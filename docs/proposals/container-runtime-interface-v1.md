@@ -119,7 +119,7 @@ type ContainerMetricsGetter interface {
 
 ### Pod Lifecycle
 
-The sandbox’s lifecycle is decoupled from the containers, i.e., a sandbox
+The PodSandbox’s lifecycle is decoupled from the containers, i.e., a sandbox
 is created before any containers, and can exist after all containers in it have
 terminated.
 
@@ -141,6 +141,13 @@ Kubelet is also responsible for gracefully terminating all the containers
 in the sandbox before deleting the sandbox. If Kubelet chooses to delete
 the sandbox with running containers in it, those containers should be forcibly
 deleted.
+
+Note that every PodSandbox/container lifecycle operation (create, start,
+stop, delete) should either returns an error or blocks until the operation
+succeeds. A successful operation should include a state transition of the
+PodSandbox/container. E.g., if a `Create` call for a container does not
+return an error, the container state should be "created" when the runtime is
+queried.
 
 ### Updates to PodSandbox or Containers
 

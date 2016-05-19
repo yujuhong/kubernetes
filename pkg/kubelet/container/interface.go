@@ -80,9 +80,6 @@ type PodSandboxConfig struct {
 //     prefixed-name ::= prefix '/' name
 //     prefix ::= DNS_SUBDOMAIN
 //     name ::= DNS_LABEL
-// The prefix is optional. If the prefix is not specified, the key is assumed to be private
-// to the user. Other system components that wish to use labels must specify a prefix. The
-// "kubernetes.io/" prefix is reserved for use by kubernetes components.
 type Labels map[string]string
 
 // LinuxPodSandboxConfig holds platform-specific configuraions for Linux
@@ -131,6 +128,8 @@ type PodSandboxFilter struct {
 	// State of the sandbox.
 	State string
 	// LabelSelector to select matches.
+	// Only api.MatchLabels is supported for now and the requirements
+	// are ANDed. MatchExpressions is not supported yet.
 	LabelSelector unversioned.LabelSelector
 }
 
@@ -291,6 +290,8 @@ type ContainerFilter struct {
 	// State of the contianer.
 	State ContainerState
 	// LabelSelector to select matches.
+	// Only api.MatchLabels is supported for now and the requirements
+	// are ANDed. MatchExpressions is not supported yet.
 	LabelSelector unversioned.LabelSelector
 }
 
