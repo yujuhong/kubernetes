@@ -19,24 +19,29 @@ package container
 import (
 	"io"
 
-	cadvisorapiv2 "github.com/google/cadvisor/info/v2"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/unversioned"
 )
 
+type PodSandboxID string
+
 // PodSandboxManager provides basic operations to create/delete and examine the
 // PodSandboxes.
 type PodSandboxManager interface {
-	// Create creates a sandbox based on the given config, and returns the ID
-	// of the new sandbox.
-	Create(config *PodSandboxConfig) (string, error)
-	// Delete deletes the sandbox with by its ID. If there are any running
+	// Create creates a sandbox based on the given config, and returns the
+	//  of the new sandbox.
+	Create(config *PodSandboxConfig) (PodSandboxID, error)
+	// Delete deletes the sandbox by its ID. If there are any running
 	// containers in the sandbox, they will be terminated as a side-effect.
-	Delete(id string) (string, error)
+	Delete(id PodSandboxID) error
 	// List lists existing sandboxes, filtered by the given PodSandboxFilter.
 	List(filter PodSandboxFilter) []PodSandboxListItem
 	// Status gets the status of the sandbox by ID.
-	Status(id string) PodSandboxStatus
+	Status(id PodSandboxID) (PodSandboxStatus, error)
+	// PortForward copies the data from the port in the PodSandBox to the
+	// stream.
+	// TODO: Should PortForward be in a separate interface.
+	PortForward(id PodSandboxID, port uint16, stream io.ReadWriteCloser) error
 }
 
 // PodSandboxConfig holds all the required and optional fields for creating a
@@ -50,7 +55,7 @@ type PodSandboxConfig struct {
 	DNSOptions DNSOptions
 	// PortMappings lists the port mappings for the sandbox.
 	PortMappings []PortMapping
-	// Mounts list the mounts to be added to the sandbox's filesystem.
+	// Mounts lists the mounts to be added to the sandbox's filesystem.
 	Mounts []Mount
 	// Resources specifies the resource requirements for the sandbox.
 	// Note: On a Linux host, kubelet will create a pod-level cgroup and pass
@@ -75,8 +80,8 @@ type PodSandboxConfig struct {
 //     prefixed-name ::= prefix '/' name
 //     prefix ::= DNS_SUBDOMAIN
 //     name ::= DNS_LABEL
-// The prefix is optional.  If the prefix is not specified, the key is assumed to be private
-// to the user.  Other system components that wish to use labels must specify a prefix.  The
+// The prefix is optional. If the prefix is not specified, the key is assumed to be private
+// to the user. Other system components that wish to use labels must specify a prefix. The
 // "kubernetes.io/" prefix is reserved for use by kubernetes components.
 type Labels map[string]string
 
@@ -105,7 +110,7 @@ type DNSOptions struct {
 	// Servers is a list of DNS servers of the cluster.
 	Servers []string
 	// Searches is a list of DNS search domains of the cluster.
-	Searchs []string
+	Searches []string
 }
 
 type PodSandboxState string
@@ -172,31 +177,35 @@ type PodSandboxResources struct {
 	Memory api.ResourceRequirements
 }
 
+// This is to distinguish with existing ContainerID type, which includes a
+// runtime type prefix (e.g., docker://). We may rename this later.
+type RawContainerID string
+
 // ContainerRuntime provides methods for container lifecycle operations, as
 // well as listing or inspecting existing containers.
 type ContainerRuntime interface {
-	// Create creates a container in the sandbox, and returns the ID of hte
-	// created container.
-	Create(config *ContainerConfig, sandboxConfig *PodSandboxConfig, sandboxID string) (string, error)
+	// Create creates a container in the sandbox, and returns the ID
+	// of the created container.
+	Create(config *ContainerConfig, sandboxConfig *PodSandboxConfig, sandboxID PodSandboxID) (RawContainerID, error)
 	// Start starts a created container.
-	Start(id string) error
+	Start(RawContainerID ContainerID) error
 	// Stop stops a running container with a grace period (i.e., timeout).
-	Stop(id string, timeout int) error
+	Stop(RawContainerID string, timeout int) error
 	// Remove removes the container.
-	Remove(id string) error
-	// List lists the existing containers that matches the ContainerFilter.
+	Remove(RawContainerID string) error
+	// List lists the existing containers that match the ContainerFilter.
 	// The returned list should only include containers previously created
 	// by this ContainerManager.
 	List(filter ContainerFilter) ([]Container, error)
 	// Status returns the status of the container.
-	Status(id string) (ContainerStatus, error)
+	Status(RawContainerID string) (ContainerStatus, error)
 }
 
 // ContainerCommandExecutor provides methods to run a command in the container.
 // TODO: Should we merge this with ContainerRuntime?
 type ContainerCommandExecutor interface {
 	// Exec executes a command in the container.
-	Exec(id string, cmd []string, streamOpts StreamOptions) error
+	Exec(RawContainerID string, cmd []string, streamOpts StreamOptions) error
 }
 
 type ContainerConfig struct {
@@ -212,7 +221,7 @@ type ContainerConfig struct {
 	WorkingDir string
 	// List of environment variable to set in the container
 	Env []KeyValue
-	// Mount specifies mounts for the container
+	// Mounts specifies mounts for the container
 	Mounts []Mount
 	// Labels are key value pairs that may be used to scope and select individual resources.
 	Labels Labels
@@ -227,6 +236,14 @@ type ContainerConfig struct {
 	// Path to store the container log on the host (i.e., outside of the
 	// sandbox).
 	LogPath string
+
+	// Variables for interactive containers, these have very specialized
+	// use-cases (e.g. debugging).
+	// TODO: Determine if we need to continue supporting these fields that are
+	// part of Kubernetes's Container Spec.
+	Stdin     bool
+	StdinOnce bool
+	TTY       bool
 
 	// Linux contains configuration specific to Linux containers.
 	Linux *LinuxContainerConfig
@@ -251,13 +268,18 @@ type LinuxContainerConfig struct {
 // directly.
 type LinuxContainerResources struct {
 	// CPU CFS (Completely Fair Scheduler) period
-	CPUPeriod int64
+	CPUPeriod uint64
 	// CPU CFS (Completely Fair Scheduler) quota
-	CPUQuota int64
+	CPUQuota uint64
 	// CPU shares (relative weight vs. other containers)
-	CPUShares int64
+	CPUShares uint64
 	// Memory limit in bytes
-	MemoryLimitInBytes int64
+	MemoryLimitInBytes uint64
+	// OOMScoreAdj specifies oom_score_adj for the container.
+	OomScoreAdj int
+	// Swappiness specifies hwow aggressive the kernel will swap memory pages.
+	// Range from 0 to 100.
+	Swappiness uint64
 }
 
 // ContainerFilter is used to filter containers.
@@ -285,13 +307,6 @@ type KeyValue struct {
 	Value string
 }
 
-type ContainerMetricsGetter interface {
-	// Metrics returns the stats of the container.
-	// TODO: Reuse cadvisor's api for now. Should re-evaluate whether we need
-	// all the fields.
-	Metrics(id string) (cadvisorapiv2.ContainerInfo, error)
-}
-
 // ImageOperations offers basic image operations.
 type ImageOperations interface {
 	// List lists the existing images.
@@ -302,21 +317,6 @@ type ImageOperations interface {
 	Remove(image ImageSpec) error
 	// Status returns the status of an image.
 	Status(image ImageSpec) (Image, error)
-}
-
-// ImageMetricsGetter returns metrics about images.
-type ImageMetricsGetter interface {
-	// Metrics returns statistics about all the images currently available .
-	Metrics() (ImageFilesystemMetrics, error)
-}
-
-type ImageFilesystemMetrics struct {
-	// Filesystem usage in bytes.
-	Capacity uint64
-	// Bytes available for non-root use.
-	Available uint64
-	// Number of bytes used on this filesystem.
-	Usage uint64
 }
 
 // AuthConfig contains authorization information for connecting to a registry.
@@ -333,3 +333,5 @@ type AuthConfig struct {
 	// RegistryToken is a bearer token to be sent to a registry
 	RegistryToken string
 }
+
+// TODO: Add ContainerMetricsGetter and ImageMetricsGetter.

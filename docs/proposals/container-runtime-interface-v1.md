@@ -36,15 +36,18 @@ The non-goals include
    resides. The discussion of adopting a client-server architecture is tracked
    by [#13768](https://issues.k8s.io/13768), where benefits and shortcomings of
    such an architecture is discussed.
- - versioning the new interface/API. We intend to provide API versioning for
-   to offer stability for runtime integrations, but this is out of scope for
-   this proposal.
+ - versioning the new interface/API. We intend to provide API versioning to
+   offer stability for runtime integrations, but the details are beyond the
+   scope of this proposal.
  - adding support to Windows containers. Windows container support is a
-   parallel effort and is tracked by [#22623](https://issues.k8s.io/22623). The
-   new interface will not be augmented to support Windows containers, but it will
-   be made extensible such that the support can be added in the future.
- - re-defining Kubelet's internal interfaces. These interfaces, though, may affect
-   Kubelet's maintainability, is not relevant to runtime integration's.
+   parallel effort and is tracked by [#22623](https://issues.k8s.io/22623).
+   The new interface will not be augmented to support Windows containers, but
+   it will be made extensible such that the support can be added in the future.
+ - re-defining Kubelet's internal interfaces. These interfaces, though, may
+   affect Kubelet's maintainability, is not relevant to runtime integration.
+ - improving Kubelet's efficiency or performance, e.g., adopting event stream
+   from the container runtime [#8756](https://issues.k8s.io/8756),
+   [#16831](https://issues.k8s.io/16831).
 
 ## Requirements
 
@@ -179,9 +182,7 @@ There are several dimensions for container runtime extensibility.
 As mentioned previously, this proposal will only address the Linux based
 PodSandbox and containers. All Linux-specific configuration will be grouped
 into one field. A container runtime is required to enforce all configuration
-applicable to its platform, and should return an error otherwise. The only
-exception is the configuration that applies only to a certain PodSandbox
-isolation mechanism (e.g., namespaces).
+applicable to its platform, and should return an error otherwise.
 
 ## Alternatives
 
@@ -201,10 +202,7 @@ The interface contains only CreatePod(), StartPod(), StopPod() and RemovePod().
 
 ## Related Issues
 
-Features that may be implemented in Kubelet directly.
- * `AttachContainer`: [#23355](https://issues.k8s.io/23355)
+ * `AttachContainer`: [#23335](https://issues.k8s.io/23335)
  * `PortForward`: [#25113](https://issues.k8s.io/25113)
-
-Others:
  * Log management (github issue to-be-filed)
  * ...
