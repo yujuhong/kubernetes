@@ -19,13 +19,18 @@ package gce
 import (
 	"time"
 
+	computealpha "google.golang.org/api/compute/v0.alpha"
 	compute "google.golang.org/api/compute/v1"
 )
 
 func newForwardingRuleMetricContext(request, region string) *metricContext {
+	return newForwardingRuleMetricContextWithVersion(request, region, computeV1Version)
+}
+
+func newForwardingRuleMetricContextWithVersion(request, region, version string) *metricContext {
 	return &metricContext{
 		start:      time.Now(),
-		attributes: []string{"forwardingrule_" + request, region, unusedMetricLabel},
+		attributes: []string{"forwardingrule_" + request, region, unusedMetricLabel, version},
 	}
 }
 
@@ -85,6 +90,13 @@ func (gce *GCECloud) GetRegionForwardingRule(name, region string) (*compute.Forw
 	return v, mc.Observe(err)
 }
 
+// GetAlphaRegionForwardingRule returns the Alpha regional ForwardingRule by name & region.
+func (gce *GCECloud) GetAlphaRegionForwardingRule(name, region string) (*computealpha.ForwardingRule, error) {
+	mc := newForwardingRuleMetricContextWithVersion("get", region, computeAlphaVersion)
+	v, err := gce.serviceAlpha.ForwardingRules.Get(gce.projectID, region, name).Do()
+	return v, mc.Observe(err)
+}
+
 // ListRegionForwardingRules lists all RegionalForwardingRules in the project & region.
 func (gce *GCECloud) ListRegionForwardingRules(region string) (*compute.ForwardingRuleList, error) {
 	mc := newForwardingRuleMetricContext("list", region)
@@ -103,6 +115,18 @@ func (gce *GCECloud) CreateRegionForwardingRule(rule *compute.ForwardingRule, re
 	}
 
 	return gce.waitForRegionOp(op, region, mc)
+}
+
+// CreateAlphaRegionForwardingRule creates and returns an Alpha, Regional
+// ForwardingRule that points to the given BackendService.
+func (gce *GCECloud) CreateAlphaRegionForwardingRule(rule *computealpha.ForwardingRule, region string) error {
+	mc := newForwardingRuleMetricContextWithVersion("create", region, computeAlphaVersion)
+	op, err := gce.serviceAlpha.ForwardingRules.Insert(gce.projectID, region, rule).Do()
+	if err != nil {
+		return mc.Observe(err)
+	}
+
+	return gce.waitForAlphaRegionOp(op, region, mc)
 }
 
 // DeleteRegionForwardingRule deletes the RegionalForwardingRule by name & region.

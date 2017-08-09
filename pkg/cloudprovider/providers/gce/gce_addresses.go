@@ -19,13 +19,18 @@ package gce
 import (
 	"time"
 
+	computealpha "google.golang.org/api/compute/v0.alpha"
 	compute "google.golang.org/api/compute/v1"
 )
 
 func newAddressMetricContext(request, region string) *metricContext {
+	return newAddressMetricContextWithVersion(request, region, computeV1Version)
+}
+
+func newAddressMetricContextWithVersion(request, region, version string) *metricContext {
 	return &metricContext{
 		start:      time.Now(),
-		attributes: []string{"address_" + request, region, unusedMetricLabel},
+		attributes: []string{"address_" + request, region, unusedMetricLabel, version},
 	}
 }
 
@@ -69,6 +74,16 @@ func (gce *GCECloud) ReserveRegionAddress(addr *compute.Address, region string) 
 	return gce.waitForRegionOp(op, region, mc)
 }
 
+// ReserveAlphaRegionAddress creates a region address using the Alpha API.
+func (gce *GCECloud) ReserveAlphaRegionAddress(addr *computealpha.Address, region string) error {
+	mc := newAddressMetricContextWithVersion("reserve", region, computeAlphaVersion)
+	op, err := gce.serviceAlpha.Addresses.Insert(gce.projectID, region, addr).Do()
+	if err != nil {
+		return mc.Observe(err)
+	}
+	return gce.waitForRegionOp(op, region, mc)
+}
+
 // DeleteRegionAddress deletes a region address by name.
 func (gce *GCECloud) DeleteRegionAddress(name, region string) error {
 	mc := newAddressMetricContext("delete", region)
@@ -83,5 +98,12 @@ func (gce *GCECloud) DeleteRegionAddress(name, region string) error {
 func (gce *GCECloud) GetRegionAddress(name, region string) (*compute.Address, error) {
 	mc := newAddressMetricContext("get", region)
 	v, err := gce.service.Addresses.Get(gce.projectID, region, name).Do()
+	return v, mc.Observe(err)
+}
+
+// GetAlphaRegionAddress returns the Alpha, regional address by name.
+func (gce *GCECloud) GetAlphaRegionAddress(name, region string) (*computealpha.Address, error) {
+	mc := newAddressMetricContextWithVersion("get", region, computeAlphaVersion)
+	v, err := gce.serviceAlpha.Addresses.Get(gce.projectID, region, name).Do()
 	return v, mc.Observe(err)
 }

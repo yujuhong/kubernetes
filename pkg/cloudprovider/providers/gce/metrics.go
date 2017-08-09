@@ -32,6 +32,7 @@ var (
 		"request", // API function that is begin invoked.
 		"region",  // region (optional).
 		"zone",    // zone (optional).
+		"version", // API version useed for the call (optional).
 	)
 )
 

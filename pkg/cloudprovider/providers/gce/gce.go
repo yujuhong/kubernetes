@@ -78,6 +78,11 @@ const (
 	gceHcUnhealthyThreshold = int64(5)
 
 	gceComputeAPIEndpoint = "https://www.googleapis.com/compute/v1/"
+
+	// Version strings for recording metrics.
+	computeV1Version    = "v1"
+	computeAlphaVersion = "alpha"
+	computeBetaVersion  = "beta"
 )
 
 // GCECloud is an implementation of Interface, LoadBalancer and Instances for Google Compute Engine.
