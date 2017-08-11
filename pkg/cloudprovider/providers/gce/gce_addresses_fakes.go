@@ -19,12 +19,14 @@ package gce
 import (
 	"fmt"
 	"net/http"
+	"sync"
 
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 )
 
 type FakeCloudAddressService struct {
+	sync.RWMutex
 	count int
 	// reservedAddrs tracks usage of IP addresses
 	// Key is the IP address as a string
@@ -34,6 +36,9 @@ type FakeCloudAddressService struct {
 	addrsByRegionAndName map[string]map[string]*compute.Address
 }
 
+// FakeCloudAddressService Implements CloudAddressService
+var _ CloudAddressService = &FakeCloudAddressService{}
+
 func NewFakeCloudAddressService() *FakeCloudAddressService {
 	return &FakeCloudAddressService{
 		reservedAddrs:        make(map[string]bool),
@@ -41,7 +46,23 @@ func NewFakeCloudAddressService() *FakeCloudAddressService {
 	}
 }
 
+// SetRegionalAddresses populates the addresses of the region with the name to
+// IP map.
+func (cas *FakeCloudAddressService) SetRegionalAddresses(region string, ipList map[string]string) {
+	cas.Lock()
+	defer cas.Unlock()
+	// Reset addresses in the region.
+	cas.addrsByRegionAndName[region] = make(map[string]*compute.Address)
+
+	for name, ip := range ipList {
+		cas.reservedAddrs[ip] = true
+		cas.addrsByRegionAndName[region][name] = &compute.Address{Name: name, Address: ip}
+	}
+}
+
 func (cas *FakeCloudAddressService) ReserveRegionAddress(addr *compute.Address, region string) error {
+	cas.Lock()
+	defer cas.Unlock()
 	if addr.Address == "" {
 		addr.Address = fmt.Sprintf("1.2.3.%d", cas.count)
 		cas.count++
@@ -65,6 +86,8 @@ func (cas *FakeCloudAddressService) ReserveRegionAddress(addr *compute.Address, 
 }
 
 func (cas *FakeCloudAddressService) GetRegionAddress(name, region string) (*compute.Address, error) {
+	cas.RLock()
+	defer cas.RUnlock()
 	if _, exists := cas.addrsByRegionAndName[region]; !exists {
 		return nil, makeGoogleAPINotFoundError("")
 	}
@@ -77,6 +100,8 @@ func (cas *FakeCloudAddressService) GetRegionAddress(name, region string) (*comp
 }
 
 func (cas *FakeCloudAddressService) GetRegionAddressByIP(region, ipAddress string) (*compute.Address, error) {
+	cas.RLock()
+	defer cas.RUnlock()
 	if _, exists := cas.addrsByRegionAndName[region]; !exists {
 		return nil, makeGoogleAPINotFoundError("")
 	}
