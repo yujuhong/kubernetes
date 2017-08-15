@@ -17,11 +17,15 @@ limitations under the License.
 package gce
 
 import (
+	"fmt"
+
 	"github.com/golang/glog"
+
 	"k8s.io/api/core/v1"
 )
 
 type LoadBalancerType string
+type NetworkTier string
 
 const (
 	// ServiceAnnotationLoadBalancerType is annotated on a service with type LoadBalancer
@@ -39,6 +43,14 @@ const (
 	ServiceAnnotationILBBackendShare = "alpha.cloud.google.com/load-balancer-backend-share"
 	// This annotation did not correctly specify "alpha", so both annotations will be checked.
 	deprecatedServiceAnnotationILBBackendShare = "cloud.google.com/load-balancer-backend-share"
+
+	// NetworkTierAnnotationKey is annotated on a Service object to indicate which
+	// network tier a GCP LB should use. The valid values are "Standard" and
+	// "Premium" (default).
+	NetworkTierAnnotationKey             = "cloud.google.com/network-tier"
+	NetworkTierStandard      NetworkTier = "Standard"
+	NetworkTierPremium       NetworkTier = "Premium"
+	NetworkTierDefault       NetworkTier = NetworkTierPremium
 )
 
 // GetLoadBalancerAnnotationType returns the type of GCP load balancer which should be assembled.
@@ -76,4 +88,24 @@ func GetLoadBalancerAnnotationBackendShare(service *v1.Service) bool {
 	}
 
 	return false
+}
+
+// GetServiceNetworkTier returns the network tier of GCP load balancer
+// which should be assembled, and an error if the specified tier is not
+// supported.
+func GetServiceNetworkTier(service *v1.Service) (NetworkTier, error) {
+	l, ok := service.Annotations[NetworkTierAnnotationKey]
+	if !ok {
+		return NetworkTierDefault, nil
+	}
+
+	v := NetworkTier(l)
+	switch v {
+	case NetworkTierStandard:
+		fallthrough
+	case NetworkTierPremium:
+		return v, nil
+	default:
+		return NetworkTierDefault, fmt.Errorf("unsupported network tier: %q", v)
+	}
 }

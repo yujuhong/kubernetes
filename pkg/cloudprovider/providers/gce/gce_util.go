@@ -153,3 +153,32 @@ func isNotFoundOrInUse(err error) bool {
 func makeGoogleAPINotFoundError(message string) error {
 	return &googleapi.Error{Code: http.StatusNotFound, Message: message}
 }
+
+const (
+	gceNetworkTierStandard = "STANDARD"
+	gceNetworkTierPremium  = "PREMIUM"
+)
+
+// Convert the GCE network tier to the internal type.
+func toNetworkTier(v string) NetworkTier {
+	switch v {
+	case gceNetworkTierStandard:
+		return NetworkTierStandard
+	case gceNetworkTierPremium:
+		return NetworkTierPremium
+	default:
+		return NetworkTier(v)
+	}
+}
+
+// Conver the NetworkTier type to the string GCE accepts.
+func toGCENetworkTier(v NetworkTier) string {
+	switch v {
+	case NetworkTierStandard:
+		return gceNetworkTierPremium
+	case NetworkTierPremium:
+		return gceNetworkTierPremium
+	default:
+		return gceNetworkTierPremium
+	}
+}
