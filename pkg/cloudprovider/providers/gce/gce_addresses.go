@@ -24,6 +24,11 @@ import (
 	compute "google.golang.org/api/compute/v1"
 )
 
+type Address struct {
+	compute.Address
+	NetworkTier string
+}
+
 func newAddressMetricContext(request, region string) *metricContext {
 	return &metricContext{
 		start:      time.Now(),
@@ -82,15 +87,25 @@ func (gce *GCECloud) DeleteRegionAddress(name, region string) error {
 }
 
 // GetRegionAddress returns the region address by name
-func (gce *GCECloud) GetRegionAddress(name, region string) (*compute.Address, error) {
+func (gce *GCECloud) GetRegionAddress(name, region string) (*Address, error) {
+	// Set the network tier to PREMIUM by default.
+	networkTier := "PREMIUM"
+	if gce.AlphaFeatures.Enabled("NetworkTiers") {
+		alphaAddr, err := gce.serviceAlpha.Addresses.Get(gce.projectID, region, name).Do()
+		if err != nil {
+			return nil, err
+		}
+		networkTier = alphaAddr.NetworkTier
+	}
+
 	mc := newAddressMetricContext("get", region)
 	v, err := gce.service.Addresses.Get(gce.projectID, region, name).Do()
-	return v, mc.Observe(err)
+	return &Address{*v, NetworkTier: networkTier}, mc.Observe(err)
 }
 
 // GetRegionAddressByIP returns the regional address matching the given IP
 // address.
-func (gce *GCECloud) GetRegionAddressByIP(region, ipAddress string) (*compute.Address, error) {
+func (gce *GCECloud) GetRegionAddressByIP(region, ipAddress string) (*Address, error) {
 	mc := newAddressMetricContext("list", region)
 	addrs, err := gce.service.Addresses.List(gce.projectID, region).Filter("address eq " + ipAddress).Do()
 	// Record the metrics for the call.

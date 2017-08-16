@@ -22,6 +22,11 @@ import (
 	compute "google.golang.org/api/compute/v1"
 )
 
+type ForwardingRule struct {
+	compute.ForwardingRule
+	NetworkTier NetworkTier
+}
+
 func newForwardingRuleMetricContext(request, region string) *metricContext {
 	return &metricContext{
 		start:      time.Now(),
@@ -79,10 +84,18 @@ func (gce *GCECloud) ListGlobalForwardingRules() (*compute.ForwardingRuleList, e
 }
 
 // GetRegionForwardingRule returns the RegionalForwardingRule by name & region.
-func (gce *GCECloud) GetRegionForwardingRule(name, region string) (*compute.ForwardingRule, error) {
+func (gce *GCECloud) GetRegionForwardingRule(name, region string) (*ForwardingRule, error) {
+	networkTier := "PREMIUM"
+	if gce.AlphaFeatures.Enabled("NetworkTiers") {
+		alphaRule, err := gce.serviceAlpha.ForwardingRules.Get(gce.projectID, region, name).Do()
+		if err != nil {
+			return nil, err
+		}
+		networkTier = alphaRule.NetworkTier
+	}
 	mc := newForwardingRuleMetricContext("get", region)
 	v, err := gce.service.ForwardingRules.Get(gce.projectID, region, name).Do()
-	return v, mc.Observe(err)
+	return &ForwardingRule{v, NetworkTier: networkTier}, mc.Observe(err)
 }
 
 // ListRegionForwardingRules lists all RegionalForwardingRules in the project & region.
