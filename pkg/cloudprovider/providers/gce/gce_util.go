@@ -153,3 +153,20 @@ func isNotFoundOrInUse(err error) bool {
 func makeGoogleAPINotFoundError(message string) error {
 	return &googleapi.Error{Code: http.StatusNotFound, Message: message}
 }
+
+func isForbidden(err error) bool {
+	return isHTTPErrorCode(err, http.StatusForbidden)
+}
+
+func handleNetworkTierGetError(err error) (string, error) {
+	if isForbidden(err) {
+		// Network tier is still an Alpha feature in GCP, and not every project
+		// is whitelisted to access the API. If we cannot access the API, just
+		// assume the tier is premium.
+		// TODO: Evaluate whether this is reasonable for GKE Alpha clusters
+		// that are not whitelisted for GCP Alpha API.
+		return NetworkTierDefault.ToGCEValue(), nil
+	}
+	// Can't get the network tier, just return an error.
+	return "", err
+}

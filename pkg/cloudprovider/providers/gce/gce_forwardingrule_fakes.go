@@ -90,6 +90,14 @@ func (f *FakeCloudForwardingRuleService) GetRegionForwardingRule(name, region st
 	return nil, err
 }
 
+func (f *FakeCloudForwardingRuleService) getNetworkTierFromForwardingRule(name, region string) (string, error) {
+	fwdRule, err := f.GetAlphaRegionForwardingRule(name, region)
+	if err != nil {
+		return "", err
+	}
+	return fwdRule.NetworkTier, nil
+}
+
 func convertToV1ForwardingRule(object gceObject) *compute.ForwardingRule {
 	enc, err := object.MarshalJSON()
 	if err != nil {

@@ -34,6 +34,9 @@ type CloudAddressService interface {
 	// Alpha API.
 	GetAlphaRegionAddress(name, region string) (*computealpha.Address, error)
 	ReserveAlphaRegionAddress(addr *computealpha.Address, region string) error
+
+	// Needed for the Alpha "Network Tiers" feature.
+	getNetworkTierFromAddress(name, region string) (string, error)
 }
 
 // CloudForwardingRuleService is an interface for managing forwarding rules.
@@ -45,4 +48,7 @@ type CloudForwardingRuleService interface {
 	// Alpha API.
 	GetAlphaRegionForwardingRule(name, region string) (*computealpha.ForwardingRule, error)
 	CreateAlphaRegionForwardingRule(rule *computealpha.ForwardingRule, region string) error
+
+	// Needed for the Alpha "Network Tiers" feature.
+	getNetworkTierFromForwardingRule(name, region string) (string, error)
 }

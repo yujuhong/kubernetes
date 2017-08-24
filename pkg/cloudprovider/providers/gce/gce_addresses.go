@@ -132,3 +132,15 @@ func (gce *GCECloud) GetRegionAddressByIP(region, ipAddress string) (*compute.Ad
 	}
 	return nil, makeGoogleAPINotFoundError(fmt.Sprintf("Address with IP %q was not found in region %q", ipAddress, region))
 }
+
+// TODO(yujuhong): retire this function once Network Tiers becomes Beta in GCP.
+func (gce *GCECloud) getNetworkTierFromAddress(name, region string) (string, error) {
+	if !gce.AlphaFeatureGate.Enabled(AlphaFeatureNetworkTiers) {
+		return NetworkTierDefault.ToGCEValue(), nil
+	}
+	addr, err := gce.GetAlphaRegionAddress(name, region)
+	if err != nil {
+		return handleNetworkTierGetError(err)
+	}
+	return addr.NetworkTier, nil
+}
