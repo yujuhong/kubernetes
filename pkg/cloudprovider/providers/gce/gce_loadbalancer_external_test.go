@@ -90,35 +90,47 @@ func TestVerifyRequestedIP(t *testing.T) {
 	for desc, tc := range map[string]struct {
 		requestedIP     string
 		fwdRuleIP       string
+		netTier         NetworkTier
 		addrList        []*computealpha.Address
 		expectErr       bool
 		expectUserOwned bool
 	}{
 		"requested IP exists": {
 			requestedIP:     "1.1.1.1",
-			addrList:        []*computealpha.Address{{Name: "foo", Address: "1.1.1.1"}},
+			netTier:         NetworkTierPremium,
+			addrList:        []*computealpha.Address{{Name: "foo", Address: "1.1.1.1", NetworkTier: "PREMIUM"}},
 			expectErr:       false,
 			expectUserOwned: true,
 		},
 		"requested IP is not static, but is in use by the fwd rule": {
 			requestedIP: "1.1.1.1",
 			fwdRuleIP:   "1.1.1.1",
+			netTier:     NetworkTierPremium,
 			expectErr:   false,
 		},
 		"requested IP is not static and is not used by the fwd rule": {
 			requestedIP: "1.1.1.1",
 			fwdRuleIP:   "2.2.2.2",
+			netTier:     NetworkTierPremium,
 			expectErr:   true,
 		},
 		"no requested IP": {
+			netTier:   NetworkTierPremium,
 			expectErr: false,
+		},
+		"requested IP exists, but network tier does not match": {
+			requestedIP:     "1.1.1.1",
+			netTier:         NetworkTierStandard,
+			addrList:        []*computealpha.Address{{Name: "foo", Address: "1.1.1.1", NetworkTier: "PREMIUM"}},
+			expectErr:       true,
+			expectUserOwned: true,
 		},
 	} {
 		t.Run(desc, func(t *testing.T) {
 			s.SetRegionalAddresses(region, tc.addrList)
-			isUserOwnedIP, err := verifyUserRequestedIP(s, region, tc.requestedIP, tc.fwdRuleIP, lbRef)
+			isUserOwnedIP, err := verifyUserRequestedIP(s, region, tc.requestedIP, tc.fwdRuleIP, lbRef, tc.netTier)
 			assert.Equal(t, tc.expectErr, err != nil, fmt.Sprintf("err: %v", err))
-			assert.Equal(t, tc.expectUserOwned, isUserOwnedIP, desc)
+			assert.Equal(t, tc.expectUserOwned, isUserOwnedIP)
 		})
 	}
 }

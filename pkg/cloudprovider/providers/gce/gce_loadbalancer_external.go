@@ -129,7 +129,7 @@ func (gce *GCECloud) ensureExternalLoadBalancer(clusterName, clusterID string, a
 	if requestedIP != "" {
 		// If user requests a specific IP address, verify first. No mutation to
 		// the GCE resources will be performed in the verification process.
-		isUserOwnedIP, err = verifyUserRequestedIP(gce, gce.region, requestedIP, fwdRuleIP, lbRefStr)
+		isUserOwnedIP, err = verifyUserRequestedIP(gce, gce.region, requestedIP, fwdRuleIP, lbRefStr, netTier)
 		if err != nil {
 			return nil, err
 		}
@@ -430,7 +430,7 @@ func (gce *GCECloud) DeleteExternalTargetPoolAndChecks(name, region, clusterID s
 // verifyUserRequestedIP checks the user-provided IP  to see whether it can be
 // used for the LB.  It also returns whether the IP is considered owned by the
 // user.
-func verifyUserRequestedIP(s CloudAddressService, region, requestedIP, fwdRuleIP, lbRef string) (isUserOwnedIP bool, err error) {
+func verifyUserRequestedIP(s CloudAddressService, region, requestedIP, fwdRuleIP, lbRef string, desiredNetTier NetworkTier) (isUserOwnedIP bool, err error) {
 	if requestedIP == "" {
 		return false, nil
 	}
@@ -446,7 +446,19 @@ func verifyUserRequestedIP(s CloudAddressService, region, requestedIP, fwdRuleIP
 	}
 	if err == nil {
 		// The requested IP is a static IP, owned and managed by the user.
-		glog.V(4).Infof("verifyUserRequestedIP: the requested static IP %q (name: %s) for LB %s exists.", requestedIP, existingAddress.Name, lbRef)
+
+		// Check if the network tier of the static IP matches the desired
+		// network tier.
+		netTierStr, err := s.getNetworkTierFromAddress(existingAddress.Name, region)
+		if err != nil {
+			return true, fmt.Errorf("failed to check the network tier of the IP %q: %v", requestedIP, err)
+		}
+		netTier := NetworkTierGCEValueToType(netTierStr)
+		if netTier != desiredNetTier {
+			glog.Errorf("verifyUserRequestedIP: requested static IP %q (name: %s) for LB %s has network tier %s, need %s.", requestedIP, existingAddress.Name, lbRef, netTier, desiredNetTier)
+			return true, fmt.Errorf("requrested IP %q belongs to the %s network tier; expected %s", requestedIP, netTier, desiredNetTier)
+		}
+		glog.V(4).Infof("verifyUserRequestedIP: the requested static IP %q (name: %s, tier: %s) for LB %s exists.", requestedIP, existingAddress.Name, netTier, lbRef)
 		return true, nil
 	}
 	if requestedIP == fwdRuleIP {
