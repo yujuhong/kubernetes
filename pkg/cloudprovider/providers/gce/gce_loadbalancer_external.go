@@ -44,9 +44,6 @@ import (
 // new load balancers and updating existing load balancers, recognizing when
 // each is needed.
 func (gce *GCECloud) ensureExternalLoadBalancer(clusterName, clusterID string, apiService *v1.Service, existingFwdRule *compute.ForwardingRule, nodes []*v1.Node) (*v1.LoadBalancerStatus, error) {
-	// Always use the default tier.
-	netTier := NetworkTierDefault
-
 	if len(nodes) == 0 {
 		return nil, fmt.Errorf("Cannot EnsureLoadBalancer() with no hosts")
 	}
@@ -71,6 +68,21 @@ func (gce *GCECloud) ensureExternalLoadBalancer(clusterName, clusterID string, a
 	serviceName := types.NamespacedName{Namespace: apiService.Namespace, Name: apiService.Name}
 	glog.V(2).Infof("EnsureLoadBalancer(%v, %v, %v, %v, %v, %v, %v)",
 		loadBalancerName, gce.region, requestedIP, portStr, hostNames, serviceName, apiService.Annotations)
+
+	lbRefStr := fmt.Sprintf("%v(%v)", loadBalancerName, serviceName)
+	// Check the current and the desired network tiers. If they do not match,
+	// tear down the existing resources -- delete the forwarding rule, and
+	// release the IP.
+	netTier, err := gce.getServiceNetworkTier(apiService)
+	if err != nil {
+		glog.Errorf("EnsureLoadBalancer(%s): failed to get the desired network tier: %v", lbRefStr, err)
+		return nil, err
+	}
+	glog.V(2).Infof("EnsureLoadBalancer(%s): desired network tier %q ", lbRefStr, netTier)
+	if gce.AlphaFeatureGate.Enabled(AlphaFeatureNetworkTiers) {
+		reconcileFwdRuleNetworkTiers(gce, gce.region, loadBalancerName, lbRefStr, netTier)
+		reconcileAddressNetworkTiers(gce, gce.region, loadBalancerName, lbRefStr, netTier)
+	}
 
 	// Check if the forwarding rule exists, and if so, what its IP is.
 	fwdRuleExists, fwdRuleNeedsUpdate, fwdRuleIP, err := gce.forwardingRuleNeedsUpdate(loadBalancerName, gce.region, requestedIP, ports)
@@ -125,7 +137,6 @@ func (gce *GCECloud) ensureExternalLoadBalancer(clusterName, clusterID string, a
 		}
 	}()
 
-	lbRefStr := fmt.Sprintf("%v(%v)", loadBalancerName, serviceName)
 	if requestedIP != "" {
 		// If user requests a specific IP address, verify first. No mutation to
 		// the GCE resources will be performed in the verification process.
@@ -966,4 +977,67 @@ func ensureStaticIP(s CloudAddressService, name, serviceName, region, existingIP
 	}
 
 	return addr.Address, existed, nil
+}
+
+func (gce *GCECloud) getServiceNetworkTier(svc *v1.Service) (NetworkTier, error) {
+	if !gce.AlphaFeatureGate.Enabled(AlphaFeatureNetworkTiers) {
+		return NetworkTierDefault, nil
+	}
+	tier, err := GetServiceNetworkTier(svc)
+	if err != nil {
+		// Returns an error if the annotation is invalid.
+		return NetworkTier(""), err
+	}
+	return tier, nil
+}
+
+// reconcileFwdRuleNetworkTiers check the network tiers of existing forwarding
+// rule and delete the rule if the tier does not matched the desired tier.
+func reconcileFwdRuleNetworkTiers(s CloudForwardingRuleService, region, name, lbRef string, desiredNetTier NetworkTier) error {
+	logPrefix := fmt.Sprintf("reconcileNetworkTiers(%s)", lbRef)
+	tierStr, err := s.getNetworkTierFromForwardingRule(name, region)
+	if isNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	existingTier := NetworkTierGCEValueToType(tierStr)
+	if existingTier == desiredNetTier {
+		return nil
+	}
+	glog.V(2).Infof("%s: Network tiers do not match; existing forwarding rule: %q, desired: %q", logPrefix, existingTier, desiredNetTier)
+	glog.V(2).Infof("%s: Delete forwarding rule", logPrefix)
+	err = s.DeleteRegionForwardingRule(name, region)
+	return ignoreNotFound(err)
+}
+
+// reconcileAddressNetworkTiers check the network tiers of existing address
+// and delete the address if the tier does not matched the desired tier.
+func reconcileAddressNetworkTiers(s CloudAddressService, region, name, lbRef string, desiredNetTier NetworkTier) error {
+	// We only check the IP address matching the reserved name that the
+	// controller assigned to the LB. We make the assumption that an address of
+	// such name is owned by the controller and is safe to release. Whether an
+	// IP is owned by the user is not clearly defined in the current code, and
+	// this assumption may not match some of the existing logic in the code.
+	// However, this is okay since network tiering is still Alpha and will be
+	// properly gated.
+	// TODO(yujuhong): Re-evaluate the "ownership" of the IP address to ensure
+	// we don't release IP unintentionally.
+	logPrefix := fmt.Sprintf("reconcileNetworkTiers(%s)", lbRef)
+	tierStr, err := s.getNetworkTierFromAddress(name, region)
+	if isNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	existingTier := NetworkTierGCEValueToType(tierStr)
+	if existingTier == desiredNetTier {
+		return nil
+	}
+	glog.V(2).Infof("%s: Network tiers do not match; existing address: %q, desired: %q", logPrefix, existingTier, desiredNetTier)
+	glog.V(2).Infof("%s: Delete address", logPrefix)
+	err = s.DeleteRegionAddress(name, region)
+	return ignoreNotFound(err)
 }
