@@ -70,6 +70,18 @@ func (f *FakeCloudForwardingRuleService) CreateRegionForwardingRule(fwdRule *com
 	return f.CreateAlphaRegionForwardingRule(alphafwdRule, region)
 }
 
+func (f *FakeCloudForwardingRuleService) DeleteRegionForwardingRule(name, region string) error {
+	if _, exists := f.fwdRulesByRegionAndName[region]; !exists {
+		return makeGoogleAPINotFoundError("")
+	}
+
+	if _, exists := f.fwdRulesByRegionAndName[region][name]; !exists {
+		return makeGoogleAPINotFoundError("")
+	}
+	delete(f.fwdRulesByRegionAndName[region], name)
+	return nil
+}
+
 func (f *FakeCloudForwardingRuleService) GetAlphaRegionForwardingRule(name, region string) (*computealpha.ForwardingRule, error) {
 	if _, exists := f.fwdRulesByRegionAndName[region]; !exists {
 		return nil, makeGoogleAPINotFoundError("")

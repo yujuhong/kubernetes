@@ -28,7 +28,7 @@ type CloudAddressService interface {
 	ReserveRegionAddress(*compute.Address, string) error
 	GetRegionAddress(string, string) (*compute.Address, error)
 	GetRegionAddressByIP(region, ipAddress string) (*compute.Address, error)
-	// TODO: Mock `DeleteRegionAddress(name, region string) endpoint
+	DeleteRegionAddress(name, region string) error
 	// TODO: Mock Global endpoints
 
 	// Alpha API.
@@ -44,6 +44,7 @@ type CloudAddressService interface {
 type CloudForwardingRuleService interface {
 	GetRegionForwardingRule(name, region string) (*compute.ForwardingRule, error)
 	CreateRegionForwardingRule(rule *compute.ForwardingRule, region string) error
+	DeleteRegionForwardingRule(name, region string) error
 
 	// Alpha API.
 	GetAlphaRegionForwardingRule(name, region string) (*computealpha.ForwardingRule, error)
