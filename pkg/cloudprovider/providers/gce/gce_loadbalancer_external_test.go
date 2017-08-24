@@ -32,14 +32,14 @@ func TestEnsureStaticIP(t *testing.T) {
 	region := "us-central1"
 
 	// First ensure call
-	ip, existed, err := ensureStaticIP(fcas, ipName, serviceName, region, "")
+	ip, existed, err := ensureStaticIP(fcas, ipName, serviceName, region, "", NetworkTierDefault)
 	if err != nil || existed || ip == "" {
 		t.Fatalf(`ensureStaticIP(%v, %v, %v, %v, "") = %v, %v, %v; want valid ip, false, nil`, fcas, ipName, serviceName, region, ip, existed, err)
 	}
 
 	// Second ensure call
 	var ipPrime string
-	ipPrime, existed, err = ensureStaticIP(fcas, ipName, serviceName, region, ip)
+	ipPrime, existed, err = ensureStaticIP(fcas, ipName, serviceName, region, ip, NetworkTierDefault)
 	if err != nil || !existed || ip != ipPrime {
 		t.Fatalf(`ensureStaticIP(%v, %v, %v, %v, %v) = %v, %v, %v; want %v, true, nil`, fcas, ipName, serviceName, region, ip, ipPrime, existed, err, ip)
 	}

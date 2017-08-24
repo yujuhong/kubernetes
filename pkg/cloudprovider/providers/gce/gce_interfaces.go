@@ -21,6 +21,8 @@ import (
 	compute "google.golang.org/api/compute/v1"
 )
 
+// These interfaces are added for testability.
+
 // CloudAddressService is an interface for managing addresses
 type CloudAddressService interface {
 	ReserveRegionAddress(*compute.Address, string) error
@@ -32,4 +34,15 @@ type CloudAddressService interface {
 	// Alpha API.
 	GetAlphaRegionAddress(name, region string) (*computealpha.Address, error)
 	ReserveAlphaRegionAddress(addr *computealpha.Address, region string) error
+}
+
+// CloudForwardingRuleService is an interface for managing forwarding rules.
+// TODO: Expand the interface to include more methods.
+type CloudForwardingRuleService interface {
+	GetRegionForwardingRule(name, region string) (*compute.ForwardingRule, error)
+	CreateRegionForwardingRule(rule *compute.ForwardingRule, region string) error
+
+	// Alpha API.
+	GetAlphaRegionForwardingRule(name, region string) (*computealpha.ForwardingRule, error)
+	CreateAlphaRegionForwardingRule(rule *computealpha.ForwardingRule, region string) error
 }

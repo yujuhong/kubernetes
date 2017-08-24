@@ -31,6 +31,7 @@ import (
 	netsets "k8s.io/kubernetes/pkg/util/net/sets"
 
 	"github.com/golang/glog"
+	computealpha "google.golang.org/api/compute/v0.alpha"
 	compute "google.golang.org/api/compute/v1"
 )
 
@@ -43,6 +44,9 @@ import (
 // new load balancers and updating existing load balancers, recognizing when
 // each is needed.
 func (gce *GCECloud) ensureExternalLoadBalancer(clusterName, clusterID string, apiService *v1.Service, existingFwdRule *compute.ForwardingRule, nodes []*v1.Node) (*v1.LoadBalancerStatus, error) {
+	// Always use the default tier.
+	netTier := NetworkTierDefault
+
 	if len(nodes) == 0 {
 		return nil, fmt.Errorf("Cannot EnsureLoadBalancer() with no hosts")
 	}
@@ -135,11 +139,11 @@ func (gce *GCECloud) ensureExternalLoadBalancer(clusterName, clusterID string, a
 	if !isUserOwnedIP {
 		// If we are not using the user-owned IP, either promote the
 		// emphemeral IP used by the fwd rule, or create a new static IP.
-		ipAddr, existed, err := ensureStaticIP(gce, loadBalancerName, serviceName.String(), gce.region, fwdRuleIP)
+		ipAddr, existed, err := ensureStaticIP(gce, loadBalancerName, serviceName.String(), gce.region, fwdRuleIP, netTier)
 		if err != nil {
 			return nil, fmt.Errorf("failed to ensure a static IP for the LB: %v", err)
 		}
-		glog.V(4).Infof("EnsureLoadBalancer(%s): ensured IP address %s", lbRefStr, ipAddr)
+		glog.V(4).Infof("EnsureLoadBalancer(%s): ensured IP address %s (tier: %s)", lbRefStr, ipAddr, netTier)
 		// If the IP was not owned by the user, but it already existed, it
 		// could indicate that the previous update cycle failed. We can use
 		// this IP and try to run through the process again, but we should
@@ -282,8 +286,8 @@ func (gce *GCECloud) ensureExternalLoadBalancer(clusterName, clusterID string, a
 		}
 	}
 	if tpNeedsUpdate || fwdRuleNeedsUpdate {
-		glog.Infof("EnsureLoadBalancer(%v(%v)): creating forwarding rule, IP %s", loadBalancerName, serviceName, ipAddressToUse)
-		if err := gce.createForwardingRule(loadBalancerName, serviceName.String(), gce.region, ipAddressToUse, ports); err != nil {
+		glog.Infof("EnsureLoadBalancer(%v(%v)): creating forwarding rule, IP %s (tier: %s)", loadBalancerName, serviceName, ipAddressToUse, netTier)
+		if err := createForwardingRule(gce, loadBalancerName, serviceName.String(), gce.region, ipAddressToUse, gce.targetPoolURL(loadBalancerName), ports, netTier); err != nil {
 			return nil, fmt.Errorf("failed to create forwarding rule %s: %v", loadBalancerName, err)
 		}
 		// End critical section.  It is safe to release the static IP (which
@@ -544,8 +548,8 @@ func (gce *GCECloud) updateTargetPool(loadBalancerName string, existing sets.Str
 	return nil
 }
 
-func (gce *GCECloud) targetPoolURL(name, region string) string {
-	return gce.service.BasePath + strings.Join([]string{gce.projectID, "regions", region, "targetPools", name}, "/")
+func (gce *GCECloud) targetPoolURL(name string) string {
+	return gce.service.BasePath + strings.Join([]string{gce.projectID, "regions", gce.region, "targetPools", name}, "/")
 }
 
 func makeHttpHealthCheck(name, path string, port int32) *compute.HttpHealthCheck {
@@ -804,23 +808,42 @@ func (gce *GCECloud) ensureHttpHealthCheckFirewall(serviceName, ipAddress, regio
 	return nil
 }
 
-func (gce *GCECloud) createForwardingRule(name, serviceName, region, ipAddress string, ports []v1.ServicePort) error {
+func createForwardingRule(s CloudForwardingRuleService, name, serviceName, region, ipAddress, target string, ports []v1.ServicePort, netTier NetworkTier) error {
 	portRange, err := loadBalancerPortRange(ports)
 	if err != nil {
 		return err
 	}
-	req := &compute.ForwardingRule{
-		Name:        name,
-		Description: fmt.Sprintf(`{"kubernetes.io/service-name":"%s"}`, serviceName),
-		IPAddress:   ipAddress,
-		IPProtocol:  string(ports[0].Protocol),
-		PortRange:   portRange,
-		Target:      gce.targetPoolURL(name, region),
+	desc := makeServiceDescription(serviceName)
+	ipProtocol := string(ports[0].Protocol)
+
+	switch netTier {
+	case NetworkTierPremium:
+		rule := &compute.ForwardingRule{
+			Name:        name,
+			Description: desc,
+			IPAddress:   ipAddress,
+			IPProtocol:  ipProtocol,
+			PortRange:   portRange,
+			Target:      target,
+		}
+		err = s.CreateRegionForwardingRule(rule, region)
+	default:
+		rule := &computealpha.ForwardingRule{
+			Name:        name,
+			Description: desc,
+			IPAddress:   ipAddress,
+			IPProtocol:  ipProtocol,
+			PortRange:   portRange,
+			Target:      target,
+			NetworkTier: netTier.ToGCEValue(),
+		}
+		err = s.CreateAlphaRegionForwardingRule(rule, region)
 	}
 
-	if err = gce.CreateRegionForwardingRule(req, region); err != nil && !isHTTPErrorCode(err, http.StatusConflict) {
+	if err != nil && !isHTTPErrorCode(err, http.StatusConflict) {
 		return err
 	}
+
 	return nil
 }
 
@@ -883,27 +906,46 @@ func (gce *GCECloud) firewallObject(name, region, desc string, sourceRanges nets
 	return firewall, nil
 }
 
-func ensureStaticIP(s CloudAddressService, name, serviceName, region, existingIP string) (ipAddress string, existing bool, err error) {
+func ensureStaticIP(s CloudAddressService, name, serviceName, region, existingIP string, netTier NetworkTier) (ipAddress string, existing bool, err error) {
 	// If the address doesn't exist, this will create it.
 	// If the existingIP exists but is ephemeral, this will promote it to static.
 	// If the address already exists, this will harmlessly return a StatusConflict
 	// and we'll grab the IP before returning.
 	existed := false
-	addressObj := &compute.Address{
-		Name:        name,
-		Description: fmt.Sprintf(`{"kubernetes.io/service-name":"%s"}`, serviceName),
-	}
+	desc := makeServiceDescription(serviceName)
 
-	if existingIP != "" {
-		addressObj.Address = existingIP
-	}
-
-	if err = s.ReserveRegionAddress(addressObj, region); err != nil {
-		if !isHTTPErrorCode(err, http.StatusConflict) {
-			return "", false, fmt.Errorf("error creating gce static IP address: %v", err)
+	switch netTier {
+	case NetworkTierPremium:
+		addressObj := &compute.Address{
+			Name:        name,
+			Description: desc,
 		}
-		// StatusConflict == the IP exists already.
-		existed = true
+		if existingIP != "" {
+			addressObj.Address = existingIP
+		}
+		if err = s.ReserveRegionAddress(addressObj, region); err != nil {
+			if !isHTTPErrorCode(err, http.StatusConflict) {
+				return "", false, fmt.Errorf("error creating gce static IP address: %v", err)
+			}
+			// StatusConflict == the IP exists already.
+			existed = true
+		}
+	default:
+		addressObj := &computealpha.Address{
+			Name:        name,
+			Description: desc,
+			NetworkTier: netTier.ToGCEValue(),
+		}
+		if existingIP != "" {
+			addressObj.Address = existingIP
+		}
+		if err = s.ReserveAlphaRegionAddress(addressObj, region); err != nil {
+			if !isHTTPErrorCode(err, http.StatusConflict) {
+				return "", false, fmt.Errorf("error creating gce static IP address: %v", err)
+			}
+			// StatusConflict == the IP exists already.
+			existed = true
+		}
 	}
 
 	addr, err := s.GetRegionAddress(name, region)
