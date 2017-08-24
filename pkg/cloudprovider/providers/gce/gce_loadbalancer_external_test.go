@@ -21,8 +21,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
+	"github.com/stretchr/testify/require"
 	computealpha "google.golang.org/api/compute/v0.alpha"
+
+	"k8s.io/api/core/v1"
 )
 
 func TestEnsureStaticIP(t *testing.T) {
@@ -42,6 +44,41 @@ func TestEnsureStaticIP(t *testing.T) {
 	ipPrime, existed, err = ensureStaticIP(fcas, ipName, serviceName, region, ip, NetworkTierDefault)
 	if err != nil || !existed || ip != ipPrime {
 		t.Fatalf(`ensureStaticIP(%v, %v, %v, %v, %v) = %v, %v, %v; want %v, true, nil`, fcas, ipName, serviceName, region, ip, ipPrime, existed, err, ip)
+	}
+}
+
+func TestEnsureStaticIPWithTier(t *testing.T) {
+	s := NewFakeCloudAddressService()
+	serviceName := ""
+	region := "us-east1"
+
+	for desc, tc := range map[string]struct {
+		name     string
+		netTier  NetworkTier
+		expected string
+	}{
+		"Premium (default)": {
+			name:     "foo-1",
+			netTier:  NetworkTierPremium,
+			expected: "PREMIUM",
+		},
+		"Standard": {
+			name:     "foo-2",
+			netTier:  NetworkTierStandard,
+			expected: "STANDARD",
+		},
+	} {
+		t.Run(desc, func(t *testing.T) {
+			ip, existed, err := ensureStaticIP(s, tc.name, serviceName, region, "", tc.netTier)
+			assert.NoError(t, err)
+			assert.False(t, existed)
+			assert.NotEqual(t, "", ip)
+			// Get the Address from the fake address service and verify that the tier
+			// is set correctly.
+			alphaAddr, err := s.GetAlphaRegionAddress(tc.name, region)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expected, alphaAddr.NetworkTier)
+		})
 	}
 }
 
@@ -82,6 +119,57 @@ func TestVerifyRequestedIP(t *testing.T) {
 			isUserOwnedIP, err := verifyUserRequestedIP(s, region, tc.requestedIP, tc.fwdRuleIP, lbRef)
 			assert.Equal(t, tc.expectErr, err != nil, fmt.Sprintf("err: %v", err))
 			assert.Equal(t, tc.expectUserOwned, isUserOwnedIP, desc)
+		})
+	}
+}
+
+func TestCreateForwardingRule(t *testing.T) {
+	s := NewFakeCloudForwardingRuleService()
+	// Common variables among the tests.
+	ports := []v1.ServicePort{{Name: "foo", Protocol: v1.ProtocolTCP, Port: int32(123)}}
+	region := "test-region"
+	target := "test-target-pool"
+	svcName := "foo-svc"
+
+	for desc, tc := range map[string]struct {
+		netTier      NetworkTier
+		expectedRule *computealpha.ForwardingRule
+	}{
+		"Premium tier": {
+			netTier: NetworkTierPremium,
+			expectedRule: &computealpha.ForwardingRule{
+				Name:        "lb-1",
+				Description: `{"kubernetes.io/service-name":"foo-svc"}`,
+				IPAddress:   "1.1.1.1",
+				IPProtocol:  "TCP",
+				PortRange:   "123-123",
+				Target:      target,
+				NetworkTier: "PREMIUM",
+			},
+		},
+		"Standard tier": {
+			netTier: NetworkTierStandard,
+			expectedRule: &computealpha.ForwardingRule{
+				Name:        "lb-2",
+				Description: `{"kubernetes.io/service-name":"foo-svc"}`,
+				IPAddress:   "2.2.2.2",
+				IPProtocol:  "TCP",
+				PortRange:   "123-123",
+				Target:      target,
+				NetworkTier: "STANDARD",
+			},
+		},
+	} {
+		t.Run(desc, func(t *testing.T) {
+			lbName := tc.expectedRule.Name
+			ipAddr := tc.expectedRule.IPAddress
+
+			err := createForwardingRule(s, lbName, svcName, region, ipAddr, target, ports, tc.netTier)
+			assert.NoError(t, err)
+
+			alphaRule, err := s.GetAlphaRegionForwardingRule(lbName, region)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedRule, alphaRule)
 		})
 	}
 }

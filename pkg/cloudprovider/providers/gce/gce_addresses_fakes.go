@@ -140,5 +140,7 @@ func convertToAlphaAddress(object gceObject) *computealpha.Address {
 	if err := json.Unmarshal(enc, &addr); err != nil {
 		panic(fmt.Sprintf("Failed to convert GCE apiObject %v to alpha address: %v", object, err))
 	}
+	// Set the default values for the Alpha fields.
+	addr.NetworkTier = NetworkTierDefault.ToGCEValue()
 	return &addr
 }
