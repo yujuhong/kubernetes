@@ -112,6 +112,15 @@ func (c *PodConfig) Sync() {
 	c.pods.Sync()
 }
 
+// Restore restores pods from the checkpoint store.
+func (c *PodConfig) Restore() {
+	// Load the pods from the checkpoint store and send them as regular updates
+	// through the channel.
+	//
+	//  updates <- kubetypes.PodUpdate{
+	//  	Pods: pods, Op: kubetypes.RESTORE, Source: SOURCE_TYPE}
+}
+
 // podStorage manages the current pod state at any point in time and ensures updates
 // to the channel are delivered in order.  Note that this object is an in-memory source of
 // "truth" and on creation contains zero entries.  Once all previously read sources are
@@ -155,8 +164,9 @@ func (s *podStorage) Merge(source string, change interface{}) error {
 	s.updateLock.Lock()
 	defer s.updateLock.Unlock()
 
+	// TODO: Need to double check that the sourcesSeen logic works correctly.
 	seenBefore := s.sourcesSeen.Has(source)
-	adds, updates, deletes, removes, reconciles := s.merge(source, change)
+	adds, updates, deletes, removes, reconciles, restores := s.merge(source, change)
 	firstSet := !seenBefore && s.sourcesSeen.Has(source)
 
 	// deliver update notifications
@@ -174,6 +184,10 @@ func (s *podStorage) Merge(source string, change interface{}) error {
 		if len(deletes.Pods) > 0 {
 			s.updates <- *deletes
 		}
+		if len(restores.Pods) > 0 {
+			s.updates <- *restores
+		}
+
 		if firstSet && len(adds.Pods) == 0 && len(updates.Pods) == 0 && len(deletes.Pods) == 0 {
 			// Send an empty update when first seeing the source and there are
 			// no ADD or UPDATE or DELETE pods from the source. This signals kubelet that
@@ -210,7 +224,7 @@ func (s *podStorage) Merge(source string, change interface{}) error {
 	return nil
 }
 
-func (s *podStorage) merge(source string, change interface{}) (adds, updates, deletes, removes, reconciles *kubetypes.PodUpdate) {
+func (s *podStorage) merge(source string, change interface{}) (adds, updates, deletes, removes, reconciles, restores *kubetypes.PodUpdate) {
 	s.podLock.Lock()
 	defer s.podLock.Unlock()
 
@@ -219,6 +233,7 @@ func (s *podStorage) merge(source string, change interface{}) (adds, updates, de
 	deletePods := []*v1.Pod{}
 	removePods := []*v1.Pod{}
 	reconcilePods := []*v1.Pod{}
+	restorePods := []*v1.Pod{}
 
 	pods := s.pods[source]
 	if pods == nil {
@@ -292,6 +307,8 @@ func (s *podStorage) merge(source string, change interface{}) (adds, updates, de
 			}
 		}
 
+	case kubetypes.RESTORE:
+		// Generate updates with kubetypes.RESTORE types
 	default:
 		glog.Warningf("Received invalid update type: %v", update)
 
@@ -304,8 +321,9 @@ func (s *podStorage) merge(source string, change interface{}) (adds, updates, de
 	deletes = &kubetypes.PodUpdate{Op: kubetypes.DELETE, Pods: copyPods(deletePods), Source: source}
 	removes = &kubetypes.PodUpdate{Op: kubetypes.REMOVE, Pods: copyPods(removePods), Source: source}
 	reconciles = &kubetypes.PodUpdate{Op: kubetypes.RECONCILE, Pods: copyPods(reconcilePods), Source: source}
+	restores = &kubetypes.PodUpdate{Op: kubetypes.RESTORE, Pods: copyPods(restorePods), Source: source}
 
-	return adds, updates, deletes, removes, reconciles
+	return adds, updates, deletes, removes, reconciles, restores
 }
 
 func (s *podStorage) markSourceSet(source string) {
