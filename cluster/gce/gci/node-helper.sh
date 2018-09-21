@@ -35,7 +35,11 @@ function get-node-instance-metadata {
 
 # $1: template name (required).
 function create-node-instance-template {
+  # This is hit during kube-up.sh:
+  #echo "PJH: exiting from create-node-instance-template: cluster/gce/custom/node-helper.sh, a.k.a cluster/gce/ubuntu/node-helper.sh, a.k.a. cluster/gce/cos/node-helper.sh, a.k.a. cluster/gce/gci/node-helper.sh"
+  #exit 1
   local template_name="$1"
   ensure-gci-metadata-files
-  create-node-template "$template_name" "${scope_flags[*]}" "$(get-node-instance-metadata)"
+  create-node-template "${template_name}" "${scope_flags[*]}" "$(get-node-instance-metadata)" "linux"
+  create-node-template "${template_name}-windows" "${scope_flags[*]}" "$(get-node-instance-metadata)" "windows"
 }

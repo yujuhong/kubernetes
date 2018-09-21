@@ -25,6 +25,7 @@ source "${KUBE_ROOT}/cluster/gce/${KUBE_CONFIG_FILE-"config-default.sh"}"
 source "${KUBE_ROOT}/cluster/common.sh"
 source "${KUBE_ROOT}/hack/lib/util.sh"
 
+#echo "PJH: NODE_OS_DISTRIBUTION=${NODE_OS_DISTRIBUTION}"
 if [[ "${NODE_OS_DISTRIBUTION}" == "gci" || "${NODE_OS_DISTRIBUTION}" == "ubuntu" || "${NODE_OS_DISTRIBUTION}" == "custom" ]]; then
   source "${KUBE_ROOT}/cluster/gce/${NODE_OS_DISTRIBUTION}/node-helper.sh"
 else
@@ -32,6 +33,7 @@ else
   exit 1
 fi
 
+#echo "PJH: MASTER_OS_DISTRIBUTION=${MASTER_OS_DISTRIBUTION}"
 if [[ "${MASTER_OS_DISTRIBUTION}" == "trusty" || "${MASTER_OS_DISTRIBUTION}" == "gci" || "${MASTER_OS_DISTRIBUTION}" == "ubuntu" ]]; then
   source "${KUBE_ROOT}/cluster/gce/${MASTER_OS_DISTRIBUTION}/master-helper.sh"
 else
@@ -66,14 +68,14 @@ function set-node-image() {
 
         # If the node image is not set, we use the latest GCI image.
         # Otherwise, we respect whatever is set by the user.
-        NODE_IMAGE=${KUBE_GCE_NODE_IMAGE:-${GCI_VERSION}}
-        NODE_IMAGE_PROJECT=${KUBE_GCE_NODE_PROJECT:-${DEFAULT_GCI_PROJECT}}
+        LINUX_NODE_IMAGE=${KUBE_GCE_NODE_IMAGE:-${GCI_VERSION}}
+        LINUX_NODE_IMAGE_PROJECT=${KUBE_GCE_NODE_PROJECT:-${DEFAULT_GCI_PROJECT}}
     fi
 }
 
 set-node-image
 
-# Verfiy cluster autoscaler configuration.
+# Verify cluster autoscaler configuration.
 if [[ "${ENABLE_CLUSTER_AUTOSCALER}" == "true" ]]; then
   if [[ -z $AUTOSCALER_MIN_NODES ]]; then
     echo "AUTOSCALER_MIN_NODES not set."
@@ -350,6 +352,8 @@ function detect-node-names() {
 
   echo "INSTANCE_GROUPS=${INSTANCE_GROUPS[*]:-}" >&2
   echo "NODE_NAMES=${NODE_NAMES[*]:-}" >&2
+  echo "PJH: detect-node-names: INSTANCE_GROUPS=${INSTANCE_GROUPS[*]:-}" >&2
+  echo "PJH: detect-node-names: NODE_NAMES=${NODE_NAMES[*]:-}" >&2
 }
 
 # Detect the information about the minions
@@ -801,6 +805,9 @@ EOF
 function build-kube-env {
   local master=$1
   local file=$2
+  # file is something like "/tmp/tmp.Xqsou4FNlf/node-kube-env.yaml" - in
+  # KUBE_TEMP directory!
+  #echo "PJH: build-kube-env: file=${file}"
 
   local server_binary_tar_url=$SERVER_BINARY_TAR_URL
   local kube_manifests_tar_url="${KUBE_MANIFESTS_TAR_URL:-}"
@@ -985,6 +992,7 @@ EOF
     done
   fi
 
+  echo "PJH: TODO: figure out how master uses kube-env, adjust it for Windows nodes too! Looks like get-node-instance-metadata sets kube-env metadata label."
   if [[ "${master}" == "true" ]]; then
     # Master-only env vars.
     cat >>$file <<EOF
@@ -997,7 +1005,7 @@ MASTER_KEY: $(yaml-quote ${MASTER_KEY_BASE64:-})
 KUBECFG_CERT: $(yaml-quote ${KUBECFG_CERT_BASE64:-})
 KUBECFG_KEY: $(yaml-quote ${KUBECFG_KEY_BASE64:-})
 KUBELET_APISERVER: $(yaml-quote ${KUBELET_APISERVER:-})
-NUM_NODES: $(yaml-quote ${NUM_NODES})
+NUM_NODES: $(yaml-quote $(get-num-nodes))
 STORAGE_BACKEND: $(yaml-quote ${STORAGE_BACKEND:-etcd3})
 STORAGE_MEDIA_TYPE: $(yaml-quote ${STORAGE_MEDIA_TYPE:-})
 ENABLE_GARBAGE_COLLECTOR: $(yaml-quote ${ENABLE_GARBAGE_COLLECTOR:-})
@@ -1473,7 +1481,9 @@ from distutils import version
 
 minVersion = version.LooseVersion("1.3.0")
 required = [ "alpha", "beta", "core" ]
+#print ("pjh: sys.argv=%s" % sys.argv)
 data = json.loads(sys.argv[1])
+#print ("pjh: data=%s" % data)
 rel = data.get("Google Cloud SDK")
 if "CL @" in rel:
   print("Using dev version of gcloud: %s" %rel)
@@ -1488,7 +1498,8 @@ for c in required:
 if missing:
   for c in missing:
     print ("missing required gcloud component \"{0}\"".format(c))
-  exit(1)
+    print ("Try running `gcloud components install {0}`".format(c))
+  #exit(1)
     ' """${version}"""
   fi
 }
@@ -1638,10 +1649,14 @@ function validate-node-local-ssds-ext(){
 # $1: The name of the instance template.
 # $2: The scopes flag.
 # $3: String of comma-separated metadata entries (must all be from a file).
+# $4: "linux" or "windows"
 function create-node-template() {
   detect-project
   detect-subnetworks
   local template_name="$1"
+  echo "PJH: in create-node-template: template_name=${template_name}"
+  local linux_or_windows="$4"
+  echo "PJH: in create-node-template: linux_or_windows=${linux_or_windows}"
 
   # First, ensure the template doesn't exist.
   # TODO(zmerlynn): To make this really robust, we need to parse the output and
@@ -1708,6 +1723,19 @@ function create-node-template() {
     "${ENABLE_IP_ALIASES:-}" \
     "${IP_ALIAS_SIZE:-}")
 
+  echo "PJH: in create-node-template: NODE_TAG=${NODE_TAG}"
+  local node_image_project=""
+  local node_image=""
+  if [[ "${linux_or_windows}" == 'linux' ]]; then
+      node_image_project="${LINUX_NODE_IMAGE_PROJECT}"
+      node_image="${LINUX_NODE_IMAGE}"
+  else
+      node_image_project="${WINDOWS_NODE_IMAGE_PROJECT}"
+      node_image="${WINDOWS_NODE_IMAGE}"
+  fi
+  echo "PJH: in create-node-template: node_image_project=${node_image_project}"
+  echo "PJH: in create-node-template: node_image=${node_image}"
+
   local attempt=1
   while true; do
     echo "Attempt ${attempt} to create ${1}" >&2
@@ -1717,8 +1745,8 @@ function create-node-template() {
       --machine-type "${NODE_SIZE}" \
       --boot-disk-type "${NODE_DISK_TYPE}" \
       --boot-disk-size "${NODE_DISK_SIZE}" \
-      --image-project="${NODE_IMAGE_PROJECT}" \
-      --image "${NODE_IMAGE}" \
+      --image-project="${node_image_project}" \
+      --image "${node_image}" \
       --service-account "${NODE_SERVICE_ACCOUNT}" \
       --tags "${NODE_TAG}" \
       ${accelerator_args} \
@@ -1770,7 +1798,8 @@ function kube-up() {
     parse-master-env
     create-subnetworks
     detect-subnetworks
-    create-nodes
+    create-linux-nodes
+    create-windows-nodes
   elif [[ ${KUBE_REPLICATE_EXISTING_MASTER:-} == "true" ]]; then
     if  [[ "${MASTER_OS_DISTRIBUTION}" != "gci" && "${MASTER_OS_DISTRIBUTION}" != "ubuntu" ]]; then
       echo "Master replication supported only for gci and ubuntu"
@@ -1789,11 +1818,15 @@ function kube-up() {
     detect-subnetworks
     write-cluster-location
     write-cluster-name
+    echo "PJH: kube-up(): calling create-autoscaler-config"
     create-autoscaler-config
     create-master
     create-nodes-firewall
     create-nodes-template
-    create-nodes
+    echo "PJH: kube-up(): calling create-linux-nodes and create-windows-nodes"
+    create-linux-nodes
+    create-windows-nodes
+    echo "PJH: kube-up(): calling check-cluster"
     check-cluster
   fi
 }
@@ -2116,7 +2149,7 @@ function create-master() {
   create-certs "${MASTER_RESERVED_IP}"
   create-etcd-certs ${MASTER_NAME}
 
-  if [[ "${NUM_NODES}" -ge "50" ]]; then
+  if [[ "$(get-num-nodes)" -ge "50" ]]; then
     # We block on master creation for large clusters to avoid doing too much
     # unnecessary work in case master start-up fails (like creation of nodes).
     create-master-instance "${MASTER_RESERVED_IP}"
@@ -2303,6 +2336,8 @@ function get-scope-flags() {
 
 function create-nodes-template() {
   echo "Creating nodes."
+  #echo "PJH: exiting from create-nodes-template cluster/gce/util.sh"
+  #exit 1
 
   local scope_flags=$(get-scope-flags)
 
@@ -2324,38 +2359,41 @@ function set_num_migs() {
     echo "MAX_INSTANCES_PER_MIG cannot be negative. Assuming default 1000"
     defaulted_max_instances_per_mig=1000
   fi
-  export NUM_MIGS=$(((${NUM_NODES} + ${defaulted_max_instances_per_mig} - 1) / ${defaulted_max_instances_per_mig}))
+  export NUM_LINUX_MIGS=$(((${NUM_LINUX_NODES} + ${defaulted_max_instances_per_mig} - 1) / ${defaulted_max_instances_per_mig}))
+  export NUM_WINDOWS_MIGS=$(((${NUM_WINDOWS_NODES} + ${defaulted_max_instances_per_mig} - 1) / ${defaulted_max_instances_per_mig}))
+  export NUM_MIGS=$((${NUM_LINUX_NODES} + ${NUM_WINDOWS_NODES}))
+  echo "PJH: NUM_LINUX_MIGS=${NUM_LINUX_MIGS}, NUM_WINDOWS_MIGS=${NUM_WINDOWS_MIGS}, NUM_MIGS=${NUM_MIGS}"
 }
 
 # Assumes:
-# - NUM_MIGS
+# - NUM_LINUX_MIGS
 # - NODE_INSTANCE_PREFIX
-# - NUM_NODES
+# - NUM_LINUX_NODES
 # - PROJECT
 # - ZONE
-function create-nodes() {
+function create-linux-nodes() {
   local template_name="${NODE_INSTANCE_PREFIX}-template"
 
   if [[ -z "${HEAPSTER_MACHINE_TYPE:-}" ]]; then
-    local -r nodes="${NUM_NODES}"
+    local -r nodes="${NUM_LINUX_NODES}"
   else
     echo "Creating a special node for heapster with machine-type ${HEAPSTER_MACHINE_TYPE}"
     create-heapster-node
-    local -r nodes=$(( NUM_NODES - 1 ))
+    local -r nodes=$(( NUM_LINUX_NODES - 1 ))
   fi
 
   local instances_left=${nodes}
 
   #TODO: parallelize this loop to speed up the process
-  for ((i=1; i<=${NUM_MIGS}; i++)); do
+  for ((i=1; i<=${NUM_LINUX_MIGS}; i++)); do
     local group_name="${NODE_INSTANCE_PREFIX}-group-$i"
-    if [[ $i == ${NUM_MIGS} ]]; then
+    if [[ $i == ${NUM_LINUX_MIGS} ]]; then
       # TODO: We don't add a suffix for the last group to keep backward compatibility when there's only one MIG.
       # We should change it at some point, but note #18545 when changing this.
       group_name="${NODE_INSTANCE_PREFIX}-group"
     fi
     # Spread the remaining number of nodes evenly
-    this_mig_size=$((${instances_left} / (${NUM_MIGS}-${i}+1)))
+    this_mig_size=$((${instances_left} / (${NUM_LINUX_MIGS}-${i}+1)))
     instances_left=$((instances_left-${this_mig_size}))
 
     gcloud compute instance-groups managed \
@@ -2374,6 +2412,45 @@ function create-nodes() {
 }
 
 # Assumes:
+# - NUM_WINDOWS_MIGS
+# - NODE_INSTANCE_PREFIX
+# - NUM_WINDOWS_NODES
+# - PROJECT
+# - ZONE
+function create-windows-nodes() {
+  local template_name="${NODE_INSTANCE_PREFIX}-template-windows"
+
+  local -r nodes="${NUM_WINDOWS_NODES}"
+  local instances_left=${nodes}
+
+  #TODO: parallelize this loop to speed up the process
+  for ((i=1; i<=${NUM_WINDOWS_MIGS}; i++)); do
+    local group_name="${NODE_INSTANCE_PREFIX}-windows-group-$i"
+    if [[ $i == ${NUM_WINDOWS_MIGS} ]]; then
+      # TODO: We don't add a suffix for the last group to keep backward compatibility when there's only one MIG.
+      # We should change it at some point, but note #18545 when changing this.
+      group_name="${NODE_INSTANCE_PREFIX}-windows-group"
+    fi
+    # Spread the remaining number of nodes evenly
+    this_mig_size=$((${instances_left} / (${NUM_WINDOWS_MIGS}-${i}+1)))
+    instances_left=$((instances_left-${this_mig_size}))
+
+    gcloud compute instance-groups managed \
+        create "${group_name}" \
+        --project "${PROJECT}" \
+        --zone "${ZONE}" \
+        --base-instance-name "${group_name}" \
+        --size "${this_mig_size}" \
+        --template "$template_name" || true;
+    gcloud compute instance-groups managed wait-until-stable \
+        "${group_name}" \
+        --zone "${ZONE}" \
+        --project "${PROJECT}" \
+        --timeout "${MIG_WAIT_UNTIL_WINDOWS_STABLE_TIMEOUT}" || true;
+  done
+}
+
+# Assumes:
 # - NODE_INSTANCE_PREFIX
 # - PROJECT
 # - NETWORK_PROJECT
@@ -2382,8 +2459,8 @@ function create-nodes() {
 # - HEAPSTER_MACHINE_TYPE
 # - NODE_DISK_TYPE
 # - NODE_DISK_SIZE
-# - NODE_IMAGE_PROJECT
-# - NODE_IMAGE
+# - LINUX_NODE_IMAGE_PROJECT
+# - LINUX_NODE_IMAGE
 # - NODE_SERVICE_ACCOUNT
 # - NODE_TAG
 # - NETWORK
@@ -2413,8 +2490,8 @@ function create-heapster-node() {
       --machine-type="${HEAPSTER_MACHINE_TYPE}" \
       --boot-disk-type "${NODE_DISK_TYPE}" \
       --boot-disk-size "${NODE_DISK_SIZE}" \
-      --image-project="${NODE_IMAGE_PROJECT}" \
-      --image "${NODE_IMAGE}" \
+      --image-project="${LINUX_NODE_IMAGE_PROJECT}" \
+      --image "${LINUX_NODE_IMAGE}" \
       --service-account "${NODE_SERVICE_ACCOUNT}" \
       --tags "${NODE_TAG}" \
       ${network} \
@@ -2432,6 +2509,10 @@ function create-heapster-node() {
 # Exports
 # - AUTOSCALER_MIG_CONFIG
 function create-cluster-autoscaler-mig-config() {
+
+  echo "PJH: create-cluster-autoscaler-mig-config: no idea if/how to fork this function for Windows, might break"
+  echo "PJH: create-cluster-autoscaler-mig-config: AUTOSCALER_MIN_NODES=${AUTOSCALER_MIN_NODES}"
+  echo "PJH: create-cluster-autoscaler-mig-config: AUTOSCALER_MAX_NODES=${AUTOSCALER_MAX_NODES}"
 
   # Each MIG must have at least one node, so the min number of nodes
   # must be greater or equal to the number of migs.
@@ -2487,6 +2568,8 @@ function create-autoscaler-config() {
   if [[ "${ENABLE_CLUSTER_AUTOSCALER}" == "true" ]]; then
     create-cluster-autoscaler-mig-config
     echo "Using autoscaler config: ${AUTOSCALER_MIG_CONFIG} ${AUTOSCALER_EXPANDER_CONFIG}"
+  else
+    echo "PJH: create-autoscaler-config: ENABLE_CLUSTER_AUTOSCALER false, creating autoscaler MIG config."
   fi
 }
 

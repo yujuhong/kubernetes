@@ -48,6 +48,7 @@ function detect_kube_release() {
     return 0  # Allow caller to explicitly set version
   fi
 
+  echo "PJH: looking for ${KUBE_ROOT}/version file."
   if [[ ! -e "${KUBE_ROOT}/version" ]]; then
     echo "Can't determine Kubernetes release." >&2
     echo "${BASH_SOURCE} should only be run from a prebuilt Kubernetes release." >&2

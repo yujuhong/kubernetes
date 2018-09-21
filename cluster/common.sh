@@ -21,6 +21,7 @@ set -o nounset
 set -o pipefail
 
 KUBE_ROOT=$(cd $(dirname "${BASH_SOURCE}")/.. && pwd)
+#echo "PJH: KUBE_ROOT: ${KUBE_ROOT}"
 
 DEFAULT_KUBECONFIG="${HOME:-.}/.kube/config"
 
@@ -300,6 +301,7 @@ function find-tar() {
   local -r tarball=$1
   locations=(
     "${KUBE_ROOT}/server/${tarball}"
+    "${KUBE_ROOT}/kubernetes/server/${tarball}"
     "${KUBE_ROOT}/_output/release-tars/${tarball}"
     "${KUBE_ROOT}/bazel-bin/build/release-tars/${tarball}"
   )
@@ -458,7 +460,8 @@ EOF
 # If KUBERNETES_SKIP_CONFIRM is set to y, we'll automatically download binaries
 # without prompting.
 function verify-kube-binaries() {
-  if ! "${KUBE_ROOT}/cluster/kubectl.sh" version --client >&/dev/null; then
+  #if ! "${KUBE_ROOT}/cluster/kubectl.sh" version --client >&/dev/null; then
+  if ! "${KUBE_ROOT}/cluster/kubectl.sh" version --client ; then
     echo "!!! kubectl appears to be broken or missing"
     download-release-binaries
   fi

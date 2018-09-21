@@ -91,7 +91,7 @@ function create_cluster {
   if [[ -n "${KUBERNETES_SKIP_CREATE_CLUSTER-}" ]]; then
     exit 0
   fi
-  echo "Creating a kubernetes on ${KUBERNETES_PROVIDER:-gce}..."
+  echo "Creating a kubernetes cluster on ${KUBERNETES_PROVIDER:-gce}..."
   (
     cd kubernetes
     ./cluster/kube-up.sh
