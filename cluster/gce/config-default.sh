@@ -65,18 +65,19 @@ MIG_WAIT_UNTIL_STABLE_TIMEOUT=${MIG_WAIT_UNTIL_STABLE_TIMEOUT:-1800}
 MIG_WAIT_UNTIL_WINDOWS_STABLE_TIMEOUT=${MIG_WAIT_UNTIL_WINDOWS_STABLE_TIMEOUT:-1800}
 
 MASTER_OS_DISTRIBUTION=${KUBE_MASTER_OS_DISTRIBUTION:-${KUBE_OS_DISTRIBUTION:-gci}}
-NODE_OS_DISTRIBUTION=${KUBE_NODE_OS_DISTRIBUTION:-${KUBE_OS_DISTRIBUTION:-gci}}
+LINUX_NODE_OS_DISTRIBUTION=${KUBE_NODE_OS_DISTRIBUTION:-${KUBE_OS_DISTRIBUTION:-gci}}
+WINDOWS_NODE_OS_DISTRIBUTION="win1803"
 
 if [[ "${MASTER_OS_DISTRIBUTION}" == "cos" ]]; then
     MASTER_OS_DISTRIBUTION="gci"
 fi
 
-if [[ "${NODE_OS_DISTRIBUTION}" == "cos" ]]; then
-    NODE_OS_DISTRIBUTION="gci"
+if [[ "${LINUX_NODE_OS_DISTRIBUTION}" == "cos" ]]; then
+    LINUX_NODE_OS_DISTRIBUTION="gci"
 fi
 
 # GPUs supported in GCE do not have compatible drivers in Debian 7.
-if [[ "${NODE_OS_DISTRIBUTION}" == "debian" ]]; then
+if [[ "${LINUX_NODE_OS_DISTRIBUTION}" == "debian" ]]; then
     NODE_ACCELERATORS=""
 fi
 
@@ -90,8 +91,6 @@ MASTER_IMAGE=${KUBE_GCE_MASTER_IMAGE:-}
 MASTER_IMAGE_PROJECT=${KUBE_GCE_MASTER_PROJECT:-cos-cloud}
 LINUX_NODE_IMAGE=${KUBE_GCE_NODE_IMAGE:-${GCI_VERSION}}
 LINUX_NODE_IMAGE_PROJECT=${KUBE_GCE_NODE_PROJECT:-cos-cloud}
-WINDOWS_NODE_IMAGE="windows-server-1803-dc-core-for-containers-v20180916"
-WINDOWS_NODE_IMAGE_PROJECT="windows-cloud"
 NODE_SERVICE_ACCOUNT=${KUBE_GCE_NODE_SERVICE_ACCOUNT:-default}
 CONTAINER_RUNTIME=${KUBE_CONTAINER_RUNTIME:-docker}
 CONTAINER_RUNTIME_ENDPOINT=${KUBE_CONTAINER_RUNTIME_ENDPOINT:-}
@@ -282,7 +281,7 @@ ENABLE_CLUSTER_UI="${KUBE_ENABLE_CLUSTER_UI:-true}"
 #   none           - Not run node problem detector.
 #   daemonset      - Run node problem detector as daemonset.
 #   standalone     - Run node problem detector as standalone system daemon.
-if [[ "${NODE_OS_DISTRIBUTION}" == "gci" ]]; then
+if [[ "${LINUX_NODE_OS_DISTRIBUTION}" == "gci" ]]; then
   # Enable standalone mode by default for gci.
   ENABLE_NODE_PROBLEM_DETECTOR="${KUBE_ENABLE_NODE_PROBLEM_DETECTOR:-standalone}"
 else

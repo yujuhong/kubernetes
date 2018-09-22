@@ -25,15 +25,15 @@ source "${KUBE_ROOT}/cluster/gce/${KUBE_CONFIG_FILE-"config-default.sh"}"
 source "${KUBE_ROOT}/cluster/common.sh"
 source "${KUBE_ROOT}/hack/lib/util.sh"
 
-#echo "PJH: NODE_OS_DISTRIBUTION=${NODE_OS_DISTRIBUTION}"
-if [[ "${NODE_OS_DISTRIBUTION}" == "gci" || "${NODE_OS_DISTRIBUTION}" == "ubuntu" || "${NODE_OS_DISTRIBUTION}" == "custom" ]]; then
-  source "${KUBE_ROOT}/cluster/gce/${NODE_OS_DISTRIBUTION}/node-helper.sh"
+if [[ "${LINUX_NODE_OS_DISTRIBUTION}" == "gci" || "${LINUX_NODE_OS_DISTRIBUTION}" == "ubuntu" || "${LINUX_NODE_OS_DISTRIBUTION}" == "custom" ]]; then
+  source "${KUBE_ROOT}/cluster/gce/${LINUX_NODE_OS_DISTRIBUTION}/node-helper.sh"
 else
-  echo "Cannot operate on cluster using node os distro: ${NODE_OS_DISTRIBUTION}" >&2
+  echo "Cannot operate on cluster using node os distro: ${LINUX_NODE_OS_DISTRIBUTION}" >&2
   exit 1
 fi
 
-#echo "PJH: MASTER_OS_DISTRIBUTION=${MASTER_OS_DISTRIBUTION}"
+source "${KUBE_ROOT}/cluster/gce/${WINDOWS_NODE_OS_DISTRIBUTION}/node-helper.sh"
+
 if [[ "${MASTER_OS_DISTRIBUTION}" == "trusty" || "${MASTER_OS_DISTRIBUTION}" == "gci" || "${MASTER_OS_DISTRIBUTION}" == "ubuntu" ]]; then
   source "${KUBE_ROOT}/cluster/gce/${MASTER_OS_DISTRIBUTION}/master-helper.sh"
 else
@@ -59,8 +59,8 @@ fi
 
 # Sets node image based on the specified os distro. Currently this function only
 # supports gci and debian.
-function set-node-image() {
-    if [[ "${NODE_OS_DISTRIBUTION}" == "gci" ]]; then
+function set-linux-node-image() {
+    if [[ "${LINUX_NODE_OS_DISTRIBUTION}" == "gci" ]]; then
         DEFAULT_GCI_PROJECT=google-containers
         if [[ "${GCI_VERSION}" == "cos"* ]]; then
             DEFAULT_GCI_PROJECT=cos-cloud
@@ -73,7 +73,22 @@ function set-node-image() {
     fi
 }
 
-set-node-image
+function set-windows-node-image() {
+    WINDOWS_NODE_IMAGE_PROJECT="windows-cloud"
+    if [[ "${WINDOWS_NODE_OS_DISTRIBUTION}" == "win1709" ]]; then
+        WINDOWS_NODE_IMAGE_FAMILY="windows-1709-core-for-containers"
+        #WINDOWS_NODE_IMAGE="windows-server-1709-dc-core-for-containers-v20180916"
+    elif [[ "${WINDOWS_NODE_OS_DISTRIBUTION}" == "win1803" ]]; then
+        WINDOWS_NODE_IMAGE_FAMILY="windows-1803-core-for-containers"
+        #WINDOWS_NODE_IMAGE="windows-server-1803-dc-core-for-containers-v20180916"
+    else
+        echo "Unknown WINDOWS_NODE_OS_DISTRIBUTION ${WINDOWS_NODE_OS_DISTRIBUTION}"
+        exit 1
+    fi
+}
+
+set-linux-node-image
+set-windows-node-image
 
 # Verify cluster autoscaler configuration.
 if [[ "${ENABLE_CLUSTER_AUTOSCALER}" == "true" ]]; then
@@ -812,7 +827,7 @@ function build-kube-env {
   local server_binary_tar_url=$SERVER_BINARY_TAR_URL
   local kube_manifests_tar_url="${KUBE_MANIFESTS_TAR_URL:-}"
   if [[ "${master}" == "true" && "${MASTER_OS_DISTRIBUTION}" == "ubuntu" ]] || \
-     [[ "${master}" == "false" && ("${NODE_OS_DISTRIBUTION}" == "ubuntu" || "${NODE_OS_DISTRIBUTION}" == "custom") ]]; then
+     [[ "${master}" == "false" && ("${LINUX_NODE_OS_DISTRIBUTION}" == "ubuntu" || "${LINUX_NODE_OS_DISTRIBUTION}" == "custom") ]]; then
     # TODO: Support fallback .tar.gz settings on Container Linux
     server_binary_tar_url=$(split_csv "${SERVER_BINARY_TAR_URL}")
     kube_manifests_tar_url=$(split_csv "${KUBE_MANIFESTS_TAR_URL}")
@@ -926,9 +941,9 @@ CUSTOM_TYPHA_DEPLOYMENT_YAML: |
 $(echo "${CUSTOM_TYPHA_DEPLOYMENT_YAML:-}" | sed -e "s/'/''/g")
 EOF
   if [[ "${master}" == "true" && "${MASTER_OS_DISTRIBUTION}" == "gci" ]] || \
-     [[ "${master}" == "false" && "${NODE_OS_DISTRIBUTION}" == "gci" ]]  || \
+     [[ "${master}" == "false" && "${LINUX_NODE_OS_DISTRIBUTION}" == "gci" ]]  || \
      [[ "${master}" == "true" && "${MASTER_OS_DISTRIBUTION}" == "cos" ]] || \
-     [[ "${master}" == "false" && "${NODE_OS_DISTRIBUTION}" == "cos" ]]; then
+     [[ "${master}" == "false" && "${LINUX_NODE_OS_DISTRIBUTION}" == "cos" ]]; then
     cat >>$file <<EOF
 REMOUNT_VOLUME_PLUGIN_DIR: $(yaml-quote ${REMOUNT_VOLUME_PLUGIN_DIR:-true})
 EOF
@@ -944,7 +959,7 @@ TERMINATED_POD_GC_THRESHOLD: $(yaml-quote ${TERMINATED_POD_GC_THRESHOLD})
 EOF
   fi
   if [[ "${master}" == "true" && ("${MASTER_OS_DISTRIBUTION}" == "trusty" || "${MASTER_OS_DISTRIBUTION}" == "gci" || "${MASTER_OS_DISTRIBUTION}" == "ubuntu") ]] || \
-     [[ "${master}" == "false" && ("${NODE_OS_DISTRIBUTION}" == "trusty" || "${NODE_OS_DISTRIBUTION}" == "gci" || "${NODE_OS_DISTRIBUTION}" = "ubuntu" || "${NODE_OS_DISTRIBUTION}" = "custom") ]] ; then
+     [[ "${master}" == "false" && ("${LINUX_NODE_OS_DISTRIBUTION}" == "trusty" || "${LINUX_NODE_OS_DISTRIBUTION}" == "gci" || "${LINUX_NODE_OS_DISTRIBUTION}" = "ubuntu" || "${LINUX_NODE_OS_DISTRIBUTION}" = "custom") ]] ; then
     cat >>$file <<EOF
 KUBE_MANIFESTS_TAR_URL: $(yaml-quote ${kube_manifests_tar_url})
 KUBE_MANIFESTS_TAR_HASH: $(yaml-quote ${KUBE_MANIFESTS_TAR_HASH})
@@ -1649,7 +1664,7 @@ function validate-node-local-ssds-ext(){
 # $1: The name of the instance template.
 # $2: The scopes flag.
 # $3: String of comma-separated metadata entries (must all be from a file).
-# $4: "linux" or "windows"
+# $4: "linux" or "windows".
 function create-node-template() {
   detect-project
   detect-subnetworks
@@ -1723,18 +1738,14 @@ function create-node-template() {
     "${ENABLE_IP_ALIASES:-}" \
     "${IP_ALIAS_SIZE:-}")
 
-  echo "PJH: in create-node-template: NODE_TAG=${NODE_TAG}"
-  local node_image_project=""
-  local node_image=""
+  local node_image_flags=""
   if [[ "${linux_or_windows}" == 'linux' ]]; then
-      node_image_project="${LINUX_NODE_IMAGE_PROJECT}"
-      node_image="${LINUX_NODE_IMAGE}"
+      node_image_flags="--image-project ${LINUX_NODE_IMAGE_PROJECT} --image ${LINUX_NODE_IMAGE}"
   else
-      node_image_project="${WINDOWS_NODE_IMAGE_PROJECT}"
-      node_image="${WINDOWS_NODE_IMAGE}"
+      node_image_flags="--image-project ${WINDOWS_NODE_IMAGE_PROJECT} --image-family ${WINDOWS_NODE_IMAGE_FAMILY}"
   fi
-  echo "PJH: in create-node-template: node_image_project=${node_image_project}"
-  echo "PJH: in create-node-template: node_image=${node_image}"
+  echo "PJH: in create-node-template: node_image_flags=${node_image_flags}"
+  echo "PJH: in create-node-template: NODE_TAG=${NODE_TAG}"
 
   local attempt=1
   while true; do
@@ -1745,8 +1756,7 @@ function create-node-template() {
       --machine-type "${NODE_SIZE}" \
       --boot-disk-type "${NODE_DISK_TYPE}" \
       --boot-disk-size "${NODE_DISK_SIZE}" \
-      --image-project="${node_image_project}" \
-      --image "${node_image}" \
+      ${node_image_flags} \
       --service-account "${NODE_SERVICE_ACCOUNT}" \
       --tags "${NODE_TAG}" \
       ${accelerator_args} \
@@ -2343,8 +2353,13 @@ function create-nodes-template() {
 
   write-node-env
 
-  local template_name="${NODE_INSTANCE_PREFIX}-template"
-  create-node-instance-template $template_name
+  # NOTE: these template names and their format must match
+  # create-[linux,windows]-nodes() as well as get-template()! Ugh, find a
+  # better way to manage these (get-template() is annoying).
+  local linux_template_name="${NODE_INSTANCE_PREFIX}-template"
+  local windows_template_name="${NODE_INSTANCE_PREFIX}-template-windows"
+  create-linux-node-instance-template $linux_template_name
+  create-windows-node-instance-template $windows_template_name
 }
 
 # Assumes:
@@ -2483,6 +2498,7 @@ function create-heapster-node() {
       "${ENABLE_IP_ALIASES:-}" \
       "${IP_ALIAS_SIZE:-}")
 
+  echo "PJH: creating heapster instance w/ metadata-from-file from get-node-instance-metadata()"
   ${gcloud} compute instances \
       create "${NODE_INSTANCE_PREFIX}-heapster" \
       --project "${PROJECT}" \
@@ -2993,6 +3009,7 @@ function check-resources() {
     return 1
   fi
 
+  # TODO(pjh): this won't find the -windows template, will it?
   if gcloud compute instance-templates describe --project "${PROJECT}" "${NODE_INSTANCE_PREFIX}-template" &>/dev/null; then
     KUBE_RESOURCE_FOUND="Instance template ${NODE_INSTANCE_PREFIX}-template"
     return 1
