@@ -28,16 +28,17 @@ function get-node-instance-metadata {
   fi
 
   local metadata=""
+  #metadata+="cluster-location=${KUBE_TEMP}/cluster-location.txt,"
+  metadata+="cluster-name=${KUBE_TEMP}/cluster-name.txt,"
+  #metadata+="configure-sh=${KUBE_ROOT}/cluster/gce/gci/configure.sh,"
+  metadata+="k8s-version=${KUBE_VERSION},"
   metadata+="kube-env=${KUBE_TEMP}/node-kube-env.yaml,"
   metadata+="kubelet-config=${KUBE_TEMP}/node-kubelet-config.yaml,"
-  #metadata+="user-data=${KUBE_ROOT}/cluster/gce/gci/node.yaml,"
-  metadata+="user-data=${KUBE_ROOT}/cluster/gce/windows/node.yaml,"
-  #metadata+="configure-sh=${KUBE_ROOT}/cluster/gce/gci/configure.sh,"
-  metadata+="cluster-location=${KUBE_TEMP}/cluster-location.txt,"
-  metadata+="cluster-name=${KUBE_TEMP}/cluster-name.txt,"
   # How is KUBE_VERSION not already part of kube-env? Whatever...
-  metadata+="k8s-version=${KUBE_VERSION},"
+  metadata+="pod-cidr=${TODO_POD_CIDR},"
+  metadata+="serial-port-enable=1,"
   metadata+="win-version=${win_version},"
+  metadata+="user-data=${KUBE_ROOT}/cluster/gce/windows/node.yaml,"
   metadata+="${NODE_EXTRA_METADATA}"
   echo "${metadata}"
 }

@@ -1,35 +1,18 @@
 # TODO: copyright / license statement.
 
 # TODOs to get this thing working:
+# - set pod-cidr metadata key correctly. Really, need to fetch kube-env metadata
+#   value (node-kube-env.yaml) and capture CLUSTER_IP_RANGE,
+#   SERVICE_CLUSTER_IP_RANGE, KUBERNETES_MASTER_NAME, DNS_SERVER_IP,
+#   DNS_DOMAIN, etc. If you're not sure what to do, review what Linux startup
+#   script does and imitate it!
 # - fetch KUBELET_CONFIG (kubelet-config.yaml).
 # - fetch KUBECONFIG (the thing that lets kubelet work on the node).
+# - If this startup script is too large (I suspect it will be), use a small
+#   startup script that downloads it from Github and invokes it.
 
 $ErrorActionPreference = 'Stop'
 $k8sDir = "C:\etc\kubernetes"
-
-function Set-EnvironmentVariables {
-  [Environment]::SetEnvironmentVariable(
-    "K8S_DIR", "${k8sDir}", "Machine")
-  [Environment]::SetEnvironmentVariable(
-    "NODE_DIR", "${k8sDir}\node", "Machine")
-  [Environment]::SetEnvironmentVariable(
-    "Path", $env:Path + ";${k8sDir}\node", "Machine")
-  [Environment]::SetEnvironmentVariable(
-    "CNI_DIR", "${k8sDir}\cni", "Machine")
-  [Environment]::SetEnvironmentVariable(
-    "KUBELET_CONFIG", "${k8sDir}\kubelet-config.yaml", "Machine")
-  [Environment]::SetEnvironmentVariable(
-    "KUBECONFIG", "${k8sDir}\$(hostname).kubeconfig", "Machine")
-  [Environment]::SetEnvironmentVariable(
-    "KUBE_NETWORK", "l2bridge", "Machine")
-}
-
-function Set-PrerequisiteOptions {
-  # Disable Windows firewall.
-  Set-NetFirewallProfile -Profile Domain, Public, Private -Enabled False
-  # Use TLS 1.2: needed for Invoke-WebRequest to github.com.
-  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-}
 
 function Get-MetadataValue {
   param (
@@ -54,6 +37,61 @@ function Get-MetadataValue {
       return $null
     }
   }
+}
+
+# Fetches the kube-env from the instance metadata.
+# Returns: a PowerShell Hashtable object containing the key-value pairs from
+#   kube-env.
+function Download-KubeEnv {
+  $kubeEnv = Get-MetadataValue 'kube-env'
+  $kubeEnvTable = @{}
+  ForEach ($line in $($kubeEnv.Split("`r`n"))) {
+    # TODO(pjh): the kube-env has some values that contain newlines (e.g.
+    # CUSTOM_NETD_YAML), which are marked with a '|' character at the beginning
+    # of their value. These are not handled correctly at the moment, fix this.
+    $key, $value = $line.Split(":")
+    if($key -eq "") {
+      # Splitting kube-env on newlines fails for values that contain newlines;
+      # in these cases we'll end up with an empty key, just skip them.
+      continue
+    }
+    try {
+      $value = $value.Split("'")[1]
+    }
+    catch [System.Management.Automation.RuntimeException] {
+      # Weird values (e.g. those that begin with '|', see note above) will end
+      # up here.
+      $value = ""
+    }
+    $kubeEnvTable.Add(${key}, ${value})
+  }
+  #$kubeEnvTable | Format-Table
+  return $kubeEnvTable
+}
+
+function Set-EnvironmentVariables {
+  [Environment]::SetEnvironmentVariable(
+    "K8S_DIR", "${k8sDir}", "Machine")
+  [Environment]::SetEnvironmentVariable(
+    "NODE_DIR", "${k8sDir}\node", "Machine")
+  [Environment]::SetEnvironmentVariable(
+    "Path", $env:Path + ";${k8sDir}\node", "Machine")
+  [Environment]::SetEnvironmentVariable(
+    "CNI_DIR", "${k8sDir}\cni", "Machine")
+  [Environment]::SetEnvironmentVariable(
+    "KUBELET_CONFIG", "${k8sDir}\kubelet-config.yaml", "Machine")
+  [Environment]::SetEnvironmentVariable(
+    "KUBECONFIG", "${k8sDir}\$(hostname).kubeconfig", "Machine")
+  [Environment]::SetEnvironmentVariable(
+    "KUBE_NETWORK", "l2bridge", "Machine")
+}
+
+function Set-PrerequisiteOptions {
+  # Disable Windows firewall.
+  Set-NetFirewallProfile -Profile Domain, Public, Private -Enabled False
+  # Use TLS 1.2: needed for Invoke-WebRequest to github.com.
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  # TODO(pjh): disable automatic Windows Updates + restarts?
 }
 
 function Create-PauseImage {
@@ -90,6 +128,11 @@ function DownloadAndInstall-KubernetesBinaries {
 }
 
 function Configure-CniNetworking {
+  # TODO(pjh): use "win-bridge" plugin instead? I think it may have superseded
+  # wincni.
+  # https://github.com/containernetworking/plugins/tree/master/plugins/main/windows/win-bridge
+  # https://github.com/Microsoft/SDN/tree/master/Kubernetes/wincni
+  # https://www.google.com/url?q=https://github.com/Azure/azure-container-networking/blob/master/docs/cni.md&sa=D&ust=1537375361404000&usg=AFQjCNFdWsgEeOIZ-RJiOB1gEH_mzzd6AQ
   mkdir ${env:CNI_DIR}
   Invoke-WebRequest `
     https://github.com/Microsoft/SDN/raw/master/Kubernetes/windows/cni/wincni.exe `
@@ -97,14 +140,6 @@ function Configure-CniNetworking {
 
   $vethIp = (Get-NetAdapter | Where-Object Name -Like "vEthernet (*" |`
     Get-NetIPAddress -AddressFamily IPv4).IPAddress
-  $podCidr = "$([System.Text.Encoding]::ASCII.GetString((`
-    Invoke-WebRequest -UseBasicParsing -H @{'Metadata-Flavor' = 'Google'} `
-    http://metadata.google.internal/computeMetadata/v1/instance/attributes/pod-cidr).Content))"
-
-  # For Windows nodes the pod gateway IP address is the .1 address in the pod
-  # CIDR for the host, but from inside containers it's the .2 address.
-  $podGateway = ${podCidr}.substring(0, ${podCidr}.lastIndexOf('.')) + '.1'
-  $podEndpointGateway = ${podCidr}.substring(0, ${podCidr}.lastIndexOf('.')) + '.2'
 
   mkdir ${env:CNI_DIR}\config
   $l2bridgeConf = "${env:CNI_DIR}\config\l2bridge.conf"
@@ -156,15 +191,100 @@ function Configure-CniNetworking {
               }
           }
       ]
-  }'.replace('POD_CIDR', ${podCidr}).`
-  replace('POD_ENDPOINT_GW', ${podEndpointGateway}).`
-  replace('VETH_IP', ${vethIp})
+  }'.replace('VETH_IP', ${vethIp})
+}
+
+function Configure-HostNetworkingService {
+  $endpointName = "cbr0"
+  $vnicName = "vEthernet ($endpointName)"
+
+  Invoke-WebRequest `
+    https://github.com/Microsoft/SDN/raw/master/Kubernetes/windows/hns.psm1 `
+    -OutFile ${env:K8S_DIR}\hns.psm1
+  Import-Module ${env:K8S_DIR}\hns.psm1
+
+  # TODO(pjh): pod-cidr is 10.200.${i}.0/24 for k8s-hard-way; goes into the
+  # KUBELET_CONFIG that's passed to kubelet via --config flag.
+  $podCidr = Get-MetadataValue 'pod-cidr'
+
+  # For Windows nodes the pod gateway IP address is the .1 address in the pod
+  # CIDR for the host, but from inside containers it's the .2 address.
+  $podGateway = ${podCidr}.substring(0, ${podCidr}.lastIndexOf('.')) + '.1'
+  $podEndpointGateway = `
+    ${podCidr}.substring(0, ${podCidr}.lastIndexOf('.')) + '.2'
+
+  New-HNSNetwork -Type "L2Bridge" -AddressPrefix $podCidr -Gateway $podGateway `
+    -Name ${env:KUBE_NETWORK} -Verbose
+  $hnsNetwork = Get-HnsNetwork | ? Type -EQ "L2Bridge"
+  $hnsEndpoint = New-HnsEndpoint -NetworkId $hnsNetwork.Id -Name $endpointName `
+    -IPAddress $podEndpointGateway -Gateway "0.0.0.0" -Verbose
+  Attach-HnsHostEndpoint -EndpointID $hnsEndpoint.Id -CompartmentID 1 -Verbose
+  netsh interface ipv4 set interface "$vnicName" forwarding=enabled
+  Get-HNSPolicyList | Remove-HnsPolicyList
+}
+
+function Configure-Kubelet {
+  Set-Content ${env:KUBELET_CONFIG} `
+  'kind: KubeletConfiguration
+  apiVersion: kubelet.config.k8s.io/v1beta1
+  authentication:
+    anonymous:
+      enabled: true
+    webhook:
+      enabled: true
+    x509:
+      clientCAFile: "K8S_DIR\ca.pem"
+  authorization:
+    mode: AlwaysAllow
+  clusterDomain: "cluster.local"
+  clusterDNS:
+    - "10.32.0.10"
+  podCIDR: "POD_CIDR"
+  runtimeRequestTimeout: "15m"
+  tlsCertFile: "K8S_DIR\HOSTNAME.pem"
+  tlsPrivateKeyFile: "K8S_DIR\HOSTNAME-key.pem"'`
+  .replace('K8S_DIR', ${env:K8S_DIR}).`
+  replace('POD_CIDR', ${podCidr}).`
+  replace('HOSTNAME', `$(hostname)).replace('\', '\\')
+}
+
+function Start-WorkerServices {
+  & ${env:NODE_DIR}\kubelet.exe --hostname-override=$(hostname) --v=6 `
+    --pod-infra-container-image=kubeletwin/pause --resolv-conf="" `
+    --allow-privileged=true --config=${env:KUBELET_CONFIG} `
+    --enable-debugging-handlers `
+    --kubeconfig=${env:K8S_DIR}\$(hostname).kubeconfig `
+    --hairpin-mode=promiscuous-bridge `
+    --image-pull-progress-deadline=20m --cgroups-per-qos=false `
+    --enforce-node-allocatable="" --network-plugin=cni `
+    --cni-bin-dir="${env:CNI_DIR}" `
+    --cni-conf-dir="${env:CNI_DIR}\config" --register-node=true
+
+  Start-Sleep 10
+
+  & ${env:NODE_DIR}\kube-proxy.exe --v=4 --proxy-mode=kernelspace `
+    --hostname-override=$(hostname) `
+    --kubeconfig=${env:K8S_DIR}\kube-proxy.kubeconfig `
+    --cluster-cidr="10.200.0.0/16"
+}
+
+function Verify-WorkerServices {
+  & ${env:K8S_DIR}\node\kubectl get nodes
 }
 
 try {
   Set-EnvironmentVariables
+  Set-PrerequisiteOptions
+  $kubeEnv = Download-KubeEnv
   Create-PauseImage
   DownloadAndInstall-KubernetesBinaries
+  Configure-CniNetworking
+  Configure-HostNetworkingService
+  Configure-Kubelet
+  Start-WorkerServices
+  Write-Host 'Waiting 20 seconds for node to join cluster.'
+  Start-Sleep 20
+  Verify-WorkerServices
 }
 catch {
   Write-Host 'Exception caught in script:'
