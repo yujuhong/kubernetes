@@ -175,7 +175,7 @@ ENABLE_METADATA_AGENT="${KUBE_ENABLE_METADATA_AGENT:-none}"
 # Useful for scheduling heapster in large clusters with nodes of small size.
 HEAPSTER_MACHINE_TYPE="${HEAPSTER_MACHINE_TYPE:-}"
 
-# Set etcd image (e.g. k8s.gcr.io/etcd) and version (e.g. 3.2.24-0) if you need
+# Set etcd image (e.g. k8s.gcr.io/etcd) and version (e.g. 3.2.24-1) if you need
 # non-default version.
 ETCD_IMAGE="${TEST_ETCD_IMAGE:-}"
 ETCD_DOCKER_REPOSITORY="${TEST_ETCD_DOCKER_REPOSITORY:-}"
@@ -229,7 +229,7 @@ CUSTOM_TYPHA_DEPLOYMENT_YAML="${KUBE_CUSTOM_TYPHA_DEPLOYMENT_YAML:-}"
 # To avoid running netd on a node that is not configured appropriately,
 # label each Node so that the DaemonSet can run the Pods only on ready Nodes.
 if [[ ${ENABLE_NETD:-} == "true" ]]; then
-	NON_MASTER_NODE_LABELS="${NON_MASTER_NODE_LABELS:+${NON_MASTER_NODE_LABELS},}beta.kubernetes.io/kube-netd-ready=true"
+	NON_MASTER_NODE_LABELS="${NON_MASTER_NODE_LABELS:+${NON_MASTER_NODE_LABELS},}cloud.google.com/gke-netd-ready=true"
 fi
 
 # To avoid running Calico on a node that is not configured appropriately,
