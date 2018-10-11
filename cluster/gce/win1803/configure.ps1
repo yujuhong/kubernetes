@@ -249,6 +249,8 @@ function Configure-Kubelet {
 }
 
 function Start-WorkerServices {
+  # TODO: run these as background jobs, probably. See Yu-Ju's
+  # https://paste.googleplex.com/6221572868145152.
   & ${env:NODE_DIR}\kubelet.exe --hostname-override=$(hostname) --v=6 `
     --pod-infra-container-image=kubeletwin/pause --resolv-conf="" `
     --allow-privileged=true --config=${env:KUBELET_CONFIG} `
