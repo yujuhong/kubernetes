@@ -91,6 +91,14 @@ function Set-EnvironmentVariables {
     "KUBECONFIG", "${k8sDir}\$(hostname).kubeconfig", "Machine")
   [Environment]::SetEnvironmentVariable(
     "KUBE_NETWORK", "l2bridge", "Machine")
+  # TODO: copy-paste these for manual testing...
+  $env:K8S_DIR = "${k8sDir}"
+  $env:NODE_DIR = "${k8sDir}\node"
+  $env:Path = $env:Path + ";${k8sDir}\node"
+  $env:CNI_DIR = "${k8sDir}\cni"
+  $env:KUBELET_CONFIG = "${k8sDir}\kubelet-config.yaml"
+  $env:KUBECONFIG = "${k8sDir}\$(hostname).kubeconfig"
+  $env:KUBE_NETWORK = "l2bridge"
 }
 
 function Set-PrerequisiteOptions {
@@ -111,15 +119,14 @@ function Create-PauseImage {
   New-Item -ItemType file ${env:K8S_DIR}\pauseimage\Dockerfile
   Set-Content ${env:K8S_DIR}\pauseimage\Dockerfile `
     "FROM microsoft/nanoserver:${winVersion}`n`nCMD cmd /c ping -t localhost"
+  # TODO: kubeletwin/pause should be a variable across these functions.
   docker build -t kubeletwin/pause ${env:K8S_DIR}\pauseimage
 }
 
 function DownloadAndInstall-KubernetesBinaries {
-  #$k8sVersion = "$(gcloud compute project-info describe `
-  #  --format='value(commonInstanceMetadata.items.k8s-version)')"
-  $winVersion = Get-MetadataValue 'k8s-version'
+  $k8sVersion = Get-MetadataValue 'k8s-version'
 
-  mkdir ${env:NODE_DIR}
+  mkdir -Force ${env:NODE_DIR}
 
   # Disable progress bar to dramatically increase download speed.
   $ProgressPreference = 'SilentlyContinue'
@@ -148,6 +155,7 @@ function Configure-CniNetworking {
 
   mkdir ${env:CNI_DIR}\config
   $l2bridgeConf = "${env:CNI_DIR}\config\l2bridge.conf"
+  # TODO(pjh): add -Force to overwrite if exists? Or do we want to fail?
   New-Item -ItemType file ${l2bridgeConf}
 
   # TODO(pjh): need to fill in appropriate cluster CIDR values here! See
@@ -212,10 +220,14 @@ function Configure-HostNetworkingService {
   Import-Module ${env:K8S_DIR}\hns.psm1
 
   # BOOKMARK XXX TODO: run the kubelet once here to get the podCidr!
-  # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L180
-  #
+  #   Need to update node bringup so that KUBECONFIG is attached as metadata.
   # Then:
   # $podCIDR=c:\k\kubectl.exe --kubeconfig=c:\k\config get nodes/$($(hostname).ToLower()) -o custom-columns=podCidr:.spec.podCIDR --no-headers
+  $argList = @(`
+    #"--hostname-override=$(hostname)",`
+    "--pod-infra-container-image=kubeletwin/pause",`
+    "--resolv-conf=""""",`
+    "--kubeconfig=${env:K8S_DIR}\$(hostname).kubeconfig")
 
   #### TODO(pjh): pod-cidr is 10.200.${i}.0/24 for k8s-hard-way; goes into the
   #### KUBELET_CONFIG that's passed to kubelet via --config flag.
@@ -259,7 +271,8 @@ function Configure-Kubelet {
   tlsPrivateKeyFile: "K8S_DIR\HOSTNAME-key.pem"'`
   .replace('K8S_DIR', ${env:K8S_DIR}).`
   replace('POD_CIDR', ${podCidr}).`
-  replace('HOSTNAME', `$(hostname)).replace('\', '\\')
+  replace('HOSTNAME', $(hostname)).`
+  replace('\', '\\')
 }
 
 function Start-WorkerServices {
