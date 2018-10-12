@@ -18,28 +18,34 @@
 #echo "PJH: TODO: is cluster/gce/gci/helper.sh needed for Windows?"
 source "${KUBE_ROOT}/cluster/gce/gci/helper.sh"
 
-# TODO(pjh): add win-version=1803
-function get-node-instance-metadata {
-  local win_version=""
+function get-windows-version {
   if [[ "${WINDOWS_NODE_OS_DISTRIBUTION}" == "win1709" ]]; then
-    win_version="1709"
+    echo "1709"
   else
-    win_version="1803"
+    echo "1803"
   fi
+}
 
+function get-windows-node-instance-metadata-from-file {
+  #local win_version="$(get-windows-version)"
   local metadata=""
   #metadata+="cluster-location=${KUBE_TEMP}/cluster-location.txt,"
   metadata+="cluster-name=${KUBE_TEMP}/cluster-name.txt,"
   #metadata+="configure-sh=${KUBE_ROOT}/cluster/gce/gci/configure.sh,"
-  metadata+="k8s-version=${KUBE_VERSION},"
   metadata+="kube-env=${KUBE_TEMP}/node-kube-env.yaml,"
   metadata+="kubelet-config=${KUBE_TEMP}/node-kubelet-config.yaml,"
-  # How is KUBE_VERSION not already part of kube-env? Whatever...
-  metadata+="pod-cidr=${TODO_POD_CIDR},"
+  metadata+="${NODE_EXTRA_METADATA}"
+  echo "${metadata}"
+}
+
+function get-windows-node-instance-metadata {
+  local win_version="$(get-windows-version)"
+  local metadata=""
   metadata+="serial-port-enable=1,"
   metadata+="win-version=${win_version},"
-  metadata+="user-data=${KUBE_ROOT}/cluster/gce/windows/node.yaml,"
-  metadata+="${NODE_EXTRA_METADATA}"
+  # How is KUBE_VERSION not already part of kube-env? Whatever...
+  metadata+="k8s-version=${KUBE_VERSION},"
+  #metadata+="pod-cidr=${TODO_POD_CIDR},"
   echo "${metadata}"
 }
 
@@ -48,5 +54,5 @@ function create-windows-node-instance-template {
   local template_name="$1"
   echo "PJH: TODO: what is ensure-gci-metadata-files? Fork it or remove it for windows."
   ensure-gci-metadata-files
-  create-node-template "${template_name}" "${scope_flags[*]}" "$(get-node-instance-metadata)" "windows"
+  create-node-template "${template_name}" "${scope_flags[*]}" "$(get-windows-node-instance-metadata-from-file)" "$(get-windows-node-instance-metadata)" "windows"
 }

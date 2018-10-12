@@ -17,7 +17,7 @@
 # A library of helper functions and constant for GCI distro
 source "${KUBE_ROOT}/cluster/gce/gci/helper.sh"
 
-function get-node-instance-metadata {
+function get-linux-node-instance-metadata-from-file {
   local metadata=""
   metadata+="kube-env=${KUBE_TEMP}/node-kube-env.yaml,"
   metadata+="kubelet-config=${KUBE_TEMP}/node-kubelet-config.yaml,"
@@ -33,9 +33,17 @@ function get-node-instance-metadata {
   echo "${metadata}"
 }
 
+function get-linux-node-instance-metadata {
+  local metadata=""
+  # TODO(pjh): if we don't add any metadata here, does setting '--metadata ""'
+  # work in create-node-template?
+  metadata+="serial-port-enable=1,"
+  echo "${metadata}"
+}
+
 # $1: template name (required).
 function create-linux-node-instance-template {
   local template_name="$1"
   ensure-gci-metadata-files
-  create-node-template "${template_name}" "${scope_flags[*]}" "$(get-node-instance-metadata)" "linux"
+  create-node-template "${template_name}" "${scope_flags[*]}" "$(get-linux-node-instance-metadata-from-file)" "$(get-linux-node-instance-metadata)" "linux"
 }

@@ -1007,7 +1007,7 @@ EOF
     done
   fi
 
-  echo "PJH: TODO: figure out how master uses kube-env, adjust it for Windows nodes too! Looks like get-node-instance-metadata sets kube-env metadata label."
+  echo "PJH: TODO: figure out how master uses kube-env, adjust it for Windows nodes too! Looks like get-linux-node-instance-metadata sets kube-env metadata label."
   if [[ "${master}" == "true" ]]; then
     # Master-only env vars.
     cat >>$file <<EOF
@@ -1663,15 +1663,18 @@ function validate-node-local-ssds-ext(){
 # Robustly try to create an instance template.
 # $1: The name of the instance template.
 # $2: The scopes flag.
-# $3: String of comma-separated metadata entries (must all be from a file).
-# $4: "linux" or "windows".
+# $3: String of comma-separated metadata-from-file entries.
+# $4: String of comma-separated metadata (key-value) entries.
+# $5: "linux" or "windows".
 function create-node-template() {
   detect-project
   detect-subnetworks
-  local template_name="$1"
+  local template_name="${1}"
   echo "PJH: in create-node-template: template_name=${template_name}"
-  local linux_or_windows="$4"
+  local linux_or_windows="${5}"
   echo "PJH: in create-node-template: linux_or_windows=${linux_or_windows}"
+  echo "PJH: in create-node-template: \$3: ${3}"
+  echo "PJH: in create-node-template: \$4: ${4}"
 
   # First, ensure the template doesn't exist.
   # TODO(zmerlynn): To make this really robust, we need to parse the output and
@@ -1761,7 +1764,8 @@ function create-node-template() {
       ${network} \
       ${preemptible_minions} \
       $2 \
-      --metadata-from-file $3 >&2; then
+      --metadata-from-file $3\
+      --metadata $4 >&2; then
         if (( attempt > 5 )); then
           echo -e "${color_red}Failed to create instance template $template_name ${color_norm}" >&2
           exit 2
@@ -2342,8 +2346,6 @@ function get-scope-flags() {
 
 function create-nodes-template() {
   echo "Creating nodes."
-  #echo "PJH: exiting from create-nodes-template cluster/gce/util.sh"
-  #exit 1
 
   local scope_flags=$(get-scope-flags)
 
@@ -2490,7 +2492,7 @@ function create-heapster-node() {
       "${ENABLE_IP_ALIASES:-}" \
       "${IP_ALIAS_SIZE:-}")
 
-  echo "PJH: creating heapster instance w/ metadata-from-file from get-node-instance-metadata()"
+  echo "PJH: creating heapster instance w/ metadata-from-file from get-linux-node-instance-metadata()"
   ${gcloud} compute instances \
       create "${NODE_INSTANCE_PREFIX}-heapster" \
       --project "${PROJECT}" \
@@ -2504,7 +2506,7 @@ function create-heapster-node() {
       --tags "${NODE_TAG}" \
       ${network} \
       $(get-scope-flags) \
-      --metadata-from-file "$(get-node-instance-metadata)"
+      --metadata-from-file "$(get-linux-node-instance-metadata)"
 }
 
 # Assumes:
