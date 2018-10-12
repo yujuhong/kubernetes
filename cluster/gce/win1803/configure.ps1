@@ -128,23 +128,24 @@ function DownloadAndInstall-KubernetesBinaries {
 }
 
 function Configure-CniNetworking {
-  # TODO(pjh): use "win-bridge" plugin instead? I think it may have superseded
-  # wincni.
+  # TODO(pjh): switch to using win-bridge plugin instead of wincni.
   # https://github.com/containernetworking/plugins/tree/master/plugins/main/windows/win-bridge
-  # https://github.com/Microsoft/SDN/tree/master/Kubernetes/wincni
-  # https://www.google.com/url?q=https://github.com/Azure/azure-container-networking/blob/master/docs/cni.md&sa=D&ust=1537375361404000&usg=AFQjCNFdWsgEeOIZ-RJiOB1gEH_mzzd6AQ
   mkdir ${env:CNI_DIR}
   Invoke-WebRequest `
     https://github.com/Microsoft/SDN/raw/master/Kubernetes/windows/cni/wincni.exe `
     -OutFile ${env:CNI_DIR}\wincni.exe
 
-  $vethIp = (Get-NetAdapter | Where-Object Name -Like "vEthernet (*" |`
+  #$vethIp = (Get-NetAdapter | Where-Object Name -Like "vEthernet (*" |`
+  $vethIp = (Get-NetAdapter | Where-Object Name -Like "vEthernet (nat*" |`
     Get-NetIPAddress -AddressFamily IPv4).IPAddress
 
   mkdir ${env:CNI_DIR}\config
   $l2bridgeConf = "${env:CNI_DIR}\config\l2bridge.conf"
   New-Item -ItemType file ${l2bridgeConf}
 
+  # TODO(pjh): need to fill in appropriate cluster CIDR values here! See
+  # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L133
+  # for what values go where.
   Set-Content ${l2bridgeConf} `
     '{
       "cniVersion":  "0.2.0",
@@ -203,9 +204,15 @@ function Configure-HostNetworkingService {
     -OutFile ${env:K8S_DIR}\hns.psm1
   Import-Module ${env:K8S_DIR}\hns.psm1
 
-  # TODO(pjh): pod-cidr is 10.200.${i}.0/24 for k8s-hard-way; goes into the
-  # KUBELET_CONFIG that's passed to kubelet via --config flag.
-  $podCidr = Get-MetadataValue 'pod-cidr'
+  # BOOKMARK XXX TODO: run the kubelet once here to get the podCidr!
+  # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L180
+  #
+  # Then:
+  # $podCIDR=c:\k\kubectl.exe --kubeconfig=c:\k\config get nodes/$($(hostname).ToLower()) -o custom-columns=podCidr:.spec.podCIDR --no-headers
+
+  #### TODO(pjh): pod-cidr is 10.200.${i}.0/24 for k8s-hard-way; goes into the
+  #### KUBELET_CONFIG that's passed to kubelet via --config flag.
+  ###$podCidr = Get-MetadataValue 'pod-cidr'
 
   # For Windows nodes the pod gateway IP address is the .1 address in the pod
   # CIDR for the host, but from inside containers it's the .2 address.

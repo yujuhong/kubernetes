@@ -27,11 +27,10 @@ function get-windows-version {
 }
 
 function get-windows-node-instance-metadata-from-file {
-  #local win_version="$(get-windows-version)"
   local metadata=""
   #metadata+="cluster-location=${KUBE_TEMP}/cluster-location.txt,"
-  metadata+="cluster-name=${KUBE_TEMP}/cluster-name.txt,"
   #metadata+="configure-sh=${KUBE_ROOT}/cluster/gce/gci/configure.sh,"
+  metadata+="cluster-name=${KUBE_TEMP}/cluster-name.txt,"
   metadata+="kube-env=${KUBE_TEMP}/node-kube-env.yaml,"
   metadata+="kubelet-config=${KUBE_TEMP}/node-kubelet-config.yaml,"
   metadata+="${NODE_EXTRA_METADATA}"
@@ -43,8 +42,10 @@ function get-windows-node-instance-metadata {
   local metadata=""
   metadata+="serial-port-enable=1,"
   metadata+="win-version=${win_version},"
-  # How is KUBE_VERSION not already part of kube-env? Whatever...
-  metadata+="k8s-version=${KUBE_VERSION},"
+  # TODO(pjh): check how KUBE_VERSION is set - does it make sense to use for
+  # downloading the kubernetes binaries on the node?
+  #metadata+="k8s-version=v1.12.0"
+  metadata+="k8s-version=${KUBE_VERSION}"
   #metadata+="pod-cidr=${TODO_POD_CIDR},"
   echo "${metadata}"
 }
