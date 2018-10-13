@@ -23,10 +23,8 @@ Export-ModuleMember -Variable k8sDir
 
 function Get-MetadataValue {
   param (
-    [parameter(Mandatory=$true)]
-      [string]$key,
-    [parameter(Mandatory=$false)]
-      [string]$default
+    [parameter(Mandatory=$true)] [string]$key,
+    [parameter(Mandatory=$false)] [string]$default
   )
 
   $url = "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$key"
@@ -86,6 +84,8 @@ function Set-EnvironmentVariables {
   [Environment]::SetEnvironmentVariable(
     "CNI_DIR", "${k8sDir}\cni", "Machine")
   [Environment]::SetEnvironmentVariable(
+    "PKI_DIR", "${k8sDir}\pki", "Machine")
+  [Environment]::SetEnvironmentVariable(
     "KUBELET_CONFIG", "${k8sDir}\kubelet-config.yaml", "Machine")
   [Environment]::SetEnvironmentVariable(
     "KUBECONFIG", "${k8sDir}\$(hostname).kubeconfig", "Machine")
@@ -96,6 +96,7 @@ function Set-EnvironmentVariables {
   $env:NODE_DIR = "${k8sDir}\node"
   $env:Path = $env:Path + ";${k8sDir}\node"
   $env:CNI_DIR = "${k8sDir}\cni"
+  $env:PKI_DIR = "${k8sDir}\pki"
   $env:KUBELET_CONFIG = "${k8sDir}\kubelet-config.yaml"
   $env:KUBECONFIG = "${k8sDir}\$(hostname).kubeconfig"
   $env:KUBE_NETWORK = "l2bridge"
@@ -210,6 +211,98 @@ function Configure-CniNetworking {
   }'.replace('VETH_IP', ${vethIp})
 }
 
+# Decodes the base64 $data string and writes it as binary to $file.
+function Write-PkiData() {
+  param (
+    [parameter(Mandatory=$true)] [string] $data
+    [parameter(Mandatory=$true)] [string] $file
+  )
+  # See https://stackoverflow.com/a/51914136/1230197
+  # (umask 077; echo "${data}" | base64 --decode > "${path}")
+  # [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($data)
+  [IO.File]::WriteAllBytes($file, [Convert]::FromBase64String($data))
+  # TODO(pjh): set permissions correctly on this file! No idea what the Windows
+  # equivalent is.
+}
+
+# This function is analogous to create-node-pki() in gci/configure-helper.sh for
+# Linux nodes.
+function Create-NodePki() {
+  echo "Creating node pki files"
+
+  mkdir -Force ${env:PKI_DIR}
+
+  # Note: create-node-pki() tests if CA_CERT_BUNDLE / KUBELET_CERT /
+  # KUBELET_KEY are already set, we don't.
+  $CA_CERT_BUNDLE = $kubeEnv['CA_CERT']
+  $CA_CERT_BUNDLE_PATH = "${env:PKI_DIR}/ca-certificates.crt"
+  $KUBELET_CERT_PATH="${env:PKI_DIR}/kubelet.crt"
+  $KUBELET_KEY_PATH="${env:PKI_DIR}/kubelet.key"
+
+  # Wrap data arg in quotes in case it contains spaces? (does this even make
+  # sense?)
+  Write-PkiData "${CA_CERT_BUNDLE}" ${CA_CERT_BUNDLE_PATH}
+  Write-PkiData "${KUBELET_CERT}" ${KUBELET_CERT_PATH}
+  Write-PkiData "${KUBELET_KEY}" ${KUBELET_KEY_PATH}
+}
+
+# This is analogous to create-kubelet-kubeconfig() in gci/configure-helper.sh
+# for Linux nodes.
+# The API server IP address comes from KUBERNETES_MASTER_NAME in kube-env, I
+# think.
+#   http://cs/github/kubernetes/kubernetes/cluster/gce/gci/configure-helper.sh?l=2801&rcl=e4200cea9ced996c54096dc45d65e4dadb43a7ae
+function Create-KubeletKubeconfig() {
+  param (
+    [parameter(Mandatory=$true)] [string] $apiserverAddress
+  )
+
+  $KUBELET_CERT_PATH="${pki_dir}/kubelet.crt"
+
+  # TODO(pjh): set these using kube-env values.
+  $createBootstrapConfig = $true
+  $fetchBootstrapConfig = $false
+
+  # TODO(pjh) BOOKMARK XXX: assume that Create-NodePki() has been called and
+  # replace the values below with proper ones.
+
+  if ($createBootstrapConfig) {
+    New-Item -ItemType file ${env:KUBECONFIG}
+    # TODO(pjh): is user "kubelet" correct? In my guide it's
+    #   "system:node:$(hostname)"
+    # The kubelet user config uses client-certificate and client-key here; in
+    # my guide it's client-certificate-data and client-key-data. Does it matter?
+    Set-Content ${env:KUBECONFIG} `
+      'apiVersion: v1
+      kind: Config
+      users:
+      - name: kubelet
+        user:
+          client-certificate: KUBELET_CERT_PATH
+          client-key: KUBELET_KEY_PATH
+      clusters:
+      - name: local
+        cluster:
+          server: https://APISERVER_ADDRESS
+          certificate-authority: CA_CERT_BUNDLE_PATH
+      contexts:
+      - context:
+          cluster: local
+          user: kubelet
+        name: service-account-context
+      current-context: service-account-context'`
+      .replace('KUBELET_CERT_PATH', $KUBELET_CERT_PATH)`
+      .replace('KUBELET_KEY_PATH', $KUBELET_KEY_PATH)`
+      .replace('APISERVER_ADDRESS', $apiserverAddress)`
+      .replace('CA_CERT_BUNDLE_PATH', $CA_CERT_BUNDLE_PATH)
+  } ElseIf ($fetchBootstrapConfig) {
+    # echo "Fetching kubelet bootstrap-kubeconfig file from metadata"
+    # get-metadata-value "instance/attributes/bootstrap-kubeconfig" >/var/lib/kubelet/bootstrap-kubeconfig
+  } Else {
+    # echo "Fetching kubelet kubeconfig file from metadata"
+    # get-metadata-value "instance/attributes/kubeconfig" >/var/lib/kubelet/kubeconfig
+  }
+}
+
 function Configure-HostNetworkingService {
   $endpointName = "cbr0"
   $vnicName = "vEthernet ($endpointName)"
@@ -221,8 +314,33 @@ function Configure-HostNetworkingService {
 
   # BOOKMARK XXX TODO: run the kubelet once here to get the podCidr!
   #   Need to update node bringup so that KUBECONFIG is attached as metadata.
+  #   kubelet on Linux node uses:
+  #     --bootstrap-kubeconfig=/var/lib/kubelet/bootstrap-kubeconfig
+  #     --kubeconfig=/var/lib/kubelet/kubeconfig
+  #   How do those files get there? cluster/gce/gci/configure-helper.sh calls
+  #   create-kubelet-kubeconfig() which does one of 1) creates a "bootstrap
+  #   kubeconfig", 2) fetches the bootstrap kubeconfig from metadata, or 3)
+  #   fetches a normal non-bootstrap kubeconfig from metadata. In the case of
+  #   1) or 2), the kubelet writes out the non-bootstrap kubeconfig to the path
+  #   specified by --kubeconfig on first execution:
+  #   https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet-tls-bootstrapping/.
+  #     Is a token (KUBE_PROXY_TOKEN?) necessary?
+  #
   # Then:
   # $podCIDR=c:\k\kubectl.exe --kubeconfig=c:\k\config get nodes/$($(hostname).ToLower()) -o custom-columns=podCidr:.spec.podCIDR --no-headers
+  #   TODO: also need to include args from KUBELET_ARGS in kube-env??
+  #     --v=2 --allow-privileged=true --cloud-provider=gce
+  #     --experimental-mounter-path=/home/kubernetes/containerized_mounter/mounter
+  #     --experimental-check-node-capabilities-before-mount=true
+  #     --cert-dir=/var/lib/kubelet/pki/
+  #     --dynamic-config-dir=/var/lib/kubelet/dynamic-config
+  #     --bootstrap-kubeconfig=/var/lib/kubelet/bootstrap-kubeconfig
+  #     --kubeconfig=/var/lib/kubelet/kubeconfig
+  #     --cni-bin-dir=/home/kubernetes/bin --network-plugin=cni
+  #     --non-masquerade-cidr=0.0.0.0/0
+  #     --volume-plugin-dir=/home/kubernetes/flexvolume
+  #     --node-labels=beta.kubernetes.io/fluentd-ds-ready=true,cloud.google.com/gke-netd-ready=true
+  #     --container-runtime=docker
   $argList = @(`
     #"--hostname-override=$(hostname)",`
     "--pod-infra-container-image=kubeletwin/pause",`
@@ -312,3 +430,80 @@ Export-ModuleMember -Function Configure-HostNetworkingService
 Export-ModuleMember -Function Configure-Kubelet
 Export-ModuleMember -Function Start-WorkerServices
 Export-ModuleMember -Function Verify-WorkerServices
+
+# TODO(pjh): other functions from configure-helper.sh that we may need to
+# replicate here:
+#function setup-os-params {
+#function secure_random {
+#function config-ip-firewall {
+#function create-dirs {
+#function get-local-disk-num() {
+#function safe-block-symlink(){
+#function get-or-generate-uuid(){
+#function safe-format-and-mount() {
+#function unique-uuid-bind-mount(){
+#function safe-bind-mount(){
+#function mount-ext(){
+#function ensure-local-ssds() {
+#function setup-logrotate() {
+#function find-master-pd {
+#function mount-master-pd {
+#function append_or_replace_prefixed_line {
+#function write-pki-data {
+#function create-node-pki {
+#function create-master-pki {
+#function create-master-auth {
+#function create-master-audit-policy {
+#function create-master-audit-webhook-config {
+#function create-kubelet-kubeconfig() {
+#function create-master-kubelet-auth {
+#function create-kubeproxy-user-kubeconfig {
+#function create-kubecontrollermanager-kubeconfig {
+#function create-kubescheduler-kubeconfig {
+#function create-clusterautoscaler-kubeconfig {
+#function create-kubescheduler-policy-config {
+#function create-node-problem-detector-kubeconfig {
+#function create-master-etcd-auth {
+#function assemble-docker-flags {
+#function start-kubelet {
+#function start-node-problem-detector {
+#function prepare-log-file {
+#function prepare-kube-proxy-manifest-variables {
+#function start-kube-proxy {
+#function prepare-etcd-manifest {
+#function start-etcd-empty-dir-cleanup-pod {
+#function start-etcd-servers {
+#function compute-master-manifest-variables {
+#function prepare-mounter-rootfs {
+#function start-kube-apiserver {
+#function setup-etcd-encryption {
+#function apply-encryption-config() {
+#function start-kube-controller-manager {
+#function start-kube-scheduler {
+#function start-cluster-autoscaler {
+#function setup-addon-manifests {
+#function download-extra-addons {
+#function get-metadata-value {
+#function copy-manifests {
+#function wait-for-apiserver-and-update-fluentd {
+#function start-fluentd-resource-update {
+#function update-container-runtime {
+#function update-node-journal {
+#function update-prometheus-to-sd-parameters {
+#function update-daemon-set-prometheus-to-sd-parameters {
+#function update-event-exporter {
+#function update-dashboard-controller {
+#function setup-coredns-manifest {
+#function setup-fluentd {
+#function setup-kube-dns-manifest {
+#function setup-netd-manifest {
+#function setup-addon-custom-yaml {
+#function start-kube-addons {
+#function setup-node-termination-handler-manifest {
+#function start-lb-controller {
+#function setup-kubelet-dir {
+#function gke-master-start {
+#function reset-motd {
+#function override-kubectl {
+#function override-pv-recycler {
+
