@@ -21,10 +21,28 @@
 $k8sDir = "C:\etc\kubernetes"
 Export-ModuleMember -Variable k8sDir
 
+function Todo {
+  param (
+    [parameter(Mandatory=$true)] [string]$message,
+  )
+  Write-Output "TODO: ${message}"
+}
+
+function NotImplemented {
+  param (
+    [parameter(Mandatory=$true)] [string]$message,
+    [parameter(Mandatory=$false)] [bool]$fail = $false,
+  )
+  Write-Output "Not implemented yet: ${message}"
+  If (${fail}) {
+    Exit 1
+  }
+}
+
 function Get-MetadataValue {
   param (
     [parameter(Mandatory=$true)] [string]$key,
-    [parameter(Mandatory=$false)] [string]$default
+    [parameter(Mandatory=$false)] [string]$default,
   )
 
   $url = "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$key"
@@ -84,22 +102,31 @@ function Set-EnvironmentVariables {
   [Environment]::SetEnvironmentVariable(
     "CNI_DIR", "${k8sDir}\cni", "Machine")
   [Environment]::SetEnvironmentVariable(
-    "PKI_DIR", "${k8sDir}\pki", "Machine")
-  [Environment]::SetEnvironmentVariable(
     "KUBELET_CONFIG", "${k8sDir}\kubelet-config.yaml", "Machine")
   [Environment]::SetEnvironmentVariable(
     "KUBECONFIG", "${k8sDir}\$(hostname).kubeconfig", "Machine")
   [Environment]::SetEnvironmentVariable(
     "KUBE_NETWORK", "l2bridge", "Machine")
+  [Environment]::SetEnvironmentVariable(
+    "PKI_DIR", "${k8sDir}\pki", "Machine")
+  [Environment]::SetEnvironmentVariable(
+    "CA_CERT_BUNDLE_PATH", "${k8sDir}\pki\ca-certificates.crt"
+  [Environment]::SetEnvironmentVariable(
+    "KUBELET_CERT_PATH", "${k8sDir}\pki\kubelet.crt"
+  [Environment]::SetEnvironmentVariable(
+    "KUBELET_KEY_PATH", "${k8sDir}\pki\kubelet.key"
   # TODO: copy-paste these for manual testing...
   $env:K8S_DIR = "${k8sDir}"
   $env:NODE_DIR = "${k8sDir}\node"
   $env:Path = $env:Path + ";${k8sDir}\node"
   $env:CNI_DIR = "${k8sDir}\cni"
-  $env:PKI_DIR = "${k8sDir}\pki"
   $env:KUBELET_CONFIG = "${k8sDir}\kubelet-config.yaml"
   $env:KUBECONFIG = "${k8sDir}\$(hostname).kubeconfig"
   $env:KUBE_NETWORK = "l2bridge"
+  $env:PKI_DIR = "${k8sDir}\pki"
+  $env:CA_CERT_BUNDLE_PATH = "${k8sDir}\pki\ca-certificates.crt"
+  $env:KUBELET_CERT_PATH="${k8sDir}\pki\kubelet.crt"
+  $env:KUBELET_KEY_PATH="${k8sDir}\pki\kubelet.key"
 }
 
 function Set-PrerequisiteOptions {
@@ -107,7 +134,7 @@ function Set-PrerequisiteOptions {
   Set-NetFirewallProfile -Profile Domain, Public, Private -Enabled False
   # Use TLS 1.2: needed for Invoke-WebRequest to github.com.
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-  # TODO(pjh): disable automatic Windows Updates + restarts?
+  Todo("disable automatic Windows Updates and restarts")
 }
 
 function Create-PauseImage {
@@ -143,7 +170,7 @@ function DownloadAndInstall-KubernetesBinaries {
 }
 
 function Configure-CniNetworking {
-  # TODO(pjh): switch to using win-bridge plugin instead of wincni.
+  Todo("switch to using win-bridge plugin instead of wincni")
   # https://github.com/containernetworking/plugins/tree/master/plugins/main/windows/win-bridge
   mkdir ${env:CNI_DIR}
   Invoke-WebRequest `
@@ -159,7 +186,8 @@ function Configure-CniNetworking {
   # TODO(pjh): add -Force to overwrite if exists? Or do we want to fail?
   New-Item -ItemType file ${l2bridgeConf}
 
-  # TODO(pjh): need to fill in appropriate cluster CIDR values here! See
+  Todo("still need to fill in appropriate cluster CIDR values in l2bridge.conf")
+  # TODO: see
   # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L133
   # for what values go where.
   Set-Content ${l2bridgeConf} `
@@ -217,12 +245,12 @@ function Write-PkiData() {
     [parameter(Mandatory=$true)] [string] $data
     [parameter(Mandatory=$true)] [string] $file
   )
-  # See https://stackoverflow.com/a/51914136/1230197
-  # (umask 077; echo "${data}" | base64 --decode > "${path}")
-  # [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($data)
+
+  # This command writes out a PEM certificate file, analogous to "base64
+  # --decode" on Linux. See https://stackoverflow.com/a/51914136/1230197.
   [IO.File]::WriteAllBytes($file, [Convert]::FromBase64String($data))
-  # TODO(pjh): set permissions correctly on this file! No idea what the Windows
-  # equivalent is.
+  Todo("need to set permissions correctly on ${file}; not sure what the `
+Windows equivalent of 'umask 077' is")
 }
 
 # This function is analogous to create-node-pki() in gci/configure-helper.sh for
@@ -235,15 +263,14 @@ function Create-NodePki() {
   # Note: create-node-pki() tests if CA_CERT_BUNDLE / KUBELET_CERT /
   # KUBELET_KEY are already set, we don't.
   $CA_CERT_BUNDLE = $kubeEnv['CA_CERT']
-  $CA_CERT_BUNDLE_PATH = "${env:PKI_DIR}/ca-certificates.crt"
-  $KUBELET_CERT_PATH="${env:PKI_DIR}/kubelet.crt"
-  $KUBELET_KEY_PATH="${env:PKI_DIR}/kubelet.key"
+  $KUBELET_CERT = $kubeEnv['KUBELET_CERT']
+  $KUBELET_KEY = $kubeEnv['KUBELET_KEY']
 
   # Wrap data arg in quotes in case it contains spaces? (does this even make
   # sense?)
-  Write-PkiData "${CA_CERT_BUNDLE}" ${CA_CERT_BUNDLE_PATH}
-  Write-PkiData "${KUBELET_CERT}" ${KUBELET_CERT_PATH}
-  Write-PkiData "${KUBELET_KEY}" ${KUBELET_KEY_PATH}
+  Write-PkiData "${CA_CERT_BUNDLE}" ${env:CA_CERT_BUNDLE_PATH}
+  Write-PkiData "${KUBELET_CERT}" ${env:KUBELET_CERT_PATH}
+  Write-PkiData "${KUBELET_KEY}" ${env:KUBELET_KEY_PATH}
 }
 
 # This is analogous to create-kubelet-kubeconfig() in gci/configure-helper.sh
@@ -256,16 +283,11 @@ function Create-KubeletKubeconfig() {
     [parameter(Mandatory=$true)] [string] $apiserverAddress
   )
 
-  $KUBELET_CERT_PATH="${pki_dir}/kubelet.crt"
-
   # TODO(pjh): set these using kube-env values.
   $createBootstrapConfig = $true
   $fetchBootstrapConfig = $false
 
-  # TODO(pjh) BOOKMARK XXX: assume that Create-NodePki() has been called and
-  # replace the values below with proper ones.
-
-  if ($createBootstrapConfig) {
+  if (${createBootstrapConfig}) {
     New-Item -ItemType file ${env:KUBECONFIG}
     # TODO(pjh): is user "kubelet" correct? In my guide it's
     #   "system:node:$(hostname)"
@@ -290,15 +312,16 @@ function Create-KubeletKubeconfig() {
           user: kubelet
         name: service-account-context
       current-context: service-account-context'`
-      .replace('KUBELET_CERT_PATH', $KUBELET_CERT_PATH)`
-      .replace('KUBELET_KEY_PATH', $KUBELET_KEY_PATH)`
-      .replace('APISERVER_ADDRESS', $apiserverAddress)`
-      .replace('CA_CERT_BUNDLE_PATH', $CA_CERT_BUNDLE_PATH)
-  } ElseIf ($fetchBootstrapConfig) {
-    # echo "Fetching kubelet bootstrap-kubeconfig file from metadata"
+      .replace('KUBELET_CERT_PATH', ${env:KUBELET_CERT_PATH})`
+      .replace('KUBELET_KEY_PATH', ${env:KUBELET_KEY_PATH})`
+      .replace('APISERVER_ADDRESS', ${apiserverAddress})`
+      .replace('CA_CERT_BUNDLE_PATH', ${env:CA_CERT_BUNDLE_PATH})
+  } ElseIf (${fetchBootstrapConfig}) {
+    NotImplemented("fetching kubelet bootstrap-kubeconfig file from metadata",
+      $true)
     # get-metadata-value "instance/attributes/bootstrap-kubeconfig" >/var/lib/kubelet/bootstrap-kubeconfig
   } Else {
-    # echo "Fetching kubelet kubeconfig file from metadata"
+    NotImplemented("fetching kubelet kubeconfig file from metadata", $true)
     # get-metadata-value "instance/attributes/kubeconfig" >/var/lib/kubelet/kubeconfig
   }
 }
