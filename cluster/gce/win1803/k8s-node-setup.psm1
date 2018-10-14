@@ -4,7 +4,7 @@
 #   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 #   Invoke-WebRequest https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/win1803/k8s-node-setup.psm1 -OutFile k8s-node-setup.psm1
 #   Invoke-WebRequest https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/win1803/configure.ps1 -OutFile configure.ps1
-#   Import-Module k8s-node-setup.psm1
+#   Import-Module -Force .\k8s-node-setup.psm1  # -Force to override existing
 #   # Execute functions manually or run configure.ps1.
 #
 # TODOs to get this thing working:
@@ -280,6 +280,7 @@ function Create-NodePki() {
 
 # This is analogous to create-kubelet-kubeconfig() in gci/configure-helper.sh
 # for Linux nodes.
+# Create-NodePki() must be called first.
 # Required ${kubeEnv} keys:
 #   KUBERNETES_MASTER_NAME: the apiserver IP address.
 function Create-KubeletKubeconfig() {
@@ -458,6 +459,8 @@ Export-ModuleMember -Function Set-PrerequisiteOptions
 Export-ModuleMember -Function Create-PauseImage
 Export-ModuleMember -Function DownloadAndInstall-KubernetesBinaries
 Export-ModuleMember -Function Configure-CniNetworking
+Export-ModuleMember -Function Create-NodePki
+Export-ModuleMember -Function Create-KubeletKubeconfig
 Export-ModuleMember -Function Configure-HostNetworkingService
 Export-ModuleMember -Function Configure-Kubelet
 Export-ModuleMember -Function Start-WorkerServices
