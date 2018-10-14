@@ -23,7 +23,7 @@ Export-ModuleMember -Variable k8sDir
 
 function Todo {
   param (
-    [parameter(Mandatory=$true)] [string]$message,
+    [parameter(Mandatory=$true)] [string]$message
   )
   Write-Output "TODO: ${message}"
 }
@@ -31,7 +31,7 @@ function Todo {
 function NotImplemented {
   param (
     [parameter(Mandatory=$true)] [string]$message,
-    [parameter(Mandatory=$false)] [bool]$fail = $false,
+    [parameter(Mandatory=$false)] [bool]$fail = $false
   )
   Write-Output "Not implemented yet: ${message}"
   If (${fail}) {
@@ -42,7 +42,7 @@ function NotImplemented {
 function Get-MetadataValue {
   param (
     [parameter(Mandatory=$true)] [string]$key,
-    [parameter(Mandatory=$false)] [string]$default,
+    [parameter(Mandatory=$false)] [string]$default
   )
 
   $url = "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$key"
@@ -110,11 +110,11 @@ function Set-EnvironmentVariables {
   [Environment]::SetEnvironmentVariable(
     "PKI_DIR", "${k8sDir}\pki", "Machine")
   [Environment]::SetEnvironmentVariable(
-    "CA_CERT_BUNDLE_PATH", "${k8sDir}\pki\ca-certificates.crt"
+    "CA_CERT_BUNDLE_PATH", "${k8sDir}\pki\ca-certificates.crt", "Machine")
   [Environment]::SetEnvironmentVariable(
-    "KUBELET_CERT_PATH", "${k8sDir}\pki\kubelet.crt"
+    "KUBELET_CERT_PATH", "${k8sDir}\pki\kubelet.crt", "Machine")
   [Environment]::SetEnvironmentVariable(
-    "KUBELET_KEY_PATH", "${k8sDir}\pki\kubelet.key"
+    "KUBELET_KEY_PATH", "${k8sDir}\pki\kubelet.key", "Machine")
   # TODO: copy-paste these for manual testing...
   $env:K8S_DIR = "${k8sDir}"
   $env:NODE_DIR = "${k8sDir}\node"
@@ -242,7 +242,7 @@ function Configure-CniNetworking {
 # Decodes the base64 $data string and writes it as binary to $file.
 function Write-PkiData() {
   param (
-    [parameter(Mandatory=$true)] [string] $data
+    [parameter(Mandatory=$true)] [string] $data,
     [parameter(Mandatory=$true)] [string] $file
   )
 
