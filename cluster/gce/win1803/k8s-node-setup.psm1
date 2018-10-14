@@ -21,6 +21,13 @@
 $k8sDir = "C:\etc\kubernetes"
 Export-ModuleMember -Variable k8sDir
 
+function Log {
+  param (
+    [parameter(Mandatory=$true)] [string]$message
+  )
+  Write-Output "${message}"
+}
+
 function Todo {
   param (
     [parameter(Mandatory=$true)] [string]$message
@@ -66,30 +73,20 @@ function Get-MetadataValue {
 # Returns: a PowerShell Hashtable object containing the key-value pairs from
 #   kube-env.
 function Download-KubeEnv {
-  $kubeEnv = Get-MetadataValue 'kube-env'
-  $kubeEnvTable = @{}
-  ForEach ($line in $($kubeEnv.Split("`r`n"))) {
-    # TODO(pjh): the kube-env has some values that contain newlines (e.g.
-    # CUSTOM_NETD_YAML), which are marked with a '|' character at the beginning
-    # of their value. These are not handled correctly at the moment, fix this.
-    $key, $value = $line.Split(":")
-    if($key -eq "") {
-      # Splitting kube-env on newlines fails for values that contain newlines;
-      # in these cases we'll end up with an empty key, just skip them.
-      continue
-    }
-    try {
-      $value = $value.Split("'")[1]
-    }
-    catch [System.Management.Automation.RuntimeException] {
-      # Weird values (e.g. those that begin with '|', see note above) will end
-      # up here.
-      $value = ""
-    }
-    $kubeEnvTable.Add(${key}, ${value})
-  }
-  #$kubeEnvTable | Format-Table
-  return $kubeEnvTable
+  # Testing / debugging:
+  # First:
+  #   ${kubeEnv} = Get-MetadataValue 'kube-env'
+  # or:
+  #   ${kubeEnv} = [IO.File]::ReadAllText(".\kubeEnv.txt")
+  # ${kubeEnvTable} = ConvertFrom-Yaml ${kubeEnv}
+  # ${kubeEnvTable}
+  # ${kubeEnvTable}.GetType()
+
+  # The type of kubeEnv is a powershell String.
+  ${kubeEnv} = Get-MetadataValue 'kube-env'
+  ${kubeEnvTable} = ConvertFrom-Yaml ${kubeEnv}
+
+  return ${kubeEnvTable}
 }
 
 function Set-EnvironmentVariables {
@@ -135,6 +132,10 @@ function Set-PrerequisiteOptions {
   # Use TLS 1.2: needed for Invoke-WebRequest to github.com.
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
   Todo("disable automatic Windows Updates and restarts")
+
+  # https://github.com/cloudbase/powershell-yaml
+  Log("installing powershell-yaml module from external repo")
+  Install-Module -Name powershell-yaml -Force
 }
 
 function Create-PauseImage {
@@ -172,7 +173,7 @@ function DownloadAndInstall-KubernetesBinaries {
 function Configure-CniNetworking {
   Todo("switch to using win-bridge plugin instead of wincni")
   # https://github.com/containernetworking/plugins/tree/master/plugins/main/windows/win-bridge
-  mkdir ${env:CNI_DIR}
+  mkdir -Force ${env:CNI_DIR}
   Invoke-WebRequest `
     https://github.com/Microsoft/SDN/raw/master/Kubernetes/windows/cni/wincni.exe `
     -OutFile ${env:CNI_DIR}\wincni.exe
@@ -181,7 +182,7 @@ function Configure-CniNetworking {
   $vethIp = (Get-NetAdapter | Where-Object Name -Like "vEthernet (nat*" |`
     Get-NetIPAddress -AddressFamily IPv4).IPAddress
 
-  mkdir ${env:CNI_DIR}\config
+  mkdir -Force ${env:CNI_DIR}\config
   $l2bridgeConf = "${env:CNI_DIR}\config\l2bridge.conf"
   # TODO(pjh): add -Force to overwrite if exists? Or do we want to fail?
   New-Item -ItemType file ${l2bridgeConf}
@@ -255,6 +256,10 @@ Windows equivalent of 'umask 077' is")
 
 # This function is analogous to create-node-pki() in gci/configure-helper.sh for
 # Linux nodes.
+# Required ${kubeEnv} keys:
+#   CA_CERT
+#   KUBELET_CERT
+#   KUBELET_KEY
 function Create-NodePki() {
   echo "Creating node pki files"
 
@@ -262,9 +267,9 @@ function Create-NodePki() {
 
   # Note: create-node-pki() tests if CA_CERT_BUNDLE / KUBELET_CERT /
   # KUBELET_KEY are already set, we don't.
-  $CA_CERT_BUNDLE = $kubeEnv['CA_CERT']
-  $KUBELET_CERT = $kubeEnv['KUBELET_CERT']
-  $KUBELET_KEY = $kubeEnv['KUBELET_KEY']
+  $CA_CERT_BUNDLE = ${kubeEnv}['CA_CERT']
+  $KUBELET_CERT = ${kubeEnv}['KUBELET_CERT']
+  $KUBELET_KEY = ${kubeEnv}['KUBELET_KEY']
 
   # Wrap data arg in quotes in case it contains spaces? (does this even make
   # sense?)
@@ -275,13 +280,17 @@ function Create-NodePki() {
 
 # This is analogous to create-kubelet-kubeconfig() in gci/configure-helper.sh
 # for Linux nodes.
-# The API server IP address comes from KUBERNETES_MASTER_NAME in kube-env, I
-# think.
-#   http://cs/github/kubernetes/kubernetes/cluster/gce/gci/configure-helper.sh?l=2801&rcl=e4200cea9ced996c54096dc45d65e4dadb43a7ae
+# Required ${kubeEnv} keys:
+#   KUBERNETES_MASTER_NAME: the apiserver IP address.
 function Create-KubeletKubeconfig() {
-  param (
-    [parameter(Mandatory=$true)] [string] $apiserverAddress
-  )
+  #param (
+  #  [parameter(Mandatory=$true)] [string] $apiserverAddress
+  #)
+
+  # The API server IP address comes from KUBERNETES_MASTER_NAME in kube-env, I
+  # think.
+  # http://cs/github/kubernetes/kubernetes/cluster/gce/gci/configure-helper.sh?l=2801&rcl=e4200cea9ced996c54096dc45d65e4dadb43a7ae
+  $apiserverAddress = ${kubeEnv}['KUBERNETES_MASTER_NAME']
 
   # TODO(pjh): set these using kube-env values.
   $createBootstrapConfig = $true

@@ -10,7 +10,7 @@ try {
   Create-PauseImage
   DownloadAndInstall-KubernetesBinaries
   Configure-CniNetworking
-  Create-KubeletKubeconfig $kubeEnv['KUBERNETES_MASTER_NAME']
+  Create-KubeletKubeconfig
   Configure-HostNetworkingService
   Configure-Kubelet
   Start-WorkerServices
