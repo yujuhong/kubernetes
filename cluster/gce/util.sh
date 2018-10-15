@@ -533,18 +533,28 @@ function write-master-env {
     KUBERNETES_MASTER_NAME="${MASTER_NAME}"
   fi
 
-  construct-kubelet-flags true
+  construct-linux-kubelet-flags true
   build-kube-env true "${KUBE_TEMP}/master-kube-env.yaml"
   build-kubelet-config true "${KUBE_TEMP}/master-kubelet-config.yaml"
   build-kube-master-certs "${KUBE_TEMP}/kube-master-certs.yaml"
 }
 
-function write-node-env {
+function write-linux-node-env {
   if [[ -z "${KUBERNETES_MASTER_NAME:-}" ]]; then
     KUBERNETES_MASTER_NAME="${MASTER_NAME}"
   fi
 
-  construct-kubelet-flags false
+  construct-linux-kubelet-flags false
+  build-kube-env false "${KUBE_TEMP}/node-kube-env.yaml"
+  build-kubelet-config false "${KUBE_TEMP}/node-kubelet-config.yaml"
+}
+
+function write-windows-node-env {
+  if [[ -z "${KUBERNETES_MASTER_NAME:-}" ]]; then
+    KUBERNETES_MASTER_NAME="${MASTER_NAME}"
+  fi
+
+  construct-windows-kubelet-flags false
   build-kube-env false "${KUBE_TEMP}/node-kube-env.yaml"
   build-kubelet-config false "${KUBE_TEMP}/node-kubelet-config.yaml"
 }
@@ -644,7 +654,7 @@ function yaml-map-string-string {
 }
 
 # $1: if 'true', we're rendering flags for a master, else a node
-function construct-kubelet-flags {
+function construct-linux-kubelet-flags {
   local master=$1
   local flags="${KUBELET_TEST_LOG_LEVEL:-"--v=2"} ${KUBELET_TEST_ARGS:-}"
   flags+=" --allow-privileged=true"
@@ -694,6 +704,66 @@ function construct-kubelet-flags {
   fi
   flags+=" --volume-plugin-dir=${VOLUME_PLUGIN_DIR}"
   local node_labels=$(build-node-labels ${master})
+  if [[ -n "${node_labels:-}" ]]; then
+    flags+=" --node-labels=${node_labels}"
+  fi
+  if [[ -n "${NODE_TAINTS:-}" ]]; then
+    flags+=" --register-with-taints=${NODE_TAINTS}"
+  fi
+  # TODO(mtaufen): ROTATE_CERTIFICATES seems unused; delete it?
+  if [[ -n "${ROTATE_CERTIFICATES:-}" ]]; then
+    flags+=" --rotate-certificates=true"
+  fi
+  if [[ -n "${CONTAINER_RUNTIME:-}" ]]; then
+    flags+=" --container-runtime=${CONTAINER_RUNTIME}"
+  fi
+  if [[ -n "${CONTAINER_RUNTIME_ENDPOINT:-}" ]]; then
+    flags+=" --container-runtime-endpoint=${CONTAINER_RUNTIME_ENDPOINT}"
+  fi
+  if [[ -n "${MAX_PODS_PER_NODE:-}" ]]; then
+    flags+=" --max-pods=${MAX_PODS_PER_NODE}"
+  fi
+
+  KUBELET_ARGS="${flags}"
+}
+
+function construct-windows-kubelet-flags {
+  echo "TODO(pjh): implement construct-windows-kubelet-flags"
+  exit 1
+
+  local flags="${KUBELET_TEST_LOG_LEVEL:-"--v=2"} ${KUBELET_TEST_ARGS:-}"
+  flags+=" --allow-privileged=true"
+  flags+=" --cloud-provider=gce"
+  # Keep in sync with CONTAINERIZED_MOUNTER_HOME in configure-helper.sh
+  flags+=" --experimental-mounter-path=/home/kubernetes/containerized_mounter/mounter"
+  flags+=" --experimental-check-node-capabilities-before-mount=true"
+  # Keep in sync with the mkdir command in configure-helper.sh (until the TODO is resolved)
+  flags+=" --cert-dir=/var/lib/kubelet/pki/"
+  # Configure the directory that the Kubelet should use to store dynamic config checkpoints
+  flags+=" --dynamic-config-dir=/var/lib/kubelet/dynamic-config"
+
+  flags+=" ${NODE_KUBELET_TEST_ARGS:-}"
+  flags+=" --bootstrap-kubeconfig=/var/lib/kubelet/bootstrap-kubeconfig"
+  flags+=" --kubeconfig=/var/lib/kubelet/kubeconfig"
+
+  # Network plugin
+  if [[ -n "${NETWORK_PROVIDER:-}" || -n "${NETWORK_POLICY_PROVIDER:-}" ]]; then
+    flags+=" --cni-bin-dir=/home/kubernetes/bin"
+    if [[ "${NETWORK_POLICY_PROVIDER:-}" == "calico" || "${ENABLE_NETD:-}" == "true" ]]; then
+      # Calico uses CNI always.
+      flags+=" --network-plugin=cni"
+    else
+      # Otherwise use the configured value.
+      flags+=" --network-plugin=${NETWORK_PROVIDER}"
+
+    fi
+  fi
+  if [[ -n "${NON_MASQUERADE_CIDR:-}" ]]; then
+    flags+=" --non-masquerade-cidr=${NON_MASQUERADE_CIDR}"
+  fi
+  flags+=" --volume-plugin-dir=${VOLUME_PLUGIN_DIR}"
+  echo "TODO(pjh): does build-node-labels need to be forked for Windows?"
+  local node_labels=$(build-node-labels "false")
   if [[ -n "${node_labels:-}" ]]; then
     flags+=" --node-labels=${node_labels}"
   fi
@@ -2349,7 +2419,8 @@ function create-nodes-template() {
 
   local scope_flags=$(get-scope-flags)
 
-  write-node-env
+  write-linux-node-env
+  write-windows-node-env
 
   # NOTE: these template names and their format must match
   # create-[linux,windows]-nodes() as well as get-template()! Ugh, find a

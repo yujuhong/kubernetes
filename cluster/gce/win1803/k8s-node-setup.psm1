@@ -100,9 +100,9 @@ function Set-EnvironmentVariables {
   [Environment]::SetEnvironmentVariable(
     "KUBELET_CONFIG", "${k8sDir}\kubelet-config.yaml", "Machine")
   [Environment]::SetEnvironmentVariable(
-    "KUBECONFIG", "${k8sDir}\$(hostname).kubeconfig", "Machine")
+    "KUBECONFIG", "${k8sDir}\kubelet.kubeconfig", "Machine")
   [Environment]::SetEnvironmentVariable(
-    "BOOTSTRAP_KUBECONFIG", "${k8sDir}\$(hostname).bootstrap-kubeconfig",
+    "BOOTSTRAP_KUBECONFIG", "${k8sDir}\kubelet.bootstrap-kubeconfig",
     "Machine")
   [Environment]::SetEnvironmentVariable(
     "KUBE_NETWORK", "l2bridge", "Machine")
@@ -120,8 +120,8 @@ function Set-EnvironmentVariables {
   $env:Path = $env:Path + ";${k8sDir}\node"
   $env:CNI_DIR = "${k8sDir}\cni"
   $env:KUBELET_CONFIG = "${k8sDir}\kubelet-config.yaml"
-  $env:KUBECONFIG = "${k8sDir}\$(hostname).kubeconfig"
-  $env:BOOTSTRAP_KUBECONFIG = "${k8sDir}\$(hostname).bootstrap-kubeconfig"
+  $env:BOOTSTRAP_KUBECONFIG = "${k8sDir}\kubelet.bootstrap-kubeconfig"
+  $env:KUBECONFIG = "${k8sDir}\kubelet.kubeconfig"
   $env:KUBE_NETWORK = "l2bridge"
   $env:PKI_DIR = "${k8sDir}\pki"
   $env:CA_CERT_BUNDLE_PATH = "${k8sDir}\pki\ca-certificates.crt"
@@ -295,8 +295,7 @@ function Create-NodePki() {
 #   KUBERNETES_MASTER_NAME: the apiserver IP address.
 function Create-KubeletKubeconfig() {
   # The API server IP address comes from KUBERNETES_MASTER_NAME in kube-env, I
-  # think.
-  # http://cs/github/kubernetes/kubernetes/cluster/gce/gci/configure-helper.sh?l=2801&rcl=e4200cea9ced996c54096dc45d65e4dadb43a7ae
+  # think. cluster/gce/gci/configure-helper.sh?l=2801
   $apiserverAddress = ${kubeEnv}['KUBERNETES_MASTER_NAME']
 
   # TODO(pjh): set these using kube-env values.
@@ -336,16 +335,151 @@ current-context: service-account-context'.`
   } ElseIf (${fetchBootstrapConfig}) {
     NotImplemented("fetching kubelet bootstrap-kubeconfig file from metadata",
       $true)
-    # get-metadata-value "instance/attributes/bootstrap-kubeconfig" >/var/lib/kubelet/bootstrap-kubeconfig
+    # get-metadata-value "instance/attributes/bootstrap-kubeconfig" >
+    #   /var/lib/kubelet/bootstrap-kubeconfig
     Get-Content ${env:BOOTSTRAP_KUBECONFIG}
   } Else {
     NotImplemented("fetching kubelet kubeconfig file from metadata", $true)
-    # get-metadata-value "instance/attributes/kubeconfig" >/var/lib/kubelet/kubeconfig
+    # get-metadata-value "instance/attributes/kubeconfig" >
+    #   /var/lib/kubelet/kubeconfig
     Get-Content ${env:KUBECONFIG}
   }
 }
 
 function Configure-HostNetworkingService {
+  # BOOKMARK: Linux node path is something like
+  # (cluster/gce/gci/configure-helper.sh?l=2760):
+  # - Set KUBELET_CONFIG_FILE_ARG by fetching kubelet-config metadata value and
+  #   storing it in ${KUBE_HOME}/kubelet-config.yaml.
+  # - setup-os-params, config-ip-firewall, create-dirs, setup-kubelet-dir,
+  #   ensure-local-ssds, setup-logrotate, create-node-pki (done!),
+  #   create-kubelet-kubeconfig (done!), create-kubeproxy-user-kubeconfig,
+  #   create-node-problem-detector-kubeconfig
+  # - override-kubectl
+  #   wtf? cluster/gce/gci/configure-helper.sh?l=2698
+  # - assemble-docker-flags: "Run the containerized mounter once to pre-cache
+  #   the container image"
+  #     -p /var/run/docker.pid --iptables=false --ip-masq=false
+  #     and either --bip=169.254.123.1/24 or --bridge=cbr0
+  # - start-kubelet
+  #
+  # TODO: ignore all of this for now. Try the approach used in the Microsoft
+  # scripts of connecting the kubelet to the master once to get a podCidr, then
+  # killing the kubelet, configuring HNS and further kubelet / kubeproxy stuff,
+  # then starting kubelet and kubeproxy again. Looks like you may not need
+  # the "kubelet config" for the first kubelet run, only the "kubeconfig"; try
+  # running with the bootstrap config specified and see what happens
+
+  $argListForFirstKubeletRun = @(`
+    "--v=2",
+
+    # Path to a kubeconfig file that will be used to get client certificate for
+    # kubelet. If the file specified by --kubeconfig does not exist, the
+    # bootstrap kubeconfig is used to request a client certificate from the API
+    # server. On success, a kubeconfig file referencing the generated client
+    # certificate and key is written to the path specified by --kubeconfig. The
+    # client certificate and key file will be stored in the directory pointed
+    # by --cert-dir.
+    #
+    # See also:
+    # https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet-tls-bootstrapping/
+    "--bootstrap-kubeconfig=${env:BOOTSTRAP_KUBECONFIG}",
+    "--kubeconfig=${env:KUBECONFIG}",
+
+    # The directory where the TLS certs are located. If --tls-cert-file and
+    # --tls-private-key-file are provided, this flag will be ignored.
+    "--cert-dir=${env:PKI_DIR}",
+
+    # Comes from https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L180:
+    "--pod-infra-container-image=kubeletwin/pause",
+
+    # Comes from https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L180:
+    "--resolv-conf="""""
+  )
+
+  # For debugging run:
+  #   C:\etc\kubernetes\node\kubelet.exe ${argListForFirstKubeletRun}"
+  # BOOKMARK: left off here; need to resolve errors from running this. First
+  # one:
+  #   server.go:207] [invalid configuration: CgroupsPerQOS (--cgroups-per-qos)
+  #   true is not supported on Windows, invalid configuration:
+  #   EnforceNodeAllocatable (--enforce-node-allocatable) [pods] is not
+  #   supported on Windows]
+
+  $kubeletProcess = Start-Process -FilePath ${env:NODE_DIR}\kubelet.exe `
+    -PassThru -ArgumentList ${argListForFirstKubeletRun}
+
+  # Then:
+  # $podCIDR=c:\k\kubectl.exe --kubeconfig=c:\k\config get nodes/$($(hostname).ToLower()) -o custom-columns=podCidr:.spec.podCIDR --no-headers
+
+  # https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet/#options
+  Todo("switch to using KUBELET_ARGS instead of building them here.")
+  $argList = @(`
+    "--v=2",
+    "--allow-privileged=true",
+    "--cloud-provider=gce",
+
+    # Path to a kubeconfig file that will be used to get client certificate for
+    # kubelet. If the file specified by --kubeconfig does not exist, the
+    # bootstrap kubeconfig is used to request a client certificate from the API
+    # server. On success, a kubeconfig file referencing the generated client
+    # certificate and key is written to the path specified by --kubeconfig. The
+    # client certificate and key file will be stored in the directory pointed
+    # by --cert-dir.
+    #
+    # See also:
+    # https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet-tls-bootstrapping/
+    "--bootstrap-kubeconfig=${env:BOOTSTRAP_KUBECONFIG}",
+    "--kubeconfig=${env:KUBECONFIG}",
+
+    # The directory where the TLS certs are located. If --tls-cert-file and
+    # --tls-private-key-file are provided, this flag will be ignored.
+    "--cert-dir=${env:PKI_DIR}",
+
+    # TODO(pjh): necessary on Windows?
+    "--cni-bin-dir=${env:CNI_DIR}",
+    "--network-plugin=cni",
+
+    # TODO: what is this?
+    "--non-masquerade-cidr=0.0.0.0/0",
+
+    # Comes from https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L180:
+    "--pod-infra-container-image=kubeletwin/pause",
+
+    # Comes from https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L180:
+    "--resolv-conf="""""
+  )
+
+  # These args are present in the KUBELET_ARGS value of kube-env, but I don't
+  # think we need them or they don't make sense on Windows.
+  $argListUnused = @(`
+    # [Experimental] Path of mounter binary. Leave empty to use the default
+    # mount.
+    "--experimental-mounter-path=/home/kubernetes/containerized_mounter/mounter",
+    # [Experimental] if set true, the kubelet will check the underlying node
+    # for required components (binaries, etc.) before performing the mount
+    "--experimental-check-node-capabilities-before-mount=true",
+    # The Kubelet will use this directory for checkpointing downloaded
+    # configurations and tracking configuration health. The Kubelet will create
+    # this directory if it does not already exist. The path may be absolute or
+    # relative; relative paths start at the Kubelet's current working
+    # directory. Providing this flag enables dynamic Kubelet configuration.
+    # Presently, you must also enable the DynamicKubeletConfig feature gate to
+    # pass this flag.
+    "--dynamic-config-dir=/var/lib/kubelet/dynamic-config",
+    # The full path of the directory in which to search for additional third
+    # party volume plugins (default
+    # "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/")
+    "--volume-plugin-dir=/home/kubernetes/flexvolume",
+    # TODO(pjh): what node-labels do Windows nodes need?
+    "--node-labels=beta.kubernetes.io/fluentd-ds-ready=true,cloud.google.com/gke-netd-ready=true",
+    # The container runtime to use. Possible values: 'docker', 'rkt'. (default
+    # "docker")
+    "--container-runtime=docker"
+  )
+
+  # TODO: kubernetes-the-hard-way approach follows below...
+
   $endpointName = "cbr0"
   $vnicName = "vEthernet ($endpointName)"
 
@@ -354,44 +488,15 @@ function Configure-HostNetworkingService {
     -OutFile ${env:K8S_DIR}\hns.psm1
   Import-Module ${env:K8S_DIR}\hns.psm1
 
-  # BOOKMARK XXX TODO: run the kubelet once here to get the podCidr!
-  #   Need to update node bringup so that KUBECONFIG is attached as metadata.
-  #   kubelet on Linux node uses:
-  #     --bootstrap-kubeconfig=/var/lib/kubelet/bootstrap-kubeconfig
-  #     --kubeconfig=/var/lib/kubelet/kubeconfig
-  #   How do those files get there? cluster/gce/gci/configure-helper.sh calls
-  #   create-kubelet-kubeconfig() which does one of 1) creates a "bootstrap
-  #   kubeconfig", 2) fetches the bootstrap kubeconfig from metadata, or 3)
-  #   fetches a normal non-bootstrap kubeconfig from metadata. In the case of
-  #   1) or 2), the kubelet writes out the non-bootstrap kubeconfig to the path
-  #   specified by --kubeconfig on first execution:
-  #   https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet-tls-bootstrapping/.
-  #     Is a token (KUBE_PROXY_TOKEN?) necessary?
-  #
-  # Then:
-  # $podCIDR=c:\k\kubectl.exe --kubeconfig=c:\k\config get nodes/$($(hostname).ToLower()) -o custom-columns=podCidr:.spec.podCIDR --no-headers
-  #   TODO: also need to include args from KUBELET_ARGS in kube-env??
-  #     --v=2 --allow-privileged=true --cloud-provider=gce
-  #     --experimental-mounter-path=/home/kubernetes/containerized_mounter/mounter
-  #     --experimental-check-node-capabilities-before-mount=true
-  #     --cert-dir=/var/lib/kubelet/pki/
-  #     --dynamic-config-dir=/var/lib/kubelet/dynamic-config
-  #     --bootstrap-kubeconfig=/var/lib/kubelet/bootstrap-kubeconfig
-  #     --kubeconfig=/var/lib/kubelet/kubeconfig
-  #     --cni-bin-dir=/home/kubernetes/bin --network-plugin=cni
-  #     --non-masquerade-cidr=0.0.0.0/0
-  #     --volume-plugin-dir=/home/kubernetes/flexvolume
-  #     --node-labels=beta.kubernetes.io/fluentd-ds-ready=true,cloud.google.com/gke-netd-ready=true
-  #     --container-runtime=docker
-  $argList = @(`
-    #"--hostname-override=$(hostname)",`
-    "--pod-infra-container-image=kubeletwin/pause",`
-    "--resolv-conf=""""",`
-    "--kubeconfig=${env:K8S_DIR}\$(hostname).kubeconfig")
+  # TODO: pod-cidr is 10.200.${i}.0/24 for k8s-hard-way; goes into the
+  # KUBELET_CONFIG that's passed to kubelet via --config flag.
+  $podCidr = Get-MetadataValue 'pod-cidr'
 
-  #### TODO(pjh): pod-cidr is 10.200.${i}.0/24 for k8s-hard-way; goes into the
-  #### KUBELET_CONFIG that's passed to kubelet via --config flag.
-  ###$podCidr = Get-MetadataValue 'pod-cidr'
+  # TODO: alternative approach from
+  # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L182:
+  # run kubelet once first, then run this command to get podCIDR, then
+  # configure HNS and restart kubelet.
+  # $podCIDR=c:\k\kubectl.exe --kubeconfig=c:\k\config get nodes/$($(hostname).ToLower()) -o custom-columns=podCidr:.spec.podCIDR --no-headers
 
   # For Windows nodes the pod gateway IP address is the .1 address in the pod
   # CIDR for the host, but from inside containers it's the .2 address.
