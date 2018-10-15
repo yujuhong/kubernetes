@@ -10,6 +10,7 @@ try {
   Create-PauseImage
   DownloadAndInstall-KubernetesBinaries
   Configure-CniNetworking
+  Create-NodePki
   Create-KubeletKubeconfig
   Configure-HostNetworkingService
   Configure-Kubelet

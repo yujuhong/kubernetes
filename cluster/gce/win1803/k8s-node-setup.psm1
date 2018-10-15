@@ -14,7 +14,6 @@
 #   DNS_DOMAIN, etc. If you're not sure what to do, review what Linux startup
 #   script does and imitate it!
 # - fetch KUBELET_CONFIG (kubelet-config.yaml).
-# - fetch KUBECONFIG (the thing that lets kubelet work on the node).
 # - If this startup script is too large (I suspect it will be), use a small
 #   startup script that downloads it from Github and invokes it.
 
@@ -103,6 +102,9 @@ function Set-EnvironmentVariables {
   [Environment]::SetEnvironmentVariable(
     "KUBECONFIG", "${k8sDir}\$(hostname).kubeconfig", "Machine")
   [Environment]::SetEnvironmentVariable(
+    "BOOTSTRAP_KUBECONFIG", "${k8sDir}\$(hostname).bootstrap-kubeconfig",
+    "Machine")
+  [Environment]::SetEnvironmentVariable(
     "KUBE_NETWORK", "l2bridge", "Machine")
   [Environment]::SetEnvironmentVariable(
     "PKI_DIR", "${k8sDir}\pki", "Machine")
@@ -119,6 +121,7 @@ function Set-EnvironmentVariables {
   $env:CNI_DIR = "${k8sDir}\cni"
   $env:KUBELET_CONFIG = "${k8sDir}\kubelet-config.yaml"
   $env:KUBECONFIG = "${k8sDir}\$(hostname).kubeconfig"
+  $env:BOOTSTRAP_KUBECONFIG = "${k8sDir}\$(hostname).bootstrap-kubeconfig"
   $env:KUBE_NETWORK = "l2bridge"
   $env:PKI_DIR = "${k8sDir}\pki"
   $env:CA_CERT_BUNDLE_PATH = "${k8sDir}\pki\ca-certificates.crt"
@@ -250,8 +253,14 @@ function Write-PkiData() {
   # This command writes out a PEM certificate file, analogous to "base64
   # --decode" on Linux. See https://stackoverflow.com/a/51914136/1230197.
   [IO.File]::WriteAllBytes($file, [Convert]::FromBase64String($data))
-  Todo("need to set permissions correctly on ${file}; not sure what the `
-Windows equivalent of 'umask 077' is")
+  Todo("need to set permissions correctly on ${file}; not sure what the Windows equivalent of 'umask 077' is")
+  # Linux: owned by root, rw by user only.
+  #   -rw------- 1 root root 1.2K Oct 12 00:56 ca-certificates.crt
+  #   -rw------- 1 root root 1.3K Oct 12 00:56 kubelet.crt
+  #   -rw------- 1 root root 1.7K Oct 12 00:56 kubelet.key
+  # Windows:
+  #   https://docs.microsoft.com/en-us/dotnet/api/system.io.fileattributes
+  #   https://docs.microsoft.com/en-us/dotnet/api/system.io.fileattributes
 }
 
 # This function is analogous to create-node-pki() in gci/configure-helper.sh for
@@ -276,6 +285,7 @@ function Create-NodePki() {
   Write-PkiData "${CA_CERT_BUNDLE}" ${env:CA_CERT_BUNDLE_PATH}
   Write-PkiData "${KUBELET_CERT}" ${env:KUBELET_CERT_PATH}
   Write-PkiData "${KUBELET_KEY}" ${env:KUBELET_KEY_PATH}
+  Get-ChildItem ${env:PKI_DIR}
 }
 
 # This is analogous to create-kubelet-kubeconfig() in gci/configure-helper.sh
@@ -284,10 +294,6 @@ function Create-NodePki() {
 # Required ${kubeEnv} keys:
 #   KUBERNETES_MASTER_NAME: the apiserver IP address.
 function Create-KubeletKubeconfig() {
-  #param (
-  #  [parameter(Mandatory=$true)] [string] $apiserverAddress
-  #)
-
   # The API server IP address comes from KUBERNETES_MASTER_NAME in kube-env, I
   # think.
   # http://cs/github/kubernetes/kubernetes/cluster/gce/gci/configure-helper.sh?l=2801&rcl=e4200cea9ced996c54096dc45d65e4dadb43a7ae
@@ -298,41 +304,44 @@ function Create-KubeletKubeconfig() {
   $fetchBootstrapConfig = $false
 
   if (${createBootstrapConfig}) {
-    New-Item -ItemType file ${env:KUBECONFIG}
+    New-Item -ItemType file ${env:BOOTSTRAP_KUBECONFIG}
     # TODO(pjh): is user "kubelet" correct? In my guide it's
     #   "system:node:$(hostname)"
     # The kubelet user config uses client-certificate and client-key here; in
     # my guide it's client-certificate-data and client-key-data. Does it matter?
-    Set-Content ${env:KUBECONFIG} `
-      'apiVersion: v1
-      kind: Config
-      users:
-      - name: kubelet
-        user:
-          client-certificate: KUBELET_CERT_PATH
-          client-key: KUBELET_KEY_PATH
-      clusters:
-      - name: local
-        cluster:
-          server: https://APISERVER_ADDRESS
-          certificate-authority: CA_CERT_BUNDLE_PATH
-      contexts:
-      - context:
-          cluster: local
-          user: kubelet
-        name: service-account-context
-      current-context: service-account-context'`
-      .replace('KUBELET_CERT_PATH', ${env:KUBELET_CERT_PATH})`
-      .replace('KUBELET_KEY_PATH', ${env:KUBELET_KEY_PATH})`
-      .replace('APISERVER_ADDRESS', ${apiserverAddress})`
-      .replace('CA_CERT_BUNDLE_PATH', ${env:CA_CERT_BUNDLE_PATH})
+    Set-Content ${env:BOOTSTRAP_KUBECONFIG} `
+'apiVersion: v1
+kind: Config
+users:
+- name: kubelet
+  user:
+    client-certificate: KUBELET_CERT_PATH
+    client-key: KUBELET_KEY_PATH
+clusters:
+- name: local
+  cluster:
+    server: https://APISERVER_ADDRESS
+    certificate-authority: CA_CERT_BUNDLE_PATH
+contexts:
+- context:
+    cluster: local
+    user: kubelet
+  name: service-account-context
+current-context: service-account-context'.`
+      replace('KUBELET_CERT_PATH', ${env:KUBELET_CERT_PATH}).`
+      replace('KUBELET_KEY_PATH', ${env:KUBELET_KEY_PATH}).`
+      replace('APISERVER_ADDRESS', ${apiserverAddress}).`
+      replace('CA_CERT_BUNDLE_PATH', ${env:CA_CERT_BUNDLE_PATH})
+    Get-Content ${env:BOOTSTRAP_KUBECONFIG}
   } ElseIf (${fetchBootstrapConfig}) {
     NotImplemented("fetching kubelet bootstrap-kubeconfig file from metadata",
       $true)
     # get-metadata-value "instance/attributes/bootstrap-kubeconfig" >/var/lib/kubelet/bootstrap-kubeconfig
+    Get-Content ${env:BOOTSTRAP_KUBECONFIG}
   } Else {
     NotImplemented("fetching kubelet kubeconfig file from metadata", $true)
     # get-metadata-value "instance/attributes/kubeconfig" >/var/lib/kubelet/kubeconfig
+    Get-Content ${env:KUBECONFIG}
   }
 }
 
