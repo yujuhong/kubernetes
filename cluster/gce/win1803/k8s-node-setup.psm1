@@ -395,7 +395,62 @@ function Configure-HostNetworkingService {
 
     # Comes from https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L180:
     "--resolv-conf="""""
+
+    # kubelet seems to fail (at least when running with bootstrap-kubeconfig)
+    # when this flag is omitted. It's included at
+    # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L232.
+    "--cgroups-per-qos=false"
+
+    # kubelet seems to fail (at least when running with bootstrap-kubeconfig)
+    # when this flag is omitted. It's included at
+    # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L232.
+    "--enforce-node-allocatable="""
   )
+
+  # Notable kubelet log messages when running with the flags above:
+  # W1015 16:24:58.896270     760 cni.go:172] Unable to update cni config: No networks found in /etc/cni/net.d
+  # I1015 16:24:58.907054     760 docker_service.go:253] Docker cri networking managed by kubernetes.io/no-op
+  # E1015 16:25:00.075959     760 kubelet_network.go:102] Failed to ensure that nat chain KUBE-MARK-DROP exists: error creating chain "KUBE-MARK-DROP": executable file not found in %PATH%:
+  # I1015 16:25:00.179487     760 kubelet_node_status.go:79] Attempting to register node kubernetes-minion-windows-group-ccr3
+  # I1015 16:25:00.186306     760 kubelet_node_status.go:82] Successfully registered node kubernetes-minion-windows-group-ccr3
+  # I1015 16:25:10.203846     760 kuberuntime_manager.go:917] updating runtime config through cri with podcidr 10.64.3.0/24
+  # I1015 16:25:10.204822     760 docker_service.go:352] docker cri received runtime config &RuntimeConfig{NetworkConfig:                   &NetworkConfig{PodCidr:10.64.3.0/24,},}
+  # I1015 16:25:10.209715     760 kubelet_network.go:73] Setting Pod CIDR:  -> 10.64.3.0/24
+  #
+  # kubeconfig that gets generated:
+  #   apiVersion: v1
+  #   clusters:
+  #   - cluster:
+  #       certificate-authority: C:\etc\kubernetes\pki\ca-certificates.crt
+  #       server: https://35.232.38.37
+  #     name: default-cluster
+  #   contexts:
+  #   - context:
+  #       cluster: default-cluster
+  #       namespace: default
+  #       user: default-auth
+  #     name: default-context
+  #   current-context: default-context
+  #   kind: Config
+  #   preferences: {}
+  #   users:
+  #   - name: default-auth
+  #     user:
+  #       client-certificate: C:\etc\kubernetes\pki\kubelet-client-current.pem
+  #       client-key: C:\etc\kubernetes\pki\kubelet-client-current.pem
+  #
+  # C:\etc\kubernetes\node\kubectl.exe --kubeconfig=C:\etc\kubernetes\kubelet.kubeconfig get nodes
+  # NAME                                   STATUS                     ROLES     AGE       VERSION
+  # kubernetes-master                      Ready,SchedulingDisabled   <none>    4d20h     v1.13.0-alpha.0.2025+01f8948e809e94-dirty
+  # kubernetes-minion-group-svgq           Ready                      <none>    4d20h     v1.13.0-alpha.0.2025+01f8948e809e94-dirty
+  # kubernetes-minion-group-v3gm           Ready                      <none>    4d20h     v1.13.0-alpha.0.2025+01f8948e809e94-dirty
+  # kubernetes-minion-windows-group-ccr3   Ready                      <none>    29h       v1.11.3
+  #
+  # C:\etc\kubernetes\node\kubectl.exe --kubeconfig=C:\etc\kubernetes\kubelet.kubeconfig get nodes/$($(hostname).ToLower()) -o custom-columns=podCidr:.spec.podCIDR --no-headers
+  # 10.64.3.0/24
+  #
+  # Woohoo!
+
 
   # For debugging run:
   #   C:\etc\kubernetes\node\kubelet.exe ${argListForFirstKubeletRun}"
