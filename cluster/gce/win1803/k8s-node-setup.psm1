@@ -89,44 +89,28 @@ function Download-KubeEnv {
 }
 
 function Set-EnvironmentVariables {
-  [Environment]::SetEnvironmentVariable(
-    "K8S_DIR", "${k8sDir}", "Machine")
-  [Environment]::SetEnvironmentVariable(
-    "NODE_DIR", "${k8sDir}\node", "Machine")
-  [Environment]::SetEnvironmentVariable(
-    "Path", $env:Path + ";${k8sDir}\node", "Machine")
-  [Environment]::SetEnvironmentVariable(
-    "CNI_DIR", "${k8sDir}\cni", "Machine")
-  [Environment]::SetEnvironmentVariable(
-    "KUBELET_CONFIG", "${k8sDir}\kubelet-config.yaml", "Machine")
-  [Environment]::SetEnvironmentVariable(
-    "KUBECONFIG", "${k8sDir}\kubelet.kubeconfig", "Machine")
-  [Environment]::SetEnvironmentVariable(
-    "BOOTSTRAP_KUBECONFIG", "${k8sDir}\kubelet.bootstrap-kubeconfig",
-    "Machine")
-  [Environment]::SetEnvironmentVariable(
-    "KUBE_NETWORK", "l2bridge", "Machine")
-  [Environment]::SetEnvironmentVariable(
-    "PKI_DIR", "${k8sDir}\pki", "Machine")
-  [Environment]::SetEnvironmentVariable(
-    "CA_CERT_BUNDLE_PATH", "${k8sDir}\pki\ca-certificates.crt", "Machine")
-  [Environment]::SetEnvironmentVariable(
-    "KUBELET_CERT_PATH", "${k8sDir}\pki\kubelet.crt", "Machine")
-  [Environment]::SetEnvironmentVariable(
-    "KUBELET_KEY_PATH", "${k8sDir}\pki\kubelet.key", "Machine")
-  # TODO: copy-paste these for manual testing...
-  $env:K8S_DIR = "${k8sDir}"
-  $env:NODE_DIR = "${k8sDir}\node"
-  $env:Path = $env:Path + ";${k8sDir}\node"
-  $env:CNI_DIR = "${k8sDir}\cni"
-  $env:KUBELET_CONFIG = "${k8sDir}\kubelet-config.yaml"
-  $env:BOOTSTRAP_KUBECONFIG = "${k8sDir}\kubelet.bootstrap-kubeconfig"
-  $env:KUBECONFIG = "${k8sDir}\kubelet.kubeconfig"
-  $env:KUBE_NETWORK = "l2bridge"
-  $env:PKI_DIR = "${k8sDir}\pki"
-  $env:CA_CERT_BUNDLE_PATH = "${k8sDir}\pki\ca-certificates.crt"
-  $env:KUBELET_CERT_PATH="${k8sDir}\pki\kubelet.crt"
-  $env:KUBELET_KEY_PATH="${k8sDir}\pki\kubelet.key"
+  $envVars = @{
+    "K8S_DIR" = "${k8sDir}"
+    "NODE_DIR" = "${k8sDir}\node"
+    "Path" = ${env:Path} + ";${k8sDir}\node"
+    "CNI_DIR" = "${k8sDir}\cni"
+    "KUBELET_CONFIG" = "${k8sDir}\kubelet-config.yaml"
+    "KUBECONFIG" = "${k8sDir}\kubelet.kubeconfig"
+    "BOOTSTRAP_KUBECONFIG" = "${k8sDir}\kubelet.bootstrap-kubeconfig"
+    "KUBE_NETWORK" = "l2bridge"
+    "PKI_DIR" = "${k8sDir}\pki"
+    "CA_CERT_BUNDLE_PATH" = "${k8sDir}\pki\ca-certificates.crt"
+    "KUBELET_CERT_PATH" = "${k8sDir}\pki\kubelet.crt"
+    "KUBELET_KEY_PATH" = "${k8sDir}\pki\kubelet.key"
+  }
+
+  # Set the environment variables in two ways: permanently on the machine (only
+  # takes effect after a reboot), and in the current shell.
+  $envVars.GetEnumerator() | ForEach-Object{
+    [Environment]::SetEnvironmentVariable($_.key, $_.value, "Machine")
+    $expression = -join('$env:', $_.key, ' = "', $_.value, '"')
+    Invoke-Expression ${expression}
+  }
 }
 
 function Set-PrerequisiteOptions {
@@ -346,8 +330,12 @@ current-context: service-account-context'.`
   }
 }
 
-function Configure-HostNetworkingService {
-  # BOOKMARK: Linux node path is something like
+# TODO: document what this function does and what its effects are.
+# Side effects: BOOKMARK
+#   ...
+#   ${env:POD_CIDR} is set?
+function RunKubeletOnceToGet-PodCidr {
+  # Linux node path is something like
   # (cluster/gce/gci/configure-helper.sh?l=2760):
   # - Set KUBELET_CONFIG_FILE_ARG by fetching kubelet-config metadata value and
   #   storing it in ${KUBE_HOME}/kubelet-config.yaml.
@@ -454,90 +442,22 @@ function Configure-HostNetworkingService {
 
   # For debugging run:
   #   C:\etc\kubernetes\node\kubelet.exe ${argListForFirstKubeletRun}"
-  # BOOKMARK: left off here; need to resolve errors from running this. First
-  # one:
-  #   server.go:207] [invalid configuration: CgroupsPerQOS (--cgroups-per-qos)
-  #   true is not supported on Windows, invalid configuration:
-  #   EnforceNodeAllocatable (--enforce-node-allocatable) [pods] is not
-  #   supported on Windows]
 
   $kubeletProcess = Start-Process -FilePath ${env:NODE_DIR}\kubelet.exe `
     -PassThru -ArgumentList ${argListForFirstKubeletRun}
 
   # Then:
+  # C:\etc\kubernetes\node\kubectl.exe --kubeconfig=C:\etc\kubernetes\kubelet.kubeconfig get nodes/$($(hostname).ToLower()) -o custom-columns=podCidr:.spec.podCIDR --no-headers
   # $podCIDR=c:\k\kubectl.exe --kubeconfig=c:\k\config get nodes/$($(hostname).ToLower()) -o custom-columns=podCidr:.spec.podCIDR --no-headers
 
-  # https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet/#options
-  Todo("switch to using KUBELET_ARGS instead of building them here.")
-  $argList = @(`
-    "--v=2",
-    "--allow-privileged=true",
-    "--cloud-provider=gce",
+  # BOOKMARK
+}
 
-    # Path to a kubeconfig file that will be used to get client certificate for
-    # kubelet. If the file specified by --kubeconfig does not exist, the
-    # bootstrap kubeconfig is used to request a client certificate from the API
-    # server. On success, a kubeconfig file referencing the generated client
-    # certificate and key is written to the path specified by --kubeconfig. The
-    # client certificate and key file will be stored in the directory pointed
-    # by --cert-dir.
-    #
-    # See also:
-    # https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet-tls-bootstrapping/
-    "--bootstrap-kubeconfig=${env:BOOTSTRAP_KUBECONFIG}",
-    "--kubeconfig=${env:KUBECONFIG}",
-
-    # The directory where the TLS certs are located. If --tls-cert-file and
-    # --tls-private-key-file are provided, this flag will be ignored.
-    "--cert-dir=${env:PKI_DIR}",
-
-    # TODO(pjh): necessary on Windows?
-    "--cni-bin-dir=${env:CNI_DIR}",
-    "--network-plugin=cni",
-
-    # TODO: what is this?
-    "--non-masquerade-cidr=0.0.0.0/0",
-
-    # Comes from https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L180:
-    "--pod-infra-container-image=kubeletwin/pause",
-
-    # Comes from https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L180:
-    "--resolv-conf="""""
-  )
-
-  # These args are present in the KUBELET_ARGS value of kube-env, but I don't
-  # think we need them or they don't make sense on Windows.
-  $argListUnused = @(`
-    # [Experimental] Path of mounter binary. Leave empty to use the default
-    # mount.
-    "--experimental-mounter-path=/home/kubernetes/containerized_mounter/mounter",
-    # [Experimental] if set true, the kubelet will check the underlying node
-    # for required components (binaries, etc.) before performing the mount
-    "--experimental-check-node-capabilities-before-mount=true",
-    # The Kubelet will use this directory for checkpointing downloaded
-    # configurations and tracking configuration health. The Kubelet will create
-    # this directory if it does not already exist. The path may be absolute or
-    # relative; relative paths start at the Kubelet's current working
-    # directory. Providing this flag enables dynamic Kubelet configuration.
-    # Presently, you must also enable the DynamicKubeletConfig feature gate to
-    # pass this flag.
-    "--dynamic-config-dir=/var/lib/kubelet/dynamic-config",
-    # The full path of the directory in which to search for additional third
-    # party volume plugins (default
-    # "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/")
-    "--volume-plugin-dir=/home/kubernetes/flexvolume",
-    # TODO(pjh): what node-labels do Windows nodes need?
-    "--node-labels=beta.kubernetes.io/fluentd-ds-ready=true,cloud.google.com/gke-netd-ready=true",
-    # The container runtime to use. Possible values: 'docker', 'rkt'. (default
-    # "docker")
-    "--container-runtime=docker"
-  )
-
-  # TODO: kubernetes-the-hard-way approach follows below...
-
+function Configure-HostNetworkingService {
   $endpointName = "cbr0"
   $vnicName = "vEthernet ($endpointName)"
 
+  # TODO: move this to install-prerequisites method.
   Invoke-WebRequest `
     https://github.com/Microsoft/SDN/raw/master/Kubernetes/windows/hns.psm1 `
     -OutFile ${env:K8S_DIR}\hns.psm1
@@ -545,7 +465,7 @@ function Configure-HostNetworkingService {
 
   # TODO: pod-cidr is 10.200.${i}.0/24 for k8s-hard-way; goes into the
   # KUBELET_CONFIG that's passed to kubelet via --config flag.
-  $podCidr = Get-MetadataValue 'pod-cidr'
+  #$podCidr = Get-MetadataValue 'pod-cidr'
 
   # TODO: alternative approach from
   # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L182:
@@ -596,6 +516,72 @@ function Configure-Kubelet {
 }
 
 function Start-WorkerServices {
+  # https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet/#options
+  Todo("switch to using KUBELET_ARGS instead of building them here.")
+  $argList = @(`
+    "--v=2",
+    "--allow-privileged=true",
+    "--cloud-provider=gce",
+
+    # Path to a kubeconfig file that will be used to get client certificate for
+    # kubelet. If the file specified by --kubeconfig does not exist, the
+    # bootstrap kubeconfig is used to request a client certificate from the API
+    # server. On success, a kubeconfig file referencing the generated client
+    # certificate and key is written to the path specified by --kubeconfig. The
+    # client certificate and key file will be stored in the directory pointed
+    # by --cert-dir.
+    #
+    # See also:
+    # https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet-tls-bootstrapping/
+    #"--bootstrap-kubeconfig=${env:BOOTSTRAP_KUBECONFIG}",
+    "--kubeconfig=${env:KUBECONFIG}",
+
+    # The directory where the TLS certs are located. If --tls-cert-file and
+    # --tls-private-key-file are provided, this flag will be ignored.
+    "--cert-dir=${env:PKI_DIR}",
+
+    # TODO(pjh): necessary on Windows?
+    "--cni-bin-dir=${env:CNI_DIR}",
+    "--network-plugin=cni",
+
+    # TODO: what is this?
+    "--non-masquerade-cidr=0.0.0.0/0",
+
+    # Comes from https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L180:
+    "--pod-infra-container-image=kubeletwin/pause",
+
+    # Comes from https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L180:
+    "--resolv-conf="""""
+  )
+
+  # These args are present in the KUBELET_ARGS value of kube-env, but I don't
+  # think we need them or they don't make sense on Windows.
+  $argListUnused = @(`
+    # [Experimental] Path of mounter binary. Leave empty to use the default
+    # mount.
+    "--experimental-mounter-path=/home/kubernetes/containerized_mounter/mounter",
+    # [Experimental] if set true, the kubelet will check the underlying node
+    # for required components (binaries, etc.) before performing the mount
+    "--experimental-check-node-capabilities-before-mount=true",
+    # The Kubelet will use this directory for checkpointing downloaded
+    # configurations and tracking configuration health. The Kubelet will create
+    # this directory if it does not already exist. The path may be absolute or
+    # relative; relative paths start at the Kubelet's current working
+    # directory. Providing this flag enables dynamic Kubelet configuration.
+    # Presently, you must also enable the DynamicKubeletConfig feature gate to
+    # pass this flag.
+    "--dynamic-config-dir=/var/lib/kubelet/dynamic-config",
+    # The full path of the directory in which to search for additional third
+    # party volume plugins (default
+    # "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/")
+    "--volume-plugin-dir=/home/kubernetes/flexvolume",
+    # TODO(pjh): what node-labels do Windows nodes need?
+    "--node-labels=beta.kubernetes.io/fluentd-ds-ready=true,cloud.google.com/gke-netd-ready=true",
+    # The container runtime to use. Possible values: 'docker', 'rkt'. (default
+    # "docker")
+    "--container-runtime=docker"
+  )
+
   # TODO: run these as background jobs, probably. See Yu-Ju's
   # https://paste.googleplex.com/6221572868145152.
   & ${env:NODE_DIR}\kubelet.exe --hostname-override=$(hostname) --v=6 `
