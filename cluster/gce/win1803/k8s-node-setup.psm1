@@ -9,16 +9,6 @@
 #   Invoke-WebRequest https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/win1803/configure.ps1 -OutFile configure.ps1
 #   Import-Module -Force .\k8s-node-setup.psm1  # -Force to override existing
 #   # Execute functions manually or run configure.ps1.
-#
-# TODOs to get this thing working:
-# - set pod-cidr metadata key correctly. Really, need to fetch kube-env metadata
-#   value (node-kube-env.yaml) and capture CLUSTER_IP_RANGE,
-#   SERVICE_CLUSTER_IP_RANGE, KUBERNETES_MASTER_NAME, DNS_SERVER_IP,
-#   DNS_DOMAIN, etc. If you're not sure what to do, review what Linux startup
-#   script does and imitate it!
-# - fetch KUBELET_CONFIG (kubelet-config.yaml).
-# - If this startup script is too large (I suspect it will be), use a small
-#   startup script that downloads it from Github and invokes it.
 
 $k8sDir = "C:\etc\kubernetes"
 Export-ModuleMember -Variable k8sDir
@@ -27,6 +17,7 @@ function Log {
   param (
     [parameter(Mandatory=$true)] [string]$message
   )
+  # TODO(pjh): what's correct, Write-Output or Write-Host??
   Write-Output "${message}"
 }
 
@@ -130,6 +121,9 @@ function Set-EnvironmentVars {
   # Set the environment variables in two ways: permanently on the machine (only
   # takes effect after a reboot), and in the current shell.
   $envVars.GetEnumerator() | ForEach-Object{
+    $message = -join("Setting environment variable: ", $_.key, " = ",`
+                     $_.value)
+    Write-Output ${message}
     Set-MachineEnvironmentVar $_.key $_.value
     Set-CurrentShellEnvironmentVar $_.key $_.value
   }
@@ -182,6 +176,8 @@ function DownloadAndInstall-KubernetesBinaries {
 function Configure-CniNetworking {
   Todo("switch to using win-bridge plugin instead of wincni")
   # https://github.com/containernetworking/plugins/tree/master/plugins/main/windows/win-bridge
+
+  # TODO(pjh): create all necessary dirs up-front in a separate function?
   mkdir -Force ${env:CNI_DIR}
   Invoke-WebRequest `
     https://github.com/Microsoft/SDN/raw/master/Kubernetes/windows/cni/wincni.exe `
@@ -196,6 +192,7 @@ function Configure-CniNetworking {
   # TODO(pjh): add -Force to overwrite if exists? Or do we want to fail?
   New-Item -ItemType file ${l2bridgeConf}
 
+  # BOOKMARK: figure out how to fill in cluster CIDR values here.
   Todo("still need to fill in appropriate cluster CIDR values in l2bridge.conf")
   # TODO: see
   # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L133
@@ -353,7 +350,7 @@ current-context: service-account-context'.`
 }
 
 function Get-PodCidr {
-  $podCidr = ${env:NODE_DIR}\kubectl.exe --kubeconfig=${env:KUBECONFIG} `
+  $podCidr = & ${env:NODE_DIR}\kubectl.exe --kubeconfig=${env:KUBECONFIG} `
     get nodes/$($(hostname).ToLower()) `
     -o custom-columns=podCidr:.spec.podCIDR --no-headers
   return $podCidr
@@ -476,7 +473,7 @@ function RunKubeletOnceToGet-PodCidr {
     $kubeletProcess = Start-Process -FilePath ${env:NODE_DIR}\kubelet.exe `
       -PassThru -ArgumentList ${argListForFirstKubeletRun}
     while (${podCidr}.length -eq 0) {
-      Write-Host "Waiting for kubelet to fetch pod CIDR"
+      Write-Output "Waiting for kubelet to fetch pod CIDR"
       Start-Sleep -sec 5
       ${podCidr} = Get-PodCidr
     }
@@ -484,49 +481,45 @@ function RunKubeletOnceToGet-PodCidr {
     ${kubeletProcess} | Stop-Process | Out-Null
   }
 
-  Write-Host "fetched pod CIDR: ${podCidr}"
+  Write-Output "fetched pod CIDR: ${podCidr}"
   Set-MachineEnvironmentVar "POD_CIDR" ${podCidr}
   Set-CurrentShellEnvironmentVar "POD_CIDR" ${podCidr}
-  Write-Host "environment variable: ${env:POD_CIDR}"
+  Write-Output "environment variable: ${env:POD_CIDR}"
 }
 
 function Configure-HostNetworkingService {
   $endpointName = "cbr0"
-  $vnicName = "vEthernet ($endpointName)"
+  $vnicName = "vEthernet (${endpointName})"
 
   # TODO: move this to install-prerequisites method.
   Invoke-WebRequest `
     https://github.com/Microsoft/SDN/raw/master/Kubernetes/windows/hns.psm1 `
     -OutFile ${env:K8S_DIR}\hns.psm1
-  Import-Module ${env:K8S_DIR}\hns.psm1
-
-  # TODO: pod-cidr is 10.200.${i}.0/24 for k8s-hard-way; goes into the
-  # KUBELET_CONFIG that's passed to kubelet via --config flag.
-  #$podCidr = Get-MetadataValue 'pod-cidr'
-
-  # TODO: alternative approach from
-  # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L182:
-  # run kubelet once first, then run this command to get podCIDR, then
-  # configure HNS and restart kubelet.
-  # $podCIDR=c:\k\kubectl.exe --kubeconfig=c:\k\config get nodes/$($(hostname).ToLower()) -o custom-columns=podCidr:.spec.podCIDR --no-headers
+  Import-Module -Force ${env:K8S_DIR}\hns.psm1
 
   # For Windows nodes the pod gateway IP address is the .1 address in the pod
   # CIDR for the host, but from inside containers it's the .2 address.
-  $podGateway = ${podCidr}.substring(0, ${podCidr}.lastIndexOf('.')) + '.1'
+  $podGateway = `
+    ${env:POD_CIDR}.substring(0, ${env:POD_CIDR}.lastIndexOf('.')) + '.1'
   $podEndpointGateway = `
-    ${podCidr}.substring(0, ${podCidr}.lastIndexOf('.')) + '.2'
+    ${env:POD_CIDR}.substring(0, ${env:POD_CIDR}.lastIndexOf('.')) + '.2'
+  Log("Setting up Windows node HNS networking: podCidr = ${env:POD_CIDR}, podGateway = ${podGateway}, podEndpointGateway = ${podEndpointGateway}")
 
-  New-HNSNetwork -Type "L2Bridge" -AddressPrefix $podCidr -Gateway $podGateway `
-    -Name ${env:KUBE_NETWORK} -Verbose
+  # Note: RDP connection will hiccup when running this command.
+  New-HNSNetwork -Type "L2Bridge" -AddressPrefix ${env:POD_CIDR} `
+    -Gateway ${podGateway} -Name ${env:KUBE_NETWORK} -Verbose
   $hnsNetwork = Get-HnsNetwork | ? Type -EQ "L2Bridge"
-  $hnsEndpoint = New-HnsEndpoint -NetworkId $hnsNetwork.Id -Name $endpointName `
-    -IPAddress $podEndpointGateway -Gateway "0.0.0.0" -Verbose
-  Attach-HnsHostEndpoint -EndpointID $hnsEndpoint.Id -CompartmentID 1 -Verbose
-  netsh interface ipv4 set interface "$vnicName" forwarding=enabled
+  $hnsEndpoint = New-HnsEndpoint -NetworkId ${hnsNetwork}.Id `
+    -Name ${endpointName} -IPAddress ${podEndpointGateway} `
+    -Gateway "0.0.0.0" -Verbose
+  Attach-HnsHostEndpoint -EndpointID ${hnsEndpoint}.Id -CompartmentID 1 -Verbose
+  netsh interface ipv4 set interface "${vnicName}" forwarding=enabled
   Get-HNSPolicyList | Remove-HnsPolicyList
+  Log("Host network setup complete")
 }
 
 function Configure-Kubelet {
+  # BOOKMARK: keep going from here.
   Set-Content ${env:KUBELET_CONFIG} `
   'kind: KubeletConfiguration
   apiVersion: kubelet.config.k8s.io/v1beta1
