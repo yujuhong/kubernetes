@@ -1,5 +1,8 @@
 # TODO: copyright / license statement.
 
+# Some portions copied / adapter from
+# https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1
+
 # Suggested usage for dev/test:
 #   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 #   Invoke-WebRequest https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/win1803/k8s-node-setup.psm1 -OutFile k8s-node-setup.psm1
@@ -69,6 +72,7 @@ function Get-MetadataValue {
 }
 
 # Fetches the kube-env from the instance metadata.
+#
 # Returns: a PowerShell Hashtable object containing the key-value pairs from
 #   kube-env.
 function Download-KubeEnv {
@@ -82,13 +86,32 @@ function Download-KubeEnv {
   # ${kubeEnvTable}.GetType()
 
   # The type of kubeEnv is a powershell String.
-  ${kubeEnv} = Get-MetadataValue 'kube-env'
-  ${kubeEnvTable} = ConvertFrom-Yaml ${kubeEnv}
+  $kubeEnv = Get-MetadataValue 'kube-env'
+  $kubeEnvTable = ConvertFrom-Yaml ${kubeEnv}
 
+  # TODO(pjh): instead of returning kubeEnvTable, put it in $global namespace
+  # so it's accessible from all other functions?
   return ${kubeEnvTable}
 }
 
-function Set-EnvironmentVariables {
+function Set-MachineEnvironmentVar {
+  param (
+    [parameter(Mandatory=$true)] [string]$key,
+    [parameter(Mandatory=$true)] [string]$value
+  )
+  [Environment]::SetEnvironmentVariable($key, $value, "Machine")
+}
+
+function Set-CurrentShellEnvironmentVar {
+  param (
+    [parameter(Mandatory=$true)] [string]$key,
+    [parameter(Mandatory=$true)] [string]$value
+  )
+  $expression = -join('$env:', $key, ' = "', $value, '"')
+  Invoke-Expression ${expression}
+}
+
+function Set-EnvironmentVars {
   $envVars = @{
     "K8S_DIR" = "${k8sDir}"
     "NODE_DIR" = "${k8sDir}\node"
@@ -107,9 +130,8 @@ function Set-EnvironmentVariables {
   # Set the environment variables in two ways: permanently on the machine (only
   # takes effect after a reboot), and in the current shell.
   $envVars.GetEnumerator() | ForEach-Object{
-    [Environment]::SetEnvironmentVariable($_.key, $_.value, "Machine")
-    $expression = -join('$env:', $_.key, ' = "', $_.value, '"')
-    Invoke-Expression ${expression}
+    Set-MachineEnvironmentVar $_.key $_.value
+    Set-CurrentShellEnvironmentVar $_.key $_.value
   }
 }
 
@@ -330,10 +352,19 @@ current-context: service-account-context'.`
   }
 }
 
-# TODO: document what this function does and what its effects are.
-# Side effects: BOOKMARK
-#   ...
-#   ${env:POD_CIDR} is set?
+function Get-PodCidr {
+  $podCidr = ${env:NODE_DIR}\kubectl.exe --kubeconfig=${env:KUBECONFIG} `
+    get nodes/$($(hostname).ToLower()) `
+    -o custom-columns=podCidr:.spec.podCIDR --no-headers
+  return $podCidr
+}
+
+# This function runs the kubelet until it registers with the master, then kills
+# it. The main reason for doing this is that it causes a pod CIDR to be
+# assigned to this node. Additionally, the kubelet will consume the bootstrap
+# kubeconfig and write out the permanent kubeconfig.
+#
+# The pod CIDR can be accessed at $env:POD_CIDR after this function returns.
 function RunKubeletOnceToGet-PodCidr {
   # Linux node path is something like
   # (cluster/gce/gci/configure-helper.sh?l=2760):
@@ -439,18 +470,24 @@ function RunKubeletOnceToGet-PodCidr {
   #
   # Woohoo!
 
+  $podCidr = Get-PodCidr
 
-  # For debugging run:
-  #   C:\etc\kubernetes\node\kubelet.exe ${argListForFirstKubeletRun}"
+  if (${podCidr}.length -eq 0) {
+    $kubeletProcess = Start-Process -FilePath ${env:NODE_DIR}\kubelet.exe `
+      -PassThru -ArgumentList ${argListForFirstKubeletRun}
+    while (${podCidr}.length -eq 0) {
+      Write-Host "Waiting for kubelet to fetch pod CIDR"
+      Start-Sleep -sec 5
+      ${podCidr} = Get-PodCidr
+    }
+    # Stop the kubelet process and discard its output.
+    ${kubeletProcess} | Stop-Process | Out-Null
+  }
 
-  $kubeletProcess = Start-Process -FilePath ${env:NODE_DIR}\kubelet.exe `
-    -PassThru -ArgumentList ${argListForFirstKubeletRun}
-
-  # Then:
-  # C:\etc\kubernetes\node\kubectl.exe --kubeconfig=C:\etc\kubernetes\kubelet.kubeconfig get nodes/$($(hostname).ToLower()) -o custom-columns=podCidr:.spec.podCIDR --no-headers
-  # $podCIDR=c:\k\kubectl.exe --kubeconfig=c:\k\config get nodes/$($(hostname).ToLower()) -o custom-columns=podCidr:.spec.podCIDR --no-headers
-
-  # BOOKMARK
+  Write-Host "fetched pod CIDR: ${podCidr}"
+  Set-MachineEnvironmentVar "POD_CIDR" ${podCidr}
+  Set-CurrentShellEnvironmentVar "POD_CIDR" ${podCidr}
+  Write-Host "environment variable: ${env:POD_CIDR}"
 }
 
 function Configure-HostNetworkingService {
@@ -609,13 +646,15 @@ function Verify-WorkerServices {
 
 Export-ModuleMember -Function Get-MetadataValue
 Export-ModuleMember -Function Download-KubeEnv
-Export-ModuleMember -Function Set-EnvironmentVariables
+Export-ModuleMember -Function Set-EnvironmentVars
 Export-ModuleMember -Function Set-PrerequisiteOptions
 Export-ModuleMember -Function Create-PauseImage
 Export-ModuleMember -Function DownloadAndInstall-KubernetesBinaries
 Export-ModuleMember -Function Configure-CniNetworking
 Export-ModuleMember -Function Create-NodePki
 Export-ModuleMember -Function Create-KubeletKubeconfig
+#Export-ModuleMember -Function Get-PodCidr
+Export-ModuleMember -Function RunKubeletOnceToGet-PodCidr
 Export-ModuleMember -Function Configure-HostNetworkingService
 Export-ModuleMember -Function Configure-Kubelet
 Export-ModuleMember -Function Start-WorkerServices

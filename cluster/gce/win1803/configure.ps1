@@ -4,7 +4,7 @@ Import-Module k8s-node-setup.psm1
 $ErrorActionPreference = 'Stop'
 
 try {
-  Set-EnvironmentVariables
+  Set-EnvironmentVars
   Set-PrerequisiteOptions
   $kubeEnv = Download-KubeEnv
   Create-PauseImage
@@ -12,6 +12,7 @@ try {
   Configure-CniNetworking
   Create-NodePki
   Create-KubeletKubeconfig
+  RunKubeletOnceToGet-PodCidr
   Configure-HostNetworkingService
   Configure-Kubelet
   Start-WorkerServices
