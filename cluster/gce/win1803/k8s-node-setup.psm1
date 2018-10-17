@@ -173,77 +173,171 @@ function DownloadAndInstall-KubernetesBinaries {
     -OutFile ${env:NODE_DIR}\kube-proxy.exe
 }
 
-function Configure-CniNetworking {
-  Todo("switch to using win-bridge plugin instead of wincni")
-  # https://github.com/containernetworking/plugins/tree/master/plugins/main/windows/win-bridge
+# TODO(pjh): this is copied from
+# https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L98.
+# See if there's a way to fetch or construct the "management subnet" so that
+# this os not needed.
+function
+ConvertTo-DecimalIP
+{
+  param(
+    [Parameter(Mandatory = $true, Position = 0)]
+    [Net.IPAddress] $IPAddress
+  )
+  $i = 3; $DecimalIP = 0;
+  $IPAddress.GetAddressBytes() | % {
+    $DecimalIP += $_ * [Math]::Pow(256, $i); $i--
+  }
 
+  return [UInt32]$DecimalIP
+}
+
+# TODO(pjh): this is copied from
+# https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L98.
+# See if there's a way to fetch or construct the "management subnet" so that
+# this os not needed.
+function
+ConvertTo-DottedDecimalIP
+{
+  param(
+    [Parameter(Mandatory = $true, Position = 0)]
+    [Uint32] $IPAddress
+  )
+
+    $DottedIP = $(for ($i = 3; $i -gt -1; $i--)
+    {
+      $Remainder = $IPAddress % [Math]::Pow(256, $i)
+      ($IPAddress - $Remainder) / [Math]::Pow(256, $i)
+      $IPAddress = $Remainder
+    })
+
+    return [String]::Join(".", $DottedIP)
+}
+
+# TODO(pjh): this is copied from
+# https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L98.
+# See if there's a way to fetch or construct the "management subnet" so that
+# this os not needed.
+function
+ConvertTo-MaskLength
+{
+  param(
+    [Parameter(Mandatory = $True, Position = 0)]
+    [Net.IPAddress] $SubnetMask
+  )
+    $Bits = "$($SubnetMask.GetAddressBytes() | % {
+      [Convert]::ToString($_, 2)
+    } )" -replace "[\s0]"
+    return $Bits.Length
+}
+
+# TODO(pjh): copied from
+# https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L98.
+# Not sure what the "Management subnet" is or why this function works the way
+# it does.
+#
+# TODO(pjh): update this to return both $addr as well as $mgmtSubnet.
+function Get-MgmtSubnet {
+  # TODO(pjh): make "vEthernet (nat*" a constant somewhere.
+  $netAdapter = Get-NetAdapter | Where-Object Name -Like "vEthernet (nat*"
+  if (!${netAdapter}) {
+    throw "Failed to find a suitable network adapter, check your network settings."
+  }
+
+  $addr = (Get-NetIPAddress -InterfaceAlias ${netAdapter}.ifAlias `
+    -AddressFamily IPv4).IPAddress
+  $mask = (Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object `
+    InterfaceIndex -eq $(${netAdapter}.ifIndex)).IPSubnet[0]
+  $mgmtSubnet = `
+    (ConvertTo-DecimalIP ${addr}) -band (ConvertTo-DecimalIP ${mask})
+  $mgmtSubnet = ConvertTo-DottedDecimalIP ${mgmtSubnet}
+  return "${mgmtSubnet}/$(ConvertTo-MaskLength $mask)"
+}
+
+function Configure-CniNetworking {
   # TODO(pjh): create all necessary dirs up-front in a separate function?
   mkdir -Force ${env:CNI_DIR}
   Invoke-WebRequest `
     https://github.com/Microsoft/SDN/raw/master/Kubernetes/windows/cni/wincni.exe `
     -OutFile ${env:CNI_DIR}\wincni.exe
 
-  #$vethIp = (Get-NetAdapter | Where-Object Name -Like "vEthernet (*" |`
   $vethIp = (Get-NetAdapter | Where-Object Name -Like "vEthernet (nat*" |`
     Get-NetIPAddress -AddressFamily IPv4).IPAddress
+  $mgmtSubnet = Get-MgmtSubnet
+  Log("using mgmt IP ${vethIp} and mgmt subnet ${mgmtSubnet} for CNI config")
 
   mkdir -Force ${env:CNI_DIR}\config
   $l2bridgeConf = "${env:CNI_DIR}\config\l2bridge.conf"
   # TODO(pjh): add -Force to overwrite if exists? Or do we want to fail?
   New-Item -ItemType file ${l2bridgeConf}
 
-  # BOOKMARK: figure out how to fill in cluster CIDR values here.
-  Todo("still need to fill in appropriate cluster CIDR values in l2bridge.conf")
-  # TODO: see
-  # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L133
-  # for what values go where.
+  Todo("switch to using win-bridge plugin instead of wincni and update l2bridge.conf if needed.")
+  # https://github.com/containernetworking/plugins/tree/master/plugins/main/windows/win-bridge
+
+  # TODO(pjh): validate these values against CNI config on Linux node.
+  #
+  # Explanation of the CNI config values:
+  #   DNS_SERVER_IP: ...
+  #   DNS_DOMAIN: ...
+  #   CLUSTER_CIDR: TODO: validate this against Linux kube-proxy-config.yaml.
+  #   SERVER_CIDR: SERVICE_CLUSTER_IP_RANGE from kubeEnv?
+  #   MGMT_SUBNET: $mgmtSubnet.
+  #   MGMT_IP: $vethIp.
   Set-Content ${l2bridgeConf} `
-    '{
-      "cniVersion":  "0.2.0",
-      "name":  "l2bridge",
-      "type":  "wincni.exe",
-      "master":  "Ethernet",
-      "capabilities":  {
-          "portMappings":  true
-      },
-      "dns":  {
-          "Nameservers":  [
-              "10.32.0.10"
-          ],
-          "Search": [
-              "cluster.local"
-          ]
-      },
-      "AdditionalArgs":  [
-          {
-              "Name":  "EndpointPolicy",
-              "Value":  {
-                  "Type":  "OutBoundNAT",
-                  "ExceptionList":  [
-                      "10.200.0.0/16",
-                      "10.32.0.0/24",
-                      "10.240.0.0/24"
-                  ]
-              }
-          },
-          {
-              "Name":  "EndpointPolicy",
-              "Value":  {
-                  "Type":  "ROUTE",
-                  "DestinationPrefix":  "10.32.0.0/24",
-                  "NeedEncap":  true
-              }
-          },
-          {
-              "Name":  "EndpointPolicy",
-              "Value":  {
-                  "Type":  "ROUTE",
-                  "DestinationPrefix":  "VETH_IP/32",
-                  "NeedEncap":  true
-              }
-          }
-      ]
-  }'.replace('VETH_IP', ${vethIp})
+'{
+  "cniVersion":  "0.2.0",
+  "name":  "l2bridge",
+  "type":  "wincni.exe",
+  "master":  "Ethernet",
+  "capabilities":  {
+    "portMappings":  true
+  },
+  "dns":  {
+    "Nameservers":  [
+      "DNS_SERVER_IP"
+    ],
+    "Search": [
+      "DNS_DOMAIN"
+    ]
+  },
+  "AdditionalArgs":  [
+    {
+      "Name":  "EndpointPolicy",
+      "Value":  {
+        "Type":  "OutBoundNAT",
+        "ExceptionList":  [
+          CLUSTER_CIDR,
+          SERVER_CIDR,
+          MGMT_SUBNET
+        ]
+      }
+    },
+    {
+      "Name":  "EndpointPolicy",
+      "Value":  {
+        "Type":  "ROUTE",
+        "DestinationPrefix":  "SERVER_CIDR",
+        "NeedEncap":  true
+      }
+    },
+    {
+      "Name":  "EndpointPolicy",
+      "Value":  {
+        "Type":  "ROUTE",
+        "DestinationPrefix":  "MGMT_IP/32",
+        "NeedEncap":  true
+      }
+    }
+  ]
+}'.`
+  replace('DNS_SERVER_IP', ${kubeEnv}['DNS_SERVER_IP']).`
+  replace('DNS_DOMAIN', ${kubeEnv}['DNS_DOMAIN']).`
+  replace('MGMT_IP', ${vethIp}).`
+  replace('CLUSTER_CIDR', ${kubeEnv}['CLUSTER_IP_RANGE']).`
+  replace('SERVER_CIDR', ${kubeEnv}['SERVICE_CLUSTER_IP_RANGE']).`
+  replace('MGMT_SUBNET', ${mgmtSubnet})
+
+  Log("CNI config:`n$(Get-Content -Raw ${l2bridgeConf})")
 }
 
 # Decodes the base64 $data string and writes it as binary to $file.
@@ -334,18 +428,18 @@ current-context: service-account-context'.`
       replace('KUBELET_KEY_PATH', ${env:KUBELET_KEY_PATH}).`
       replace('APISERVER_ADDRESS', ${apiserverAddress}).`
       replace('CA_CERT_BUNDLE_PATH', ${env:CA_CERT_BUNDLE_PATH})
-    Get-Content ${env:BOOTSTRAP_KUBECONFIG}
+    Get-Content -Raw ${env:BOOTSTRAP_KUBECONFIG}
   } ElseIf (${fetchBootstrapConfig}) {
     NotImplemented("fetching kubelet bootstrap-kubeconfig file from metadata",
       $true)
     # get-metadata-value "instance/attributes/bootstrap-kubeconfig" >
     #   /var/lib/kubelet/bootstrap-kubeconfig
-    Get-Content ${env:BOOTSTRAP_KUBECONFIG}
+    Get-Content -Raw ${env:BOOTSTRAP_KUBECONFIG}
   } Else {
     NotImplemented("fetching kubelet kubeconfig file from metadata", $true)
     # get-metadata-value "instance/attributes/kubeconfig" >
     #   /var/lib/kubelet/kubeconfig
-    Get-Content ${env:KUBECONFIG}
+    Get-Content -Raw ${env:KUBECONFIG}
   }
 }
 
@@ -353,6 +447,8 @@ function Get-PodCidr {
   $podCidr = & ${env:NODE_DIR}\kubectl.exe --kubeconfig=${env:KUBECONFIG} `
     get nodes/$($(hostname).ToLower()) `
     -o custom-columns=podCidr:.spec.podCIDR --no-headers
+  # TODO(pjh): I read somewhere that return statement isn't necessary at the
+  # end of functions in PowerShell; review this and update script accordingly.
   return $podCidr
 }
 
@@ -518,28 +614,57 @@ function Configure-HostNetworkingService {
   Log("Host network setup complete")
 }
 
-function Configure-Kubelet {
-  # BOOKMARK: keep going from here.
+# This is what the KubeletConfiguration looked like for kubernetes-the-hard-way.
+# TODO: remove this.
+function Configure-KubeletTheHardWay {
   Set-Content ${env:KUBELET_CONFIG} `
-  'kind: KubeletConfiguration
-  apiVersion: kubelet.config.k8s.io/v1beta1
-  authentication:
-    anonymous:
-      enabled: true
-    webhook:
-      enabled: true
-    x509:
-      clientCAFile: "K8S_DIR\ca.pem"
-  authorization:
-    mode: AlwaysAllow
-  clusterDomain: "cluster.local"
-  clusterDNS:
-    - "10.32.0.10"
-  podCIDR: "POD_CIDR"
-  runtimeRequestTimeout: "15m"
-  tlsCertFile: "K8S_DIR\HOSTNAME.pem"
-  tlsPrivateKeyFile: "K8S_DIR\HOSTNAME-key.pem"'`
-  .replace('K8S_DIR', ${env:K8S_DIR}).`
+'kind: KubeletConfiguration
+apiVersion: kubelet.config.k8s.io/v1beta1
+authentication:
+  anonymous:
+    enabled: true
+  webhook:
+    enabled: true
+  x509:
+    clientCAFile: "K8S_DIR\ca.pem"
+authorization:
+  mode: AlwaysAllow
+clusterDomain: "cluster.local"
+clusterDNS:
+  - "10.32.0.10"
+podCIDR: "POD_CIDR"
+runtimeRequestTimeout: "15m"
+tlsCertFile: "K8S_DIR\HOSTNAME.pem"
+tlsPrivateKeyFile: "K8S_DIR\HOSTNAME-key.pem"'.`
+  replace('K8S_DIR', ${env:K8S_DIR}).`
+  replace('POD_CIDR', ${podCidr}).`
+  replace('HOSTNAME', $(hostname)).`
+  replace('\', '\\')
+}
+
+function Configure-Kubelet {
+  # BOOKMARK: implement this by finding the KubeletConfiguration for Linux nodes
+  # in a kube-up cluster and replicating it here.
+  Set-Content ${env:KUBELET_CONFIG} `
+'kind: KubeletConfiguration
+apiVersion: kubelet.config.k8s.io/v1beta1
+authentication:
+  anonymous:
+    enabled: true
+  webhook:
+    enabled: true
+  x509:
+    clientCAFile: "K8S_DIR\ca.pem"
+authorization:
+  mode: AlwaysAllow
+clusterDomain: "cluster.local"
+clusterDNS:
+  - "10.32.0.10"
+podCIDR: "POD_CIDR"
+runtimeRequestTimeout: "15m"
+tlsCertFile: "K8S_DIR\HOSTNAME.pem"
+tlsPrivateKeyFile: "K8S_DIR\HOSTNAME-key.pem"'.`
+  replace('K8S_DIR', ${env:K8S_DIR}).`
   replace('POD_CIDR', ${podCidr}).`
   replace('HOSTNAME', $(hostname)).`
   replace('\', '\\')
