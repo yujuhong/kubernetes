@@ -15,7 +15,7 @@ Export-ModuleMember -Variable k8sDir
 
 function Log {
   param (
-    [parameter(Mandatory=$true)] [string]$message
+    [parameter(Mandatory=$true)] [string]$message,
     [parameter(Mandatory=$false)] [bool]$fail = $false
   )
   # TODO(pjh): what's correct, Write-Output or Write-Host??
@@ -445,6 +445,11 @@ current-context: service-account-context'.`
 }
 
 function Get-PodCidr {
+  # TODO(pjh): fail if errors detected here. For example, if bootstrap process
+  # didn't generate permanent kubeconfig correctly, kubectl execution will
+  # return "error: CreateFile C:\etc\kubernetes\kubelet.kubeconfig: The system
+  # cannot find the file specified", and we'll never successfully get the
+  # podCidr.
   $podCidr = & ${env:NODE_DIR}\kubectl.exe --kubeconfig=${env:KUBECONFIG} `
     get nodes/$($(hostname).ToLower()) `
     -o custom-columns=podCidr:.spec.podCIDR --no-headers
@@ -517,7 +522,7 @@ function RunKubeletOnceToGet-PodCidr {
     # kubelet seems to fail (at least when running with bootstrap-kubeconfig)
     # when this flag is omitted. It's included at
     # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L232.
-    "--enforce-node-allocatable="""
+    "--enforce-node-allocatable=`"`""
   )
 
   # Notable kubelet log messages when running with the flags above:
@@ -564,24 +569,26 @@ function RunKubeletOnceToGet-PodCidr {
   #
   # Woohoo!
 
-  $podCidr = Get-PodCidr
+  $kubeletOut = "${env:NODE_DIR}\kubelet-out.txt"
+  $kubeletErr = "${env:NODE_DIR}\kubelet-err.txt"
 
-  if (${podCidr}.length -eq 0) {
-    $kubeletProcess = Start-Process -FilePath ${env:NODE_DIR}\kubelet.exe `
-      -PassThru -ArgumentList ${argListForFirstKubeletRun}
-    while (${podCidr}.length -eq 0) {
-      Write-Output "Waiting for kubelet to fetch pod CIDR"
-      Start-Sleep -sec 5
-      ${podCidr} = Get-PodCidr
-    }
-    # Stop the kubelet process and discard its output.
-    ${kubeletProcess} | Stop-Process | Out-Null
+  $kubeletProcess = Start-Process -FilePath ${env:NODE_DIR}\kubelet.exe `
+    -PassThru -ArgumentList ${argListForFirstKubeletRun} `
+    -RedirectStandardOutput $kubeletOut `
+    -RedirectStandardError $kubeletErr
+
+  $podCidr = ""
+  while (${podCidr}.length -eq 0) {
+    Write-Output "Waiting for kubelet to fetch pod CIDR"
+    Start-Sleep -sec 5
+    ${podCidr} = Get-PodCidr
   }
+  # Stop the kubelet process.
+  ${kubeletProcess} | Stop-Process
 
   Write-Output "fetched pod CIDR: ${podCidr}"
   Set-MachineEnvironmentVar "POD_CIDR" ${podCidr}
   Set-CurrentShellEnvironmentVar "POD_CIDR" ${podCidr}
-  Write-Output "environment variable: ${env:POD_CIDR}"
 }
 
 function Configure-HostNetworkingService {
@@ -615,7 +622,10 @@ function Configure-HostNetworkingService {
 
   # Workaround for
   # https://github.com/Microsoft/hcsshim/issues/299#issuecomment-425491610:
-  # re-add the route to the GCE metadata server.
+  # re-add the route to the GCE metadata server after creating the HNS network.
+  # The route does not seem to disappear immediately, so sleep for a bit.
+  Log("Waiting 10 seconds for routes to stabilize after HNS network creation")
+  Start-Sleep 10
   $gceMetadataServer = "169.254.169.254"
   route /p add ${gceMetadataServer} mask 255.255.255.255 0.0.0.0
 
@@ -774,16 +784,22 @@ function Verify-WorkerServices {
   & ${env:K8S_DIR}\node\kubectl get nodes
 }
 
+Export-ModuleMember -Function Log
+Export-ModuleMember -Function Todo
+Export-ModuleMember -Function NotImplemented
 Export-ModuleMember -Function Get-MetadataValue
 Export-ModuleMember -Function Download-KubeEnv
+Export-ModuleMember -Function Set-MachineEnvironmentVar
+Export-ModuleMember -Function Set-CurrentShellEnvironmentVar
 Export-ModuleMember -Function Set-EnvironmentVars
 Export-ModuleMember -Function Set-PrerequisiteOptions
 Export-ModuleMember -Function Create-PauseImage
 Export-ModuleMember -Function DownloadAndInstall-KubernetesBinaries
+Export-ModuleMember -Function Get-MgmtSubnet
 Export-ModuleMember -Function Configure-CniNetworking
 Export-ModuleMember -Function Create-NodePki
 Export-ModuleMember -Function Create-KubeletKubeconfig
-#Export-ModuleMember -Function Get-PodCidr
+Export-ModuleMember -Function Get-PodCidr
 Export-ModuleMember -Function RunKubeletOnceToGet-PodCidr
 Export-ModuleMember -Function Configure-HostNetworkingService
 Export-ModuleMember -Function Configure-Kubelet
