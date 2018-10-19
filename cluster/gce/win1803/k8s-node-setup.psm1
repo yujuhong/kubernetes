@@ -330,8 +330,7 @@ function Configure-CniNetworking {
       }
     }
   ]
-}'.`
-  replace('DNS_SERVER_IP', ${kubeEnv}['DNS_SERVER_IP']).`
+}'.replace('DNS_SERVER_IP', ${kubeEnv}['DNS_SERVER_IP']).`
   replace('DNS_DOMAIN', ${kubeEnv}['DNS_DOMAIN']).`
   replace('MGMT_IP', ${vethIp}).`
   replace('CLUSTER_CIDR', ${kubeEnv}['CLUSTER_IP_RANGE']).`
@@ -661,31 +660,41 @@ tlsPrivateKeyFile: "K8S_DIR\HOSTNAME-key.pem"'.`
 }
 
 function Configure-Kubelet {
-  # BOOKMARK: implement this by finding the KubeletConfiguration for Linux nodes
-  # in a kube-up cluster and replicating it here.
+  # Linux node: /home/kubernetes/kubelet-config.yaml is built by
+  # build-kubelet-config() in util.sh, then posted to metadata server as
+  # kubelet-config.
+  Todo("building KubeletConfiguration; for Linux nodes this is done by the cluster scripts and posted to metadata server. Do the same for Windows?")
+
   Set-Content ${env:KUBELET_CONFIG} `
 'kind: KubeletConfiguration
 apiVersion: kubelet.config.k8s.io/v1beta1
-authentication:
-  anonymous:
-    enabled: true
-  webhook:
-    enabled: true
-  x509:
-    clientCAFile: "K8S_DIR\ca.pem"
-authorization:
-  mode: AlwaysAllow
-clusterDomain: "cluster.local"
+cgroupRoot: /
 clusterDNS:
-  - "10.32.0.10"
-podCIDR: "POD_CIDR"
-runtimeRequestTimeout: "15m"
-tlsCertFile: "K8S_DIR\HOSTNAME.pem"
-tlsPrivateKeyFile: "K8S_DIR\HOSTNAME-key.pem"'.`
-  replace('K8S_DIR', ${env:K8S_DIR}).`
-  replace('POD_CIDR', ${podCidr}).`
-  replace('HOSTNAME', $(hostname)).`
-  replace('\', '\\')
+  - "DNS_SERVER_IP"
+clusterDomain: "DNS_DOMAIN"
+staticPodPath: STATIC_POD_PATH
+readOnlyPort: 10255
+enableDebuggingHandlers: true
+authentication:
+  x509:
+    clientCAFile: CLIENT_CA_FILE
+hairpinMode: "HAIRPIN_MODE"
+evictionHard:
+  memory.available: "250Mi"
+  nodefs.available: "10%"
+  nodefs.inodesFree: "5%"
+featureGates:
+  ExperimentalCriticalPodAnnotation: true'.`
+  replace('DNS_SERVER_IP', ${kubeEnv}['DNS_SERVER_IP']).`
+  replace('DNS_DOMAIN', ${kubeEnv}['DNS_DOMAIN']).`
+  replace('STATIC_POD_PATH', ${env:K8S_DIR}).`
+  replace('CLIENT_CA_FILE', ${env:CA_CERT_BUNDLE_PATH}).`
+  replace('HAIRPIN_MODE', 'hairpin-veth')
+  # TODO(pjh): STATIC_POD_PATH is /etc/kubernetes/manifests on Linux, no idea
+  # what makes sense for Windows.
+  # TODO(pjh): no idea if this HAIRPIN_MODE makes sense for Windows.
+
+  Log("Kubelet config:`n$(Get-Content -Raw ${env:KUBELET_CONFIG})")
 }
 
 function Start-WorkerServices {
