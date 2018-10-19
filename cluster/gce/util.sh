@@ -728,45 +728,48 @@ function construct-linux-kubelet-flags {
 }
 
 function construct-windows-kubelet-flags {
-  echo "TODO(pjh): implement construct-windows-kubelet-flags"
-  exit 1
-
+  local master=$1  # unused, no Windows master yet.
   local flags="${KUBELET_TEST_LOG_LEVEL:-"--v=2"} ${KUBELET_TEST_ARGS:-}"
+
+  echo "TODO(pjh): coalesce kubelet flags that work on both Windows + Linux."
   flags+=" --allow-privileged=true"
   flags+=" --cloud-provider=gce"
-  # Keep in sync with CONTAINERIZED_MOUNTER_HOME in configure-helper.sh
-  flags+=" --experimental-mounter-path=/home/kubernetes/containerized_mounter/mounter"
-  flags+=" --experimental-check-node-capabilities-before-mount=true"
-  # Keep in sync with the mkdir command in configure-helper.sh (until the TODO is resolved)
-  flags+=" --cert-dir=/var/lib/kubelet/pki/"
-  # Configure the directory that the Kubelet should use to store dynamic config checkpoints
-  flags+=" --dynamic-config-dir=/var/lib/kubelet/dynamic-config"
+  ## Keep in sync with CONTAINERIZED_MOUNTER_HOME in configure-helper.sh
+  #flags+=" --experimental-mounter-path=/home/kubernetes/containerized_mounter/mounter"
+  #flags+=" --experimental-check-node-capabilities-before-mount=true"
+  ## Keep in sync with the mkdir command in configure-helper.sh (until the TODO is resolved)
+  #flags+=" --cert-dir=/var/lib/kubelet/pki/"
+  ## Configure the directory that the Kubelet should use to store dynamic config checkpoints
+  #flags+=" --dynamic-config-dir=/var/lib/kubelet/dynamic-config"
 
+  # Note: NODE_KUBELET_TEST_ARGS is empty in typical kube-up runs.
   flags+=" ${NODE_KUBELET_TEST_ARGS:-}"
-  flags+=" --bootstrap-kubeconfig=/var/lib/kubelet/bootstrap-kubeconfig"
-  flags+=" --kubeconfig=/var/lib/kubelet/kubeconfig"
+  #flags+=" --bootstrap-kubeconfig=/var/lib/kubelet/bootstrap-kubeconfig"
+  #flags+=" --kubeconfig=/var/lib/kubelet/kubeconfig"
 
-  # Network plugin
-  if [[ -n "${NETWORK_PROVIDER:-}" || -n "${NETWORK_POLICY_PROVIDER:-}" ]]; then
-    flags+=" --cni-bin-dir=/home/kubernetes/bin"
-    if [[ "${NETWORK_POLICY_PROVIDER:-}" == "calico" || "${ENABLE_NETD:-}" == "true" ]]; then
-      # Calico uses CNI always.
-      flags+=" --network-plugin=cni"
-    else
-      # Otherwise use the configured value.
-      flags+=" --network-plugin=${NETWORK_PROVIDER}"
+  ## Network plugin
+  #if [[ -n "${NETWORK_PROVIDER:-}" || -n "${NETWORK_POLICY_PROVIDER:-}" ]]; then
+    #flags+=" --cni-bin-dir=/home/kubernetes/bin"
+    #if [[ "${NETWORK_POLICY_PROVIDER:-}" == "calico" || "${ENABLE_NETD:-}" == "true" ]]; then
+      ## Calico uses CNI always.
+      #flags+=" --network-plugin=cni"
+    #else
+      ## Otherwise use the configured value.
+      #flags+=" --network-plugin=${NETWORK_PROVIDER}"
 
-    fi
-  fi
+    #fi
+  #fi
   if [[ -n "${NON_MASQUERADE_CIDR:-}" ]]; then
     flags+=" --non-masquerade-cidr=${NON_MASQUERADE_CIDR}"
   fi
-  flags+=" --volume-plugin-dir=${VOLUME_PLUGIN_DIR}"
-  echo "TODO(pjh): does build-node-labels need to be forked for Windows?"
+  #flags+=" --volume-plugin-dir=${VOLUME_PLUGIN_DIR}"
+
+  echo "TODO(pjh): fork build-node-labels for Windows"
   local node_labels=$(build-node-labels "false")
   if [[ -n "${node_labels:-}" ]]; then
     flags+=" --node-labels=${node_labels}"
   fi
+
   if [[ -n "${NODE_TAINTS:-}" ]]; then
     flags+=" --register-with-taints=${NODE_TAINTS}"
   fi
@@ -774,16 +777,17 @@ function construct-windows-kubelet-flags {
   if [[ -n "${ROTATE_CERTIFICATES:-}" ]]; then
     flags+=" --rotate-certificates=true"
   fi
-  if [[ -n "${CONTAINER_RUNTIME:-}" ]]; then
-    flags+=" --container-runtime=${CONTAINER_RUNTIME}"
-  fi
-  if [[ -n "${CONTAINER_RUNTIME_ENDPOINT:-}" ]]; then
-    flags+=" --container-runtime-endpoint=${CONTAINER_RUNTIME_ENDPOINT}"
-  fi
+  #if [[ -n "${CONTAINER_RUNTIME:-}" ]]; then
+    #flags+=" --container-runtime=${CONTAINER_RUNTIME}"
+  #fi
+  #if [[ -n "${CONTAINER_RUNTIME_ENDPOINT:-}" ]]; then
+    #flags+=" --container-runtime-endpoint=${CONTAINER_RUNTIME_ENDPOINT}"
+  #fi
   if [[ -n "${MAX_PODS_PER_NODE:-}" ]]; then
     flags+=" --max-pods=${MAX_PODS_PER_NODE}"
   fi
 
+  echo "PJH: windows KUBELET_ARGS: ${flags}"
   KUBELET_ARGS="${flags}"
 }
 

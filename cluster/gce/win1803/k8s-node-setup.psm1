@@ -16,9 +16,13 @@ Export-ModuleMember -Variable k8sDir
 function Log {
   param (
     [parameter(Mandatory=$true)] [string]$message
+    [parameter(Mandatory=$false)] [bool]$fail = $false
   )
   # TODO(pjh): what's correct, Write-Output or Write-Host??
   Write-Output "${message}"
+  If (${fail}) {
+    Exit 1
+  }
 }
 
 function Todo {
@@ -33,10 +37,7 @@ function NotImplemented {
     [parameter(Mandatory=$true)] [string]$message,
     [parameter(Mandatory=$false)] [bool]$fail = $false
   )
-  Write-Output "Not implemented yet: ${message}"
-  If (${fail}) {
-    Exit 1
-  }
+  Log "Not implemented yet: ${message}" ${fail}
 }
 
 function Get-MetadataValue {
@@ -611,6 +612,13 @@ function Configure-HostNetworkingService {
   Attach-HnsHostEndpoint -EndpointID ${hnsEndpoint}.Id -CompartmentID 1 -Verbose
   netsh interface ipv4 set interface "${vnicName}" forwarding=enabled
   Get-HNSPolicyList | Remove-HnsPolicyList
+
+  # Workaround for
+  # https://github.com/Microsoft/hcsshim/issues/299#issuecomment-425491610:
+  # re-add the route to the GCE metadata server.
+  $gceMetadataServer = "169.254.169.254"
+  route /p add ${gceMetadataServer} mask 255.255.255.255 0.0.0.0
+
   Log("Host network setup complete")
 }
 
@@ -673,6 +681,10 @@ tlsPrivateKeyFile: "K8S_DIR\HOSTNAME-key.pem"'.`
 function Start-WorkerServices {
   # https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet/#options
   Todo("switch to using KUBELET_ARGS instead of building them here.")
+  $kubeletArgs = ${kubeEnv}['KUBELET_ARGS']
+  Log("kubeletArgs from metadata: ${kubeletArgs}", $true)
+
+  # TODO: dedup $kubeletArgs and argList
   $argList = @(`
     "--v=2",
     "--allow-privileged=true",
