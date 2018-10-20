@@ -12,6 +12,8 @@
 
 $k8sDir = "C:\etc\kubernetes"
 Export-ModuleMember -Variable k8sDir
+$infraContainer = "kubeletwin/pause"
+Export-ModuleMember -Variable infraContainer
 
 function Log {
   param (
@@ -108,7 +110,9 @@ function Set-EnvironmentVars {
     "K8S_DIR" = "${k8sDir}"
     "NODE_DIR" = "${k8sDir}\node"
     "Path" = ${env:Path} + ";${k8sDir}\node"
+    "LOGS_DIR" = "${k8sDir}\logs"
     "CNI_DIR" = "${k8sDir}\cni"
+    "CNI_CONFIG_DIR" = "${k8sDir}\cni\config"
     "KUBELET_CONFIG" = "${k8sDir}\kubelet-config.yaml"
     "KUBECONFIG" = "${k8sDir}\kubelet.kubeconfig"
     "BOOTSTRAP_KUBECONFIG" = "${k8sDir}\kubelet.bootstrap-kubeconfig"
@@ -152,8 +156,7 @@ function Create-PauseImage {
   New-Item -ItemType file ${env:K8S_DIR}\pauseimage\Dockerfile
   Set-Content ${env:K8S_DIR}\pauseimage\Dockerfile `
     "FROM microsoft/nanoserver:${winVersion}`n`nCMD cmd /c ping -t localhost"
-  # TODO: kubeletwin/pause should be a variable across these functions.
-  docker build -t kubeletwin/pause ${env:K8S_DIR}\pauseimage
+  docker build -t ${infraContainer} ${env:K8S_DIR}\pauseimage
 }
 
 function DownloadAndInstall-KubernetesBinaries {
@@ -267,8 +270,8 @@ function Configure-CniNetworking {
   $mgmtSubnet = Get-MgmtSubnet
   Log "using mgmt IP ${vethIp} and mgmt subnet ${mgmtSubnet} for CNI config"
 
-  mkdir -Force ${env:CNI_DIR}\config
-  $l2bridgeConf = "${env:CNI_DIR}\config\l2bridge.conf"
+  mkdir -Force ${env:CNI_CONFIG_DIR}
+  $l2bridgeConf = "${env:CNI_CONFIG_DIR}\l2bridge.conf"
   # TODO(pjh): add -Force to overwrite if exists? Or do we want to fail?
   New-Item -ItemType file ${l2bridgeConf}
 
@@ -508,10 +511,10 @@ function RunKubeletOnceToGet-PodCidr {
     "--cert-dir=${env:PKI_DIR}",
 
     # Comes from https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L180:
-    "--pod-infra-container-image=kubeletwin/pause",
+    "--pod-infra-container-image=${infraContainer}",
 
     # Comes from https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L180:
-    "--resolv-conf="""""
+    "--resolv-conf=`"`""
 
     # kubelet seems to fail (at least when running with bootstrap-kubeconfig)
     # when this flag is omitted. It's included at
@@ -524,53 +527,11 @@ function RunKubeletOnceToGet-PodCidr {
     "--enforce-node-allocatable=`"`""
   )
 
-  # Notable kubelet log messages when running with the flags above:
-  # W1015 16:24:58.896270     760 cni.go:172] Unable to update cni config: No networks found in /etc/cni/net.d
-  # I1015 16:24:58.907054     760 docker_service.go:253] Docker cri networking managed by kubernetes.io/no-op
-  # E1015 16:25:00.075959     760 kubelet_network.go:102] Failed to ensure that nat chain KUBE-MARK-DROP exists: error creating chain "KUBE-MARK-DROP": executable file not found in %PATH%:
-  # I1015 16:25:00.179487     760 kubelet_node_status.go:79] Attempting to register node kubernetes-minion-windows-group-ccr3
-  # I1015 16:25:00.186306     760 kubelet_node_status.go:82] Successfully registered node kubernetes-minion-windows-group-ccr3
-  # I1015 16:25:10.203846     760 kuberuntime_manager.go:917] updating runtime config through cri with podcidr 10.64.3.0/24
-  # I1015 16:25:10.204822     760 docker_service.go:352] docker cri received runtime config &RuntimeConfig{NetworkConfig:                   &NetworkConfig{PodCidr:10.64.3.0/24,},}
-  # I1015 16:25:10.209715     760 kubelet_network.go:73] Setting Pod CIDR:  -> 10.64.3.0/24
-  #
-  # kubeconfig that gets generated:
-  #   apiVersion: v1
-  #   clusters:
-  #   - cluster:
-  #       certificate-authority: C:\etc\kubernetes\pki\ca-certificates.crt
-  #       server: https://35.232.38.37
-  #     name: default-cluster
-  #   contexts:
-  #   - context:
-  #       cluster: default-cluster
-  #       namespace: default
-  #       user: default-auth
-  #     name: default-context
-  #   current-context: default-context
-  #   kind: Config
-  #   preferences: {}
-  #   users:
-  #   - name: default-auth
-  #     user:
-  #       client-certificate: C:\etc\kubernetes\pki\kubelet-client-current.pem
-  #       client-key: C:\etc\kubernetes\pki\kubelet-client-current.pem
-  #
-  # C:\etc\kubernetes\node\kubectl.exe --kubeconfig=C:\etc\kubernetes\kubelet.kubeconfig get nodes
-  # NAME                                   STATUS                     ROLES     AGE       VERSION
-  # kubernetes-master                      Ready,SchedulingDisabled   <none>    4d20h     v1.13.0-alpha.0.2025+01f8948e809e94-dirty
-  # kubernetes-minion-group-svgq           Ready                      <none>    4d20h     v1.13.0-alpha.0.2025+01f8948e809e94-dirty
-  # kubernetes-minion-group-v3gm           Ready                      <none>    4d20h     v1.13.0-alpha.0.2025+01f8948e809e94-dirty
-  # kubernetes-minion-windows-group-ccr3   Ready                      <none>    29h       v1.11.3
-  #
-  # C:\etc\kubernetes\node\kubectl.exe --kubeconfig=C:\etc\kubernetes\kubelet.kubeconfig get nodes/$($(hostname).ToLower()) -o custom-columns=podCidr:.spec.podCIDR --no-headers
-  # 10.64.3.0/24
-  #
-  # Woohoo!
-
   $kubeletOut = "${env:NODE_DIR}\kubelet-out.txt"
   $kubeletErr = "${env:NODE_DIR}\kubelet-err.txt"
 
+  # TODO(pjh): switch to Start-Job (for background processes) instead of
+  # Start-Process here.
   $kubeletProcess = Start-Process -FilePath ${env:NODE_DIR}\kubelet.exe `
     -PassThru -ArgumentList ${argListForFirstKubeletRun} `
     -RedirectStandardOutput $kubeletOut `
@@ -609,6 +570,7 @@ function Configure-HostNetworkingService {
   Log "Setting up Windows node HNS networking: podCidr = ${env:POD_CIDR}, podGateway = ${podGateway}, podEndpointGateway = ${podEndpointGateway}"
 
   # Note: RDP connection will hiccup when running this command.
+  Todo "update Configure-HostNetworkingService so that it checks for existing HNS network and overrides/removes it."
   New-HNSNetwork -Type "L2Bridge" -AddressPrefix ${env:POD_CIDR} `
     -Gateway ${podGateway} -Name ${env:KUBE_NETWORK} -Verbose
   $hnsNetwork = Get-HnsNetwork | ? Type -EQ "L2Bridge"
@@ -629,34 +591,6 @@ function Configure-HostNetworkingService {
   route /p add ${gceMetadataServer} mask 255.255.255.255 0.0.0.0
 
   Log "Host network setup complete"
-}
-
-# This is what the KubeletConfiguration looked like for kubernetes-the-hard-way.
-# TODO: remove this.
-function Configure-KubeletTheHardWay {
-  Set-Content ${env:KUBELET_CONFIG} `
-'kind: KubeletConfiguration
-apiVersion: kubelet.config.k8s.io/v1beta1
-authentication:
-  anonymous:
-    enabled: true
-  webhook:
-    enabled: true
-  x509:
-    clientCAFile: "K8S_DIR\ca.pem"
-authorization:
-  mode: AlwaysAllow
-clusterDomain: "cluster.local"
-clusterDNS:
-  - "10.32.0.10"
-podCIDR: "POD_CIDR"
-runtimeRequestTimeout: "15m"
-tlsCertFile: "K8S_DIR\HOSTNAME.pem"
-tlsPrivateKeyFile: "K8S_DIR\HOSTNAME-key.pem"'.`
-  replace('K8S_DIR', ${env:K8S_DIR}).`
-  replace('POD_CIDR', ${podCidr}).`
-  replace('HOSTNAME', $(hostname)).`
-  replace('\', '\\')
 }
 
 function Configure-Kubelet {
@@ -692,56 +626,56 @@ featureGates:
   replace('HAIRPIN_MODE', 'hairpin-veth')
   # TODO(pjh): STATIC_POD_PATH is /etc/kubernetes/manifests on Linux, no idea
   # what makes sense for Windows.
-  # TODO(pjh): no idea if this HAIRPIN_MODE makes sense for Windows.
+  # TODO(pjh): no idea if this HAIRPIN_MODE makes sense for Windows;
+  # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L231
+  # uses promiscuous-bridge (as does my kubernetes-the-hard-way).
+  # TODO(pjh): does cgroupRoot make sense for Windows?
 
   Log "Kubelet config:`n$(Get-Content -Raw ${env:KUBELET_CONFIG})"
 }
 
 function Start-WorkerServices {
-  # https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet/#options
-  Todo "switch to using KUBELET_ARGS instead of building them here."
-  $kubeletArgs = ${kubeEnv}['KUBELET_ARGS']
+  $kubeletArgsStr = ${kubeEnv}['KUBELET_ARGS']
+  $kubeletArgs = $kubeletArgsStr.Split(" ")
   Log "kubeletArgs from metadata: ${kubeletArgs}"
+    # --v=2
+    # --allow-privileged=true
+    # --cloud-provider=gce
+    # --non-masquerade-cidr=0.0.0.0/0
+    # --node-labels=beta.kubernetes.io/fluentd-ds-ready=true,cloud.google.com/gke-netd-ready=true
 
-  # TODO: dedup $kubeletArgs and argList
-  $argList = @(`
-    "--v=2",
-    "--allow-privileged=true",
-    "--cloud-provider=gce",
-
-    # Path to a kubeconfig file that will be used to get client certificate for
-    # kubelet. If the file specified by --kubeconfig does not exist, the
-    # bootstrap kubeconfig is used to request a client certificate from the API
-    # server. On success, a kubeconfig file referencing the generated client
-    # certificate and key is written to the path specified by --kubeconfig. The
-    # client certificate and key file will be stored in the directory pointed
-    # by --cert-dir.
-    #
-    # See also:
-    # https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet-tls-bootstrapping/
-    #"--bootstrap-kubeconfig=${env:BOOTSTRAP_KUBECONFIG}",
+  # Reference:
+  # https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet/#options
+  $additionalArgList = @(`
+    "--config=${env:KUBELET_CONFIG}",
     "--kubeconfig=${env:KUBECONFIG}",
 
     # The directory where the TLS certs are located. If --tls-cert-file and
     # --tls-private-key-file are provided, this flag will be ignored.
     "--cert-dir=${env:PKI_DIR}",
 
-    # TODO(pjh): necessary on Windows?
-    "--cni-bin-dir=${env:CNI_DIR}",
+    # The following flags are adapted from
+    # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L227:
+    "--pod-infra-container-image=${infraContainer}",
+    "--resolv-conf=`"`"",
+    # The kubelet currently fails when this flag is omitted on Windows.
+    "--cgroups-per-qos=false",
+    # The kubelet currently fails when this flag is omitted on Windows.
+    "--enforce-node-allocatable=`"`"",
     "--network-plugin=cni",
+    "--cni-bin-dir=${env:CNI_DIR}",
+    "--cni-conf-dir=${env:CNI_CONFIG_DIR}"
 
-    # TODO: what is this?
-    "--non-masquerade-cidr=0.0.0.0/0",
-
-    # Comes from https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L180:
-    "--pod-infra-container-image=kubeletwin/pause",
-
-    # Comes from https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L180:
-    "--resolv-conf="""""
+    # These flags come from Microsoft/SDN, not sure what they do or if
+    # they're needed.
+    # --log-dir=c:\k --logtostderr=false
+    #"--enable-debugging-handlers",
+    #"--image-pull-progress-deadline=20m",
   )
+  $kubeletArgs = ${kubeletArgs} + ${additionalArgList}
 
-  # These args are present in the KUBELET_ARGS value of kube-env, but I don't
-  # think we need them or they don't make sense on Windows.
+  # These args are present in the Linux KUBELET_ARGS value of kube-env, but I
+  # don't think we need them or they don't make sense on Windows.
   $argListUnused = @(`
     # [Experimental] Path of mounter binary. Leave empty to use the default
     # mount.
@@ -761,36 +695,65 @@ function Start-WorkerServices {
     # party volume plugins (default
     # "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/")
     "--volume-plugin-dir=/home/kubernetes/flexvolume",
-    # TODO(pjh): what node-labels do Windows nodes need?
-    "--node-labels=beta.kubernetes.io/fluentd-ds-ready=true,cloud.google.com/gke-netd-ready=true",
     # The container runtime to use. Possible values: 'docker', 'rkt'. (default
     # "docker")
     "--container-runtime=docker"
   )
 
-  # TODO: run these as background jobs, probably. See Yu-Ju's
-  # https://paste.googleplex.com/6221572868145152.
-  & ${env:NODE_DIR}\kubelet.exe --hostname-override=$(hostname) --v=6 `
-    --pod-infra-container-image=kubeletwin/pause --resolv-conf="" `
-    --allow-privileged=true --config=${env:KUBELET_CONFIG} `
-    --enable-debugging-handlers `
-    --kubeconfig=${env:K8S_DIR}\$(hostname).kubeconfig `
-    --hairpin-mode=promiscuous-bridge `
-    --image-pull-progress-deadline=20m --cgroups-per-qos=false `
-    --enforce-node-allocatable="" --network-plugin=cni `
-    --cni-bin-dir="${env:CNI_DIR}" `
-    --cni-conf-dir="${env:CNI_DIR}\config" --register-node=true
+  # BOOKMARK: need to look at cluster/gce/gci/configure-helper.sh?l=997 and
+  # cluster/gce/gci/configure-helper.sh?l=1337 and update kube-proxy setup
+  # here if necessary.
 
+  # TODO(pjh): in kubernetes-the-hard-way kube-proxy uses a slightly different
+  # kubeconfig than the kubelet: the context's user is "system:kube-proxy"
+  # instead of e.g. "system:node:worker-2". Is this relevant for our setup
+  # here?
+  $kubeproxyArgs = @(`
+    "--v=4",
+    "--kubeconfig=${env:KUBECONFIG}",
+    "--proxy-mode=kernelspace",
+    "--hostname-override=$(hostname)",
+    "--cluster-cidr='$(${kubeEnv}['CLUSTER_IP_RANGE'])'"
+  )
+
+  mkdir -Force ${env:LOGS_DIR}
+
+  # Passing args to Start-Job commands is weird because the new job begins as a
+  # new PowerShell instance. See https://stackoverflow.com/a/15767821/1230197.
+  Log "Starting kubelet"
+  $kubeletJob = Start-Job -Name kubelet -ScriptBlock `
+    {& "${env:NODE_DIR}\kubelet.exe" $args *> ${env:LOGS_DIR}\kubelet.log} `
+    -ArgumentList ${kubeletArgs}
+  Log "$(${kubeletJob} | Out-String)"
+  # TODO(pjh): this didn't really work, figure out how to save ${kubeletJob}
+  # so that Stop-WorkerServices can use it.
+  #Set-CurrentShellEnvironmentVar "KUBELET_JOB" ${kubeletJob}
+  #Log "Access kubelet job via `${env:KUBELET_JOB}."
+  #Log "$(${env:KUBELET_JOB})"
+
+  Log "Waiting 10 seconds for kubelet to stabilize"
   Start-Sleep 10
 
-  & ${env:NODE_DIR}\kube-proxy.exe --v=4 --proxy-mode=kernelspace `
-    --hostname-override=$(hostname) `
-    --kubeconfig=${env:K8S_DIR}\kube-proxy.kubeconfig `
-    --cluster-cidr="10.200.0.0/16"
+  # F1020 23:08:52.000083    9136 server.go:361] unable to load in-cluster
+  # configuration, KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT must be
+  # defined
+  Log "Starting kube-proxy"
+  $kubeproxyJob = Start-Job -Name kubeproxy -ScriptBlock `
+    {& "${env:NODE_DIR}\kube-proxy.exe" $args *> ${env:LOGS_DIR}\kube-proxy.log} `
+    -ArgumentList ${kubeproxyArgs}
+  Log "$(${kubeproxyJob} | Out-String)"
+
+  Todo "verify that jobs are still running; print more details about the background jobs."
+  Log "Kubernetes components started successfully"
+}
+
+function Stop-WorkerServices {
+  # Stop-Job
+  # Remove-Job
 }
 
 function Verify-WorkerServices {
-  & ${env:K8S_DIR}\node\kubectl get nodes
+  & ${env:NODE_DIR}\kubectl.exe get nodes
 }
 
 Export-ModuleMember -Function Log
