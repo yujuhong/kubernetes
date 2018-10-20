@@ -135,10 +135,10 @@ function Set-PrerequisiteOptions {
   Set-NetFirewallProfile -Profile Domain, Public, Private -Enabled False
   # Use TLS 1.2: needed for Invoke-WebRequest to github.com.
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-  Todo("disable automatic Windows Updates and restarts")
+  Todo "disable automatic Windows Updates and restarts"
 
   # https://github.com/cloudbase/powershell-yaml
-  Log("installing powershell-yaml module from external repo")
+  Log "installing powershell-yaml module from external repo"
   Install-Module -Name powershell-yaml -Force
 }
 
@@ -265,14 +265,14 @@ function Configure-CniNetworking {
   $vethIp = (Get-NetAdapter | Where-Object Name -Like "vEthernet (nat*" |`
     Get-NetIPAddress -AddressFamily IPv4).IPAddress
   $mgmtSubnet = Get-MgmtSubnet
-  Log("using mgmt IP ${vethIp} and mgmt subnet ${mgmtSubnet} for CNI config")
+  Log "using mgmt IP ${vethIp} and mgmt subnet ${mgmtSubnet} for CNI config"
 
   mkdir -Force ${env:CNI_DIR}\config
   $l2bridgeConf = "${env:CNI_DIR}\config\l2bridge.conf"
   # TODO(pjh): add -Force to overwrite if exists? Or do we want to fail?
   New-Item -ItemType file ${l2bridgeConf}
 
-  Todo("switch to using win-bridge plugin instead of wincni and update l2bridge.conf if needed.")
+  Todo "switch to using win-bridge plugin instead of wincni and update l2bridge.conf if needed."
   # https://github.com/containernetworking/plugins/tree/master/plugins/main/windows/win-bridge
 
   # TODO(pjh): validate these values against CNI config on Linux node.
@@ -337,7 +337,7 @@ function Configure-CniNetworking {
   replace('SERVER_CIDR', ${kubeEnv}['SERVICE_CLUSTER_IP_RANGE']).`
   replace('MGMT_SUBNET', ${mgmtSubnet})
 
-  Log("CNI config:`n$(Get-Content -Raw ${l2bridgeConf})")
+  Log "CNI config:`n$(Get-Content -Raw ${l2bridgeConf})"
 }
 
 # Decodes the base64 $data string and writes it as binary to $file.
@@ -350,7 +350,7 @@ function Write-PkiData() {
   # This command writes out a PEM certificate file, analogous to "base64
   # --decode" on Linux. See https://stackoverflow.com/a/51914136/1230197.
   [IO.File]::WriteAllBytes($file, [Convert]::FromBase64String($data))
-  Todo("need to set permissions correctly on ${file}; not sure what the Windows equivalent of 'umask 077' is")
+  Todo "need to set permissions correctly on ${file}; not sure what the Windows equivalent of 'umask 077' is"
   # Linux: owned by root, rw by user only.
   #   -rw------- 1 root root 1.2K Oct 12 00:56 ca-certificates.crt
   #   -rw------- 1 root root 1.3K Oct 12 00:56 kubelet.crt
@@ -430,13 +430,13 @@ current-context: service-account-context'.`
       replace('CA_CERT_BUNDLE_PATH', ${env:CA_CERT_BUNDLE_PATH})
     Get-Content -Raw ${env:BOOTSTRAP_KUBECONFIG}
   } ElseIf (${fetchBootstrapConfig}) {
-    NotImplemented("fetching kubelet bootstrap-kubeconfig file from metadata",
-      $true)
+    NotImplemented "fetching kubelet bootstrap-kubeconfig file from metadata" `
+      $true
     # get-metadata-value "instance/attributes/bootstrap-kubeconfig" >
     #   /var/lib/kubelet/bootstrap-kubeconfig
     Get-Content -Raw ${env:BOOTSTRAP_KUBECONFIG}
   } Else {
-    NotImplemented("fetching kubelet kubeconfig file from metadata", $true)
+    NotImplemented "fetching kubelet kubeconfig file from metadata" $true
     # get-metadata-value "instance/attributes/kubeconfig" >
     #   /var/lib/kubelet/kubeconfig
     Get-Content -Raw ${env:KUBECONFIG}
@@ -606,7 +606,7 @@ function Configure-HostNetworkingService {
     ${env:POD_CIDR}.substring(0, ${env:POD_CIDR}.lastIndexOf('.')) + '.1'
   $podEndpointGateway = `
     ${env:POD_CIDR}.substring(0, ${env:POD_CIDR}.lastIndexOf('.')) + '.2'
-  Log("Setting up Windows node HNS networking: podCidr = ${env:POD_CIDR}, podGateway = ${podGateway}, podEndpointGateway = ${podEndpointGateway}")
+  Log "Setting up Windows node HNS networking: podCidr = ${env:POD_CIDR}, podGateway = ${podGateway}, podEndpointGateway = ${podEndpointGateway}"
 
   # Note: RDP connection will hiccup when running this command.
   New-HNSNetwork -Type "L2Bridge" -AddressPrefix ${env:POD_CIDR} `
@@ -623,12 +623,12 @@ function Configure-HostNetworkingService {
   # https://github.com/Microsoft/hcsshim/issues/299#issuecomment-425491610:
   # re-add the route to the GCE metadata server after creating the HNS network.
   # The route does not seem to disappear immediately, so sleep for a bit.
-  Log("Waiting 10 seconds for routes to stabilize after HNS network creation")
+  Log "Waiting 10 seconds for routes to stabilize after HNS network creation"
   Start-Sleep 10
   $gceMetadataServer = "169.254.169.254"
   route /p add ${gceMetadataServer} mask 255.255.255.255 0.0.0.0
 
-  Log("Host network setup complete")
+  Log "Host network setup complete"
 }
 
 # This is what the KubeletConfiguration looked like for kubernetes-the-hard-way.
@@ -663,7 +663,7 @@ function Configure-Kubelet {
   # Linux node: /home/kubernetes/kubelet-config.yaml is built by
   # build-kubelet-config() in util.sh, then posted to metadata server as
   # kubelet-config.
-  Todo("building KubeletConfiguration; for Linux nodes this is done by the cluster scripts and posted to metadata server. Do the same for Windows?")
+  Todo "building KubeletConfiguration; for Linux nodes this is done by the cluster scripts and posted to metadata server. Do the same for Windows?"
 
   Set-Content ${env:KUBELET_CONFIG} `
 'kind: KubeletConfiguration
@@ -694,14 +694,14 @@ featureGates:
   # what makes sense for Windows.
   # TODO(pjh): no idea if this HAIRPIN_MODE makes sense for Windows.
 
-  Log("Kubelet config:`n$(Get-Content -Raw ${env:KUBELET_CONFIG})")
+  Log "Kubelet config:`n$(Get-Content -Raw ${env:KUBELET_CONFIG})"
 }
 
 function Start-WorkerServices {
   # https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet/#options
-  Todo("switch to using KUBELET_ARGS instead of building them here.")
+  Todo "switch to using KUBELET_ARGS instead of building them here."
   $kubeletArgs = ${kubeEnv}['KUBELET_ARGS']
-  Log("kubeletArgs from metadata: ${kubeletArgs}", $true)
+  Log "kubeletArgs from metadata: ${kubeletArgs}"
 
   # TODO: dedup $kubeletArgs and argList
   $argList = @(`
