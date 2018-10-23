@@ -20,9 +20,9 @@ source "${KUBE_ROOT}/cluster/gce/gci/helper.sh"
 
 function get-windows-version {
   if [[ "${WINDOWS_NODE_OS_DISTRIBUTION}" == "win1709" ]]; then
-    echo "1709"
+    echo "win1709"
   else
-    echo "1803"
+    echo "win1803"
   fi
 }
 
