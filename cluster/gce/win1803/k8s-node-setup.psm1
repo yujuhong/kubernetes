@@ -763,18 +763,31 @@ function Start-WorkerServices {
   # TODO(pjh): move to prerequisites function.
   mkdir -Force ${env:LOGS_DIR}
 
-  # Passing args to Start-Job commands is weird because the new job begins as a
-  # new PowerShell instance. See https://stackoverflow.com/a/15767821/1230197.
   Log "Starting kubelet"
-  $kubeletJob = Start-Job -Name kubelet -ScriptBlock `
-    {& "${env:NODE_DIR}\kubelet.exe" $args *> ${env:LOGS_DIR}\kubelet.log} `
-    -ArgumentList ${kubeletArgs}
-  Log "$(${kubeletJob} | Out-String)"
-  # TODO(pjh): this didn't really work, figure out how to save ${kubeletJob}
-  # so that Stop-WorkerServices can use it.
-  #Set-CurrentShellEnvironmentVar "KUBELET_JOB" ${kubeletJob}
-  #Log "Access kubelet job via `${env:KUBELET_JOB}."
-  #Log "$(${env:KUBELET_JOB})"
+
+  # Use Start-Process, not Start-Job; jobs are killed as soon as the shell /
+  # script that invoked them terminates, whereas processes continue running.
+  #
+  # -PassThru causes a process object to be returned from the Start-Process
+  # command.
+  #
+  # TODO(pjh): add -UseNewEnvironment flag and debug error "server.go:262]
+  # failed to run Kubelet: could not init cloud provider "gce": Get
+  # http://169.254.169.254/computeMetadata/v1/instance/zone: dial tcp
+  # 169.254.169.254:80: socket: The requested service provider could not be
+  # loaded or initialized."
+  # -UseNewEnvironment ensures that there are no implicit dependencies
+  # on the variables in this script - everything the kubelet needs should be
+  # specified via flags or config files.
+  $kubeletProcess = Start-Process `
+    -FilePath "${env:NODE_DIR}\kubelet.exe" `
+    -ArgumentList ${kubeletArgs} `
+    -WindowStyle Hidden -PassThru `
+    -RedirectStandardOutput ${env:LOGS_DIR}\kubelet.out `
+    -RedirectStandardError ${env:LOGS_DIR}\kubelet.log
+  Log "$(${kubeletProcess} | Out-String)"
+  # TODO(pjh): set kubeletProcess as a global variable so that
+  # Stop-WorkerServices can access it.
 
   Log "Waiting 10 seconds for kubelet to stabilize"
   Start-Sleep 10
@@ -783,16 +796,20 @@ function Start-WorkerServices {
   # configuration, KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT must be
   # defined
   Log "Starting kube-proxy"
-  $kubeproxyJob = Start-Job -Name kubeproxy -ScriptBlock `
-    {& "${env:NODE_DIR}\kube-proxy.exe" $args *> ${env:LOGS_DIR}\kube-proxy.log} `
-    -ArgumentList ${kubeproxyArgs}
-  Log "$(${kubeproxyJob} | Out-String)"
+  $kubeproxyProcess = Start-Process `
+    -FilePath "${env:NODE_DIR}\kube-proxy.exe" `
+    -ArgumentList ${kubeproxyArgs} `
+    -WindowStyle Hidden -PassThru `
+    -RedirectStandardOutput ${env:LOGS_DIR}\kube-proxy.out `
+    -RedirectStandardError ${env:LOGS_DIR}\kube-proxy.log
+  Log "$(${kubeproxyProcess} | Out-String)"
 
   # TODO(pjh): still getting errors like these in kube-proxy log:
   # E1023 04:03:58.143449    4840 reflector.go:205] k8s.io/kubernetes/pkg/client/informers/informers_generated/internalversion/factory.go:129: Failed to list *core.Endpoints: Get https://35.239.84.171/api/v1/endpoints?limit=500&resourceVersion=0: dial tcp 35.239.84.171:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond.
   # E1023 04:03:58.150266    4840 reflector.go:205] k8s.io/kubernetes/pkg/client/informers/informers_generated/internalversion/factory.go:129: Failed to list *core.Service: Get https://35.239.84.171/api/v1/services?limit=500&resourceVersion=0: dial tcp 35.239.84.171:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond.
 
   Todo "verify that jobs are still running; print more details about the background jobs."
+  Log "$(Get-Process kube* | Out-String)"
   Log "Kubernetes components started successfully"
 }
 
@@ -802,7 +819,8 @@ function Stop-WorkerServices {
 }
 
 function Verify-WorkerServices {
-  & ${env:NODE_DIR}\kubectl.exe get nodes
+  Log "kubectl get nodes:`n$(& ${env:NODE_DIR}\kubectl.exe get nodes | Out-String)"
+  Todo "run more verification commands."
 }
 
 Export-ModuleMember -Function Log
@@ -826,81 +844,5 @@ Export-ModuleMember -Function RunKubeletOnceToGet-PodCidr
 Export-ModuleMember -Function Configure-HostNetworkingService
 Export-ModuleMember -Function Configure-Kubelet
 Export-ModuleMember -Function Start-WorkerServices
+Export-ModuleMember -Function Stop-WorkerServices
 Export-ModuleMember -Function Verify-WorkerServices
-
-# TODO(pjh): other functions from configure-helper.sh that we may need to
-# replicate here:
-#function setup-os-params {
-#function secure_random {
-#function config-ip-firewall {
-#function create-dirs {
-#function get-local-disk-num() {
-#function safe-block-symlink(){
-#function get-or-generate-uuid(){
-#function safe-format-and-mount() {
-#function unique-uuid-bind-mount(){
-#function safe-bind-mount(){
-#function mount-ext(){
-#function ensure-local-ssds() {
-#function setup-logrotate() {
-#function find-master-pd {
-#function mount-master-pd {
-#function append_or_replace_prefixed_line {
-#function write-pki-data {
-#function create-node-pki {
-#function create-master-pki {
-#function create-master-auth {
-#function create-master-audit-policy {
-#function create-master-audit-webhook-config {
-#function create-kubelet-kubeconfig() {
-#function create-master-kubelet-auth {
-#function create-kubeproxy-user-kubeconfig {
-#function create-kubecontrollermanager-kubeconfig {
-#function create-kubescheduler-kubeconfig {
-#function create-clusterautoscaler-kubeconfig {
-#function create-kubescheduler-policy-config {
-#function create-node-problem-detector-kubeconfig {
-#function create-master-etcd-auth {
-#function assemble-docker-flags {
-#function start-kubelet {
-#function start-node-problem-detector {
-#function prepare-log-file {
-#function prepare-kube-proxy-manifest-variables {
-#function start-kube-proxy {
-#function prepare-etcd-manifest {
-#function start-etcd-empty-dir-cleanup-pod {
-#function start-etcd-servers {
-#function compute-master-manifest-variables {
-#function prepare-mounter-rootfs {
-#function start-kube-apiserver {
-#function setup-etcd-encryption {
-#function apply-encryption-config() {
-#function start-kube-controller-manager {
-#function start-kube-scheduler {
-#function start-cluster-autoscaler {
-#function setup-addon-manifests {
-#function download-extra-addons {
-#function get-metadata-value {
-#function copy-manifests {
-#function wait-for-apiserver-and-update-fluentd {
-#function start-fluentd-resource-update {
-#function update-container-runtime {
-#function update-node-journal {
-#function update-prometheus-to-sd-parameters {
-#function update-daemon-set-prometheus-to-sd-parameters {
-#function update-event-exporter {
-#function update-dashboard-controller {
-#function setup-coredns-manifest {
-#function setup-fluentd {
-#function setup-kube-dns-manifest {
-#function setup-netd-manifest {
-#function setup-addon-custom-yaml {
-#function start-kube-addons {
-#function setup-node-termination-handler-manifest {
-#function start-lb-controller {
-#function setup-kubelet-dir {
-#function gke-master-start {
-#function reset-motd {
-#function override-kubectl {
-#function override-pv-recycler {
-

@@ -36,6 +36,9 @@ function get-windows-node-instance-metadata-from-file {
   metadata+="kubelet-config=${KUBE_TEMP}/node-kubelet-config.yaml,"
   # https://cloud.google.com/compute/docs/startupscript#startupscriptlocalfile
   # https://cloud.google.com/compute/docs/startupscript#providing_a_startup_script_for_windows_instances
+  # To get startup script output run "gcloud compute instances
+  # get-serial-port-output <instance>" from the location where you're running
+  # kube-up.
   metadata+="windows-startup-script-ps1=${KUBE_ROOT}/cluster/gce/${win_version}/configure.ps1,"
   metadata+="${NODE_EXTRA_METADATA}"
   echo "${metadata}"

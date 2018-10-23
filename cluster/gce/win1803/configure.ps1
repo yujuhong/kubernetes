@@ -25,8 +25,8 @@ try {
   Configure-HostNetworkingService
   Configure-Kubelet
   Start-WorkerServices
-  Write-Host 'Waiting 20 seconds for node to join cluster.'
-  Start-Sleep 20
+  Write-Host 'Waiting 15 seconds for node to join cluster.'
+  Start-Sleep 15
   Verify-WorkerServices
 }
 catch {
