@@ -14,6 +14,7 @@ try {
   Import-Module C:\k8s-node-setup.psm1
   Set-EnvironmentVars
   Set-PrerequisiteOptions
+
   $kubeEnv = Download-KubeEnv
   Create-PauseImage
   DownloadAndInstall-KubernetesBinaries
@@ -23,12 +24,13 @@ try {
   Create-KubeproxyKubeconfig
   RunKubeletOnceToGet-PodCidr
   Write-Host 'Stopping before Configure-HostNetworkingService'
-  #Configure-HostNetworkingService
-  #Configure-Kubelet
-  #Start-WorkerServices
-  #Write-Host 'Waiting 15 seconds for node to join cluster.'
-  #Start-Sleep 15
-  #Verify-WorkerServices
+  Configure-HostNetworkingService
+  Configure-Kubelet
+
+  Start-WorkerServices
+  Write-Host 'Waiting 15 seconds for node to join cluster.'
+  Start-Sleep 15
+  Verify-WorkerServices
 }
 catch {
   Write-Host 'Exception caught in script:'

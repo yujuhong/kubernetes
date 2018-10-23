@@ -58,19 +58,19 @@ function Verify-GceMetadataServerRouteIsPresent {
 }
 
 function WaitFor-GceMetadataServerRouteToBeRemoved {
-  Log "Waiting for GCE metadata server route to be removed"
   $elapsed = 0
   $timeout = 60
-  while ($elapsed -lt $timeout) {
+  Log "Waiting up to ${timeout} seconds for GCE metadata server route to be removed"
+  while (${elapsed} -lt ${timeout}) {
     Try {
       Get-NetRoute -ErrorAction "Stop" -AddressFamily IPv4 `
         -DestinationPrefix ${gceMetadataServer}/32 | Out-Null
     } Catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
       break
     }
-    $sleeptime = 2
-    Start-Sleep $sleeptime
-    $elapsed += $sleeptime
+    ${sleeptime} = 2
+    Start-Sleep ${sleeptime}
+    ${elapsed} += ${sleeptime}
   }
 }
 
@@ -674,11 +674,16 @@ function Configure-HostNetworkingService {
   netsh interface ipv4 set interface "${vnicName}" forwarding=enabled
   Get-HNSPolicyList | Remove-HnsPolicyList
 
-  # Workaround for
-  # https://github.com/Microsoft/hcsshim/issues/299#issuecomment-425491610:
-  # re-add the route to the GCE metadata server after creating the HNS network.
-  # We wait until we're sure the route is gone (it does not disappear
-  # immediately, it may take tens of seconds) before re-adding the route.
+  # There is an HNS bug where the route to the GCE metadata server will be
+  # removed when the HNS network is created:
+  # https://github.com/Microsoft/hcsshim/issues/299#issuecomment-425491610.
+  # The behavior here is very unpredictable: the route may only be removed
+  # after some delay, or it may appear to be removed then you'll add it back but
+  # then it will be removed once again. So, we first wait a long unfortunate
+  # amount of time to ensure that things have quiesced, then we wait until we're
+  # sure the route is really gone before re-adding it again.
+  Log "Waiting 45 seconds for host network state to quiesce"
+  Start-Sleep 45
   WaitFor-GceMetadataServerRouteToBeRemoved
   Log "Re-adding the GCE metadata server route"
   Add-GceMetadataServerRoute
