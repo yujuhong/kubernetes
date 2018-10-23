@@ -19,8 +19,8 @@ source "${KUBE_ROOT}/cluster/gce/gci/helper.sh"
 
 function get-linux-node-instance-metadata-from-file {
   local metadata=""
-  metadata+="kube-env=${KUBE_TEMP}/node-kube-env.yaml,"
-  metadata+="kubelet-config=${KUBE_TEMP}/node-kubelet-config.yaml,"
+  metadata+="kube-env=${KUBE_TEMP}/linux-node-kube-env.yaml,"
+  metadata+="kubelet-config=${KUBE_TEMP}/linux-node-kubelet-config.yaml,"
   metadata+="user-data=${KUBE_ROOT}/cluster/gce/gci/node.yaml,"
   metadata+="configure-sh=${KUBE_ROOT}/cluster/gce/gci/configure.sh,"
   metadata+="cluster-location=${KUBE_TEMP}/cluster-location.txt,"

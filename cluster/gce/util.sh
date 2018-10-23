@@ -545,8 +545,8 @@ function write-linux-node-env {
   fi
 
   construct-linux-kubelet-flags false
-  build-kube-env false "${KUBE_TEMP}/node-kube-env.yaml"
-  build-kubelet-config false "${KUBE_TEMP}/node-kubelet-config.yaml"
+  build-kube-env false "${KUBE_TEMP}/linux-node-kube-env.yaml"
+  build-kubelet-config false "${KUBE_TEMP}/linux-node-kubelet-config.yaml"
 }
 
 function write-windows-node-env {
@@ -555,8 +555,8 @@ function write-windows-node-env {
   fi
 
   construct-windows-kubelet-flags false
-  build-kube-env false "${KUBE_TEMP}/node-kube-env.yaml"
-  build-kubelet-config false "${KUBE_TEMP}/node-kubelet-config.yaml"
+  build-kube-env false "${KUBE_TEMP}/windows-node-kube-env.yaml"
+  build-kubelet-config false "${KUBE_TEMP}/windows-node-kubelet-config.yaml"
 }
 
 function build-node-labels {
@@ -1838,7 +1838,7 @@ function create-node-template() {
       ${network} \
       ${preemptible_minions} \
       $2 \
-      --metadata-from-file $3\
+      --metadata-from-file $3 \
       --metadata $4 >&2; then
         if (( attempt > 5 )); then
           echo -e "${color_red}Failed to create instance template $template_name ${color_norm}" >&2
@@ -2581,7 +2581,7 @@ function create-heapster-node() {
       --tags "${NODE_TAG}" \
       ${network} \
       $(get-scope-flags) \
-      --metadata-from-file "$(get-linux-node-instance-metadata)"
+      --metadata-from-file "$(get-linux-node-instance-metadata-from-file)"
 }
 
 # Assumes:
