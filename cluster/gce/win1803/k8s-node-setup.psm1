@@ -14,6 +14,9 @@ $k8sDir = "C:\etc\kubernetes"
 Export-ModuleMember -Variable k8sDir
 $infraContainer = "kubeletwin/pause"
 Export-ModuleMember -Variable infraContainer
+$gceMetadataServer = "169.254.169.254"
+# The name of the primary "physical" network adapter for the Windows VM.
+$primaryNetAdapterName = "Ethernet"
 
 function Log {
   param (
@@ -40,6 +43,51 @@ function NotImplemented {
     [parameter(Mandatory=$false)] [bool]$fail = $false
   )
   Log "Not implemented yet: ${message}" ${fail}
+}
+
+# Fails and exits if the route to the GCE metadata server is not present,
+# otherwise does nothing and emits nothing.
+function Verify-GceMetadataServerRouteIsPresent {
+  Try {
+    Get-NetRoute -ErrorAction "Stop" -AddressFamily IPv4 `
+      -DestinationPrefix ${gceMetadataServer}/32 | Out-Null
+  } Catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
+    # TODO(pjh): add $true arg to make this fatal.
+    Log "GCE metadata server route is not present as expected.`n$(Get-NetRoute -AddressFamily IPv4 | Out-String)"
+  }
+}
+
+function WaitFor-GceMetadataServerRouteToBeRemoved {
+  Log "Waiting for GCE metadata server route to be removed"
+  while ($true) {
+    Try {
+      Get-NetRoute -ErrorAction "Stop" -AddressFamily IPv4 `
+        -DestinationPrefix ${gceMetadataServer}/32 | Out-Null
+    } Catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
+      break
+    }
+    Start-Sleep 2
+    continue
+  }
+}
+
+function Add-GceMetadataServerRoute {
+  # Before setting up HNS the 1803 VM has a "vEthernet (nat)" interface and a
+  # "Ethernet" interface, and the route to the metadata server exists on the
+  # Ethernet interface. After adding the HNS network a "vEthernet (Ethernet)"
+  # interface is added, and it seems to subsume the routes of the "Ethernet"
+  # interface (trying to add routes on the Ethernet interface at this point just
+  # results in "New-NetRoute : Element not found" errors). I don't know what's
+  # up with that, but since it's hard to know what's the right thing to do here
+  # we just try to add the route on all of the network adapters.
+  Get-NetAdapter | ForEach-Object {
+    $adapterIndex = $_.InterfaceIndex
+    New-NetRoute -ErrorAction SilentlyContinue `
+      -DestinationPrefix "${gceMetadataServer}/32" `
+      -InterfaceIndex ${adapterIndex} | Out-Null
+  }
+  #route /p add ${gceMetadataServer} mask 255.255.255.255 0.0.0.0 if 4 metric 1
+  #route add ${gceMetadataServer} mask 255.255.255.255 0.0.0.0
 }
 
 function Get-MetadataValue {
@@ -566,6 +614,7 @@ function RunKubeletOnceToGet-PodCidr {
     "--enforce-node-allocatable=`"`""
   )
 
+  # TODO(pjh): rename and use logs dir for these.
   $kubeletOut = "${env:NODE_DIR}\kubelet-out.txt"
   $kubeletErr = "${env:NODE_DIR}\kubelet-err.txt"
 
@@ -593,6 +642,8 @@ function RunKubeletOnceToGet-PodCidr {
 function Configure-HostNetworkingService {
   $endpointName = "cbr0"
   $vnicName = "vEthernet (${endpointName})"
+
+  Verify-GceMetadataServerRouteIsPresent
 
   # TODO: move this to install-prerequisites method.
   Invoke-WebRequest `
@@ -623,11 +674,13 @@ function Configure-HostNetworkingService {
   # Workaround for
   # https://github.com/Microsoft/hcsshim/issues/299#issuecomment-425491610:
   # re-add the route to the GCE metadata server after creating the HNS network.
-  # The route does not seem to disappear immediately, so sleep for a bit.
-  Log "Waiting 10 seconds for routes to stabilize after HNS network creation"
-  Start-Sleep 10
-  $gceMetadataServer = "169.254.169.254"
-  route /p add ${gceMetadataServer} mask 255.255.255.255 0.0.0.0
+  # We wait until we're sure the route is gone (it does not disappear
+  # immediately, it may take tens of seconds) before re-adding the route.
+  Log "Waiting for HNS network to remove the GCE metadata server route"
+  WaitFor-GceMetadataServerRouteToBeRemoved
+  Log "Re-adding the GCE metadata server route"
+  Add-GceMetadataServerRoute
+  Verify-GceMetadataServerRouteIsPresent
 
   Log "Host network setup complete"
 }
@@ -810,6 +863,7 @@ function Start-WorkerServices {
 
   Todo "verify that jobs are still running; print more details about the background jobs."
   Log "$(Get-Process kube* | Out-String)"
+  Verify-GceMetadataServerRouteIsPresent
   Log "Kubernetes components started successfully"
 }
 
@@ -820,6 +874,7 @@ function Stop-WorkerServices {
 
 function Verify-WorkerServices {
   Log "kubectl get nodes:`n$(& ${env:NODE_DIR}\kubectl.exe get nodes | Out-String)"
+  Verify-GceMetadataServerRouteIsPresent
   Todo "run more verification commands."
 }
 

@@ -22,12 +22,13 @@ try {
   Create-KubeletKubeconfig
   Create-KubeproxyKubeconfig
   RunKubeletOnceToGet-PodCidr
-  Configure-HostNetworkingService
-  Configure-Kubelet
-  Start-WorkerServices
-  Write-Host 'Waiting 15 seconds for node to join cluster.'
-  Start-Sleep 15
-  Verify-WorkerServices
+  Write-Host 'Stopping before Configure-HostNetworkingService'
+  #Configure-HostNetworkingService
+  #Configure-Kubelet
+  #Start-WorkerServices
+  #Write-Host 'Waiting 15 seconds for node to join cluster.'
+  #Start-Sleep 15
+  #Verify-WorkerServices
 }
 catch {
   Write-Host 'Exception caught in script:'
