@@ -116,6 +116,7 @@ function Set-EnvironmentVars {
     "KUBELET_CONFIG" = "${k8sDir}\kubelet-config.yaml"
     "KUBECONFIG" = "${k8sDir}\kubelet.kubeconfig"
     "BOOTSTRAP_KUBECONFIG" = "${k8sDir}\kubelet.bootstrap-kubeconfig"
+    "KUBEPROXY_KUBECONFIG" = "${k8sDir}\kubeproxy.kubeconfig"
     "KUBE_NETWORK" = "l2bridge"
     "PKI_DIR" = "${k8sDir}\pki"
     "CA_CERT_BUNDLE_PATH" = "${k8sDir}\pki\ca-certificates.crt"
@@ -431,19 +432,57 @@ current-context: service-account-context'.`
       replace('KUBELET_KEY_PATH', ${env:KUBELET_KEY_PATH}).`
       replace('APISERVER_ADDRESS', ${apiserverAddress}).`
       replace('CA_CERT_BUNDLE_PATH', ${env:CA_CERT_BUNDLE_PATH})
-    Get-Content -Raw ${env:BOOTSTRAP_KUBECONFIG}
+    Log "kubelet bootstrap kubeconfig:`n$(Get-Content -Raw ${env:BOOTSTRAP_KUBECONFIG})"
   } ElseIf (${fetchBootstrapConfig}) {
     NotImplemented "fetching kubelet bootstrap-kubeconfig file from metadata" `
       $true
     # get-metadata-value "instance/attributes/bootstrap-kubeconfig" >
     #   /var/lib/kubelet/bootstrap-kubeconfig
-    Get-Content -Raw ${env:BOOTSTRAP_KUBECONFIG}
+    Log "kubelet bootstrap kubeconfig:`n$(Get-Content -Raw ${env:BOOTSTRAP_KUBECONFIG})"
   } Else {
     NotImplemented "fetching kubelet kubeconfig file from metadata" $true
     # get-metadata-value "instance/attributes/kubeconfig" >
     #   /var/lib/kubelet/kubeconfig
     Get-Content -Raw ${env:KUBECONFIG}
+    Log "kubelet kubeconfig:`n$(Get-Content -Raw ${env:KUBECONFIG})"
   }
+}
+
+# This is analogous to create-kubeproxy-user-kubeconfig() in
+# gci/configure-helper.sh for Linux nodes. Create-NodePki() must be called
+# first.
+# Required ${kubeEnv} keys:
+#   CA_CERT
+#   KUBE_PROXY_TOKEN
+function Create-KubeproxyKubeconfig() {
+  # TODO: make this command and other New-Item commands silent.
+  New-Item -ItemType file ${env:KUBEPROXY_KUBECONFIG}
+
+  # In configure-helper.sh kubelet kubeconfig uses certificate-authority while
+  # kubeproxy kubeconfig uses certificate-authority-data, ugh. Does it matter?
+  # Use just one or the other for consistency?
+  Set-Content ${env:KUBEPROXY_KUBECONFIG} `
+'apiVersion: v1
+kind: Config
+users:
+- name: kube-proxy
+  user:
+    token: KUBEPROXY_TOKEN
+clusters:
+- name: local
+  cluster:
+    certificate-authority-data: CA_CERT
+contexts:
+- context:
+    cluster: local
+    user: kube-proxy
+  name: service-account-context
+current-context: service-account-context'.`
+    replace('KUBEPROXY_TOKEN', ${kubeEnv}['KUBE_PROXY_TOKEN']).`
+    #replace('CA_CERT_BUNDLE_PATH', ${env:CA_CERT_BUNDLE_PATH})
+    replace('CA_CERT', ${kubeEnv}['CA_CERT'])
+
+  Log "kubeproxy kubeconfig:`n$(Get-Content -Raw ${env:KUBEPROXY_KUBECONFIG})"
 }
 
 function Get-PodCidr {
@@ -700,20 +739,14 @@ function Start-WorkerServices {
     "--container-runtime=docker"
   )
 
-  # BOOKMARK: need to look at cluster/gce/gci/configure-helper.sh?l=997 and
-  # cluster/gce/gci/configure-helper.sh?l=1337 and update kube-proxy setup
-  # here if necessary.
-
-  # TODO(pjh): in kubernetes-the-hard-way kube-proxy uses a slightly different
-  # kubeconfig than the kubelet: the context's user is "system:kube-proxy"
-  # instead of e.g. "system:node:worker-2". Is this relevant for our setup
-  # here?
+  # BOOKMARK: with these args kubeproxy invocation now fails with:
+  # F1023 00:32:18.441718    5868 server.go:361] invalid configuration: no server found for cluster "local"
   $kubeproxyArgs = @(`
     "--v=4",
-    "--kubeconfig=${env:KUBECONFIG}",
+    "--kubeconfig=${env:KUBEPROXY_KUBECONFIG}",
     "--proxy-mode=kernelspace",
     "--hostname-override=$(hostname)",
-    "--cluster-cidr='$(${kubeEnv}['CLUSTER_IP_RANGE'])'"
+    "--cluster-cidr=$(${kubeEnv}['CLUSTER_IP_RANGE'])"
   )
 
   mkdir -Force ${env:LOGS_DIR}
@@ -742,6 +775,7 @@ function Start-WorkerServices {
     {& "${env:NODE_DIR}\kube-proxy.exe" $args *> ${env:LOGS_DIR}\kube-proxy.log} `
     -ArgumentList ${kubeproxyArgs}
   Log "$(${kubeproxyJob} | Out-String)"
+  # F1022 22:25:36.413595     840 server.go:359] failed validate: KubeProxyConfiguration.ClusterCIDR: Invalid value: "'10.64.0.0/14'": must be a valid CIDR block (e.g. 10.100.0.0/16)
 
   Todo "verify that jobs are still running; print more details about the background jobs."
   Log "Kubernetes components started successfully"
@@ -771,6 +805,7 @@ Export-ModuleMember -Function Get-MgmtSubnet
 Export-ModuleMember -Function Configure-CniNetworking
 Export-ModuleMember -Function Create-NodePki
 Export-ModuleMember -Function Create-KubeletKubeconfig
+Export-ModuleMember -Function Create-KubeproxyKubeconfig
 Export-ModuleMember -Function Get-PodCidr
 Export-ModuleMember -Function RunKubeletOnceToGet-PodCidr
 Export-ModuleMember -Function Configure-HostNetworkingService

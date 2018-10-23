@@ -12,6 +12,7 @@ try {
   Configure-CniNetworking
   Create-NodePki
   Create-KubeletKubeconfig
+  Create-KubeproxyKubeconfig
   RunKubeletOnceToGet-PodCidr
   Configure-HostNetworkingService
   Configure-Kubelet
