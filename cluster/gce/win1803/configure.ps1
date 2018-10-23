@@ -1,9 +1,17 @@
 # TODO: copyright / license statement.
 
-Import-Module k8s-node-setup.psm1
 $ErrorActionPreference = 'Stop'
 
+# Update TLS setting to enable Github downloads and disable progress bar to
+# increase download speed.
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$ProgressPreference = 'SilentlyContinue'
+
 try {
+  Invoke-WebRequest `
+    https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/win1803/k8s-node-setup.psm1 `
+    -OutFile C:\k8s-node-setup.psm1
+  Import-Module C:\k8s-node-setup.psm1
   Set-EnvironmentVars
   Set-PrerequisiteOptions
   $kubeEnv = Download-KubeEnv

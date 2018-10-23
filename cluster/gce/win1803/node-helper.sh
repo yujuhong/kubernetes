@@ -27,12 +27,16 @@ function get-windows-version {
 }
 
 function get-windows-node-instance-metadata-from-file {
+  local win_version="$(get-windows-version)"
   local metadata=""
   #metadata+="cluster-location=${KUBE_TEMP}/cluster-location.txt,"
   #metadata+="configure-sh=${KUBE_ROOT}/cluster/gce/gci/configure.sh,"
   metadata+="cluster-name=${KUBE_TEMP}/cluster-name.txt,"
   metadata+="kube-env=${KUBE_TEMP}/node-kube-env.yaml,"
   metadata+="kubelet-config=${KUBE_TEMP}/node-kubelet-config.yaml,"
+  # https://cloud.google.com/compute/docs/startupscript#startupscriptlocalfile
+  # https://cloud.google.com/compute/docs/startupscript#providing_a_startup_script_for_windows_instances
+  metadata+="windows-startup-script-ps1=${KUBE_ROOT}/cluster/gce/${win_version}/configure.ps1,"
   metadata+="${NODE_EXTRA_METADATA}"
   echo "${metadata}"
 }
