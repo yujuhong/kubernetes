@@ -5,9 +5,9 @@
 
 # Suggested usage for dev/test:
 #   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-#   Invoke-WebRequest https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/win1803/k8s-node-setup.psm1 -OutFile k8s-node-setup.psm1
-#   Invoke-WebRequest https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/win1803/configure.ps1 -OutFile configure.ps1
-#   Import-Module -Force .\k8s-node-setup.psm1  # -Force to override existing
+#   Invoke-WebRequest https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/win1803/k8s-node-setup.psm1 -OutFile C:\k8s-node-setup.psm1
+#   Invoke-WebRequest https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/win1803/configure.ps1 -OutFile C:\configure.ps1
+#   Import-Module -Force C:\k8s-node-setup.psm1  # -Force to override existing
 #   # Execute functions manually or run configure.ps1.
 
 $k8sDir = "C:\etc\kubernetes"
@@ -59,15 +59,18 @@ function Verify-GceMetadataServerRouteIsPresent {
 
 function WaitFor-GceMetadataServerRouteToBeRemoved {
   Log "Waiting for GCE metadata server route to be removed"
-  while ($true) {
+  $elapsed = 0
+  $timeout = 60
+  while ($elapsed -lt $timeout) {
     Try {
       Get-NetRoute -ErrorAction "Stop" -AddressFamily IPv4 `
         -DestinationPrefix ${gceMetadataServer}/32 | Out-Null
     } Catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
       break
     }
-    Start-Sleep 2
-    continue
+    $sleeptime = 2
+    Start-Sleep $sleeptime
+    $elapsed += $sleeptime
   }
 }
 
@@ -676,7 +679,6 @@ function Configure-HostNetworkingService {
   # re-add the route to the GCE metadata server after creating the HNS network.
   # We wait until we're sure the route is gone (it does not disappear
   # immediately, it may take tens of seconds) before re-adding the route.
-  Log "Waiting for HNS network to remove the GCE metadata server route"
   WaitFor-GceMetadataServerRouteToBeRemoved
   Log "Re-adding the GCE metadata server route"
   Add-GceMetadataServerRoute
