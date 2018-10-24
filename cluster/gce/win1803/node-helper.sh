@@ -52,7 +52,7 @@ function get-windows-node-instance-metadata {
   # TODO(pjh): check how KUBE_VERSION is set - does it make sense to use for
   # downloading the kubernetes binaries on the node?
   #metadata+="k8s-version=v1.12.0"
-  metadata+="k8s-version=${KUBE_VERSION}"
+  metadata+="k8s-version=${KUBE_VERSION:-v1.11.3}"
   #metadata+="pod-cidr=${TODO_POD_CIDR},"
   echo "${metadata}"
 }
