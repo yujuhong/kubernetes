@@ -14,6 +14,7 @@ try {
   Import-Module C:\k8s-node-setup.psm1
   Set-EnvironmentVars
   Set-PrerequisiteOptions
+  Create-Directories
 
   $kubeEnv = Download-KubeEnv
   Create-PauseImage

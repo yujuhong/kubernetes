@@ -164,6 +164,7 @@ function Set-EnvironmentVars {
     "LOGS_DIR" = "${k8sDir}\logs"
     "CNI_DIR" = "${k8sDir}\cni"
     "CNI_CONFIG_DIR" = "${k8sDir}\cni\config"
+    "MANIFESTS_DIR" = "${k8sDir}\manifests"
     "KUBELET_CONFIG" = "${k8sDir}\kubelet-config.yaml"
     "KUBECONFIG" = "${k8sDir}\kubelet.kubeconfig"
     "BOOTSTRAP_KUBECONFIG" = "${k8sDir}\kubelet.bootstrap-kubeconfig"
@@ -198,13 +199,22 @@ function Set-PrerequisiteOptions {
   Install-Module -Name powershell-yaml -Force
 }
 
+function Create-Directories {
+  Log "Creating ${env:K8S_DIR} and its subdirectories."
+  ForEach ($dir in ("${env:K8S_DIR}", "${env:NODE_DIR}", "${env:LOGS_DIR}",
+    "${env:CNI_DIR}", "${env:CNI_CONFIG_DIR}", "${env:MANIFESTS_DIR}",
+    "${env:PKI_DIR}")) {
+    mkdir -Force $dir
+  }
+}
+
 function Create-PauseImage {
   #$winVersion = "$([System.Text.Encoding]::ASCII.GetString((`
   #  Invoke-WebRequest -UseBasicParsing -H @{'Metadata-Flavor' = 'Google'} `
   #  http://metadata.google.internal/computeMetadata/v1/instance/attributes/win-version).Content))"
   $winVersion = Get-MetadataValue 'win-version'
 
-  mkdir ${env:K8S_DIR}\pauseimage
+  mkdir -Force ${env:K8S_DIR}\pauseimage
   New-Item -ItemType file ${env:K8S_DIR}\pauseimage\Dockerfile
   Set-Content ${env:K8S_DIR}\pauseimage\Dockerfile `
     "FROM microsoft/nanoserver:${winVersion}`n`nCMD cmd /c ping -t localhost"
@@ -213,8 +223,6 @@ function Create-PauseImage {
 
 function DownloadAndInstall-KubernetesBinaries {
   $k8sVersion = Get-MetadataValue 'k8s-version'
-
-  mkdir -Force ${env:NODE_DIR}
 
   # TODO(pjh): in one kube-up run I got a mysterious failure when the startup
   # script tried to download the binaries here:
@@ -323,7 +331,6 @@ function Get-MgmtSubnet {
 
 function Configure-CniNetworking {
   # TODO(pjh): create all necessary dirs up-front in a separate function?
-  mkdir -Force ${env:CNI_DIR}
   Invoke-WebRequest `
     https://github.com/Microsoft/SDN/raw/master/Kubernetes/windows/cni/wincni.exe `
     -OutFile ${env:CNI_DIR}\wincni.exe
@@ -333,7 +340,6 @@ function Configure-CniNetworking {
   $mgmtSubnet = Get-MgmtSubnet
   Log "using mgmt IP ${vethIp} and mgmt subnet ${mgmtSubnet} for CNI config"
 
-  mkdir -Force ${env:CNI_CONFIG_DIR}
   $l2bridgeConf = "${env:CNI_CONFIG_DIR}\l2bridge.conf"
   # TODO(pjh): add -Force to overwrite if exists? Or do we want to fail?
   New-Item -ItemType file ${l2bridgeConf}
@@ -434,8 +440,6 @@ function Write-PkiData() {
 #   KUBELET_KEY
 function Create-NodePki() {
   echo "Creating node pki files"
-
-  mkdir -Force ${env:PKI_DIR}
 
   # Note: create-node-pki() tests if CA_CERT_BUNDLE / KUBELET_CERT /
   # KUBELET_KEY are already set, we don't.
@@ -774,7 +778,8 @@ function Start-WorkerServices {
     "--enforce-node-allocatable=`"`"",
     "--network-plugin=cni",
     "--cni-bin-dir=${env:CNI_DIR}",
-    "--cni-conf-dir=${env:CNI_CONFIG_DIR}"
+    "--cni-conf-dir=${env:CNI_CONFIG_DIR}",
+    "--pod-manifest-path=${env:MANIFESTS_DIR}"
 
     # These flags come from Microsoft/SDN, not sure what they do or if
     # they're needed.
@@ -830,9 +835,6 @@ function Start-WorkerServices {
     "--resource-container=`"`"",
     "--cluster-cidr=$(${kubeEnv}['CLUSTER_IP_RANGE'])"
   )
-
-  # TODO(pjh): move to prerequisites function.
-  mkdir -Force ${env:LOGS_DIR}
 
   Log "Starting kubelet"
 
@@ -919,6 +921,7 @@ Export-ModuleMember -Function Set-MachineEnvironmentVar
 Export-ModuleMember -Function Set-CurrentShellEnvironmentVar
 Export-ModuleMember -Function Set-EnvironmentVars
 Export-ModuleMember -Function Set-PrerequisiteOptions
+Export-ModuleMember -Function Create-Directories
 Export-ModuleMember -Function Create-PauseImage
 Export-ModuleMember -Function DownloadAndInstall-KubernetesBinaries
 Export-ModuleMember -Function Get-MgmtSubnet
