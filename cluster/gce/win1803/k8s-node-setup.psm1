@@ -216,6 +216,17 @@ function DownloadAndInstall-KubernetesBinaries {
 
   mkdir -Force ${env:NODE_DIR}
 
+  # TODO(pjh): in one kube-up run I got a mysterious failure when the startup
+  # script tried to download the binaries here:
+  # 2018/10/24 00:34:18 windows-startup-script-ps1: Exception caught in script:
+  # 2018/10/24 00:34:18 windows-startup-script-ps1: At C:\k8s-node-setup.psm1:221 char:3
+  # 2018/10/24 00:34:18 windows-startup-script-ps1: +   Invoke-WebRequest `
+  # 2018/10/24 00:34:18 windows-startup-script-ps1: +   ~~~~~~~~~~~~~~~~~~~
+  #
+  # Not sure what happened (maybe my downloads from storage.googleapis.com were
+  # being throttled?), but perhaps we can wrap the Invoke-WebRequest calls in a
+  # download-with-retries function.
+
   # Disable progress bar to dramatically increase download speed.
   $ProgressPreference = 'SilentlyContinue'
   Invoke-WebRequest `
