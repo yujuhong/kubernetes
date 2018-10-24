@@ -31,5 +31,11 @@ The result should be a Kubernetes cluster with one Linux master node, two Linux
 worker nodes and two Windows worker nodes. The Linux nodes will use the `netd`
 CNI plugin and the Windows nodes will use `wincni`.
 
+To teardown the cluster run:
+
+```
+PROJECT=<your_project_name> KUBERNETES_SKIP_CONFIRM=y ./cluster/kube-down.sh
+```
+
 TODO(pjh): add NUM_LINUX_NODES and NUM_WINDOWS_NODES to
 kube-up-gce-windows-netd.env.
