@@ -362,9 +362,9 @@ function Configure-CniNetworking {
       "Value":  {
         "Type":  "OutBoundNAT",
         "ExceptionList":  [
-          CLUSTER_CIDR,
-          SERVER_CIDR,
-          MGMT_SUBNET
+          "CLUSTER_CIDR",
+          "SERVER_CIDR",
+          "MGMT_SUBNET"
         ]
       }
     },
@@ -848,6 +848,20 @@ function Start-WorkerServices {
   Log "$(${kubeletProcess} | Out-String)"
   # TODO(pjh): set kubeletProcess as a global variable so that
   # Stop-WorkerServices can access it.
+
+  # TODO(pjh): kubelet is emitting these messages:
+  # I1023 23:44:11.761915    2468 kubelet.go:274] Adding pod path:
+  # C:\etc\kubernetes
+  # I1023 23:44:11.775601    2468 file.go:68] Watching path
+  # "C:\\etc\\kubernetes"
+  # ...
+  # E1023 23:44:31.794327    2468 file.go:182] Can't process manifest file
+  # "C:\\etc\\kubernetes\\hns.psm1": C:\etc\kubernetes\hns.psm1: couldn't parse
+  # as pod(yaml: line 10: did not find expected <document start>), please check
+  # config file.
+  #
+  # Figure out how to change the directory that the kubelet monitors for new
+  # pod manifests.
 
   Log "Waiting 10 seconds for kubelet to stabilize"
   Start-Sleep 10
