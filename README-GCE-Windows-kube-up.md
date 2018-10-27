@@ -48,8 +48,7 @@ These steps are based on the
 [e2e-win-prow-deployment](https://github.com/e2e-win/e2e-win-prow-deployment)
 steps.
 
-*   Ensure that you're using the patched `cluster/local/util.sh` in this
-    repository.
+*   Ensure that you're using the patched `cluster/local/util.sh` in this branch.
 
 *   If necessary run `alias kubectl=client/bin/kubectl` .
 

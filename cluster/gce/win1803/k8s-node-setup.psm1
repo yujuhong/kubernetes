@@ -188,14 +188,16 @@ function Set-EnvironmentVars {
 }
 
 function Set-PrerequisiteOptions {
-  # Disable Windows firewall.
+  Log "Disabling Windows Firewall and Windows Update service"
   Set-NetFirewallProfile -Profile Domain, Public, Private -Enabled False
+  sc.exe config wuauserv start=disabled
+  sc.exe stop wuauserv
+
   # Use TLS 1.2: needed for Invoke-WebRequest to github.com.
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-  Todo "disable automatic Windows Updates and restarts"
 
   # https://github.com/cloudbase/powershell-yaml
-  Log "installing powershell-yaml module from external repo"
+  Log "Installing powershell-yaml module from external repo"
   Install-Module -Name powershell-yaml -Force
 }
 
