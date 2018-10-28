@@ -75,7 +75,7 @@ steps.
 *   Verify that all system pods are running successfully on Linux nodes:
 
     ```
-    client/bin/kubectl get pods --all-namespaces -o wide
+    kubectl get pods --all-namespaces -o wide
     ```
 
 *   Taint the Linux nodes so that test pods will not land on them:
