@@ -5,6 +5,8 @@ metadata:
   namespace: kube-system
 spec:
   hostNetwork: true
+  nodeSelector:
+    beta.kubernetes.io/os: linux
   containers:
   - name: etcd-version-monitor
     image: k8s.gcr.io/etcd-version-monitor:0.1.2

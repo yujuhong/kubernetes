@@ -20,6 +20,8 @@ spec:
     effect: "NoExecute"
   - operator: "Exists"
     effect: "NoSchedule"
+  nodeSelector:
+    beta.kubernetes.io/os: linux
   containers:
   - name: kube-proxy
     image: {{pillar['kube_docker_registry']}}/kube-proxy:{{pillar['kube-proxy_docker_tag']}}

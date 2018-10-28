@@ -10,6 +10,8 @@ metadata:
     component: kube-addon-manager
 spec:
   hostNetwork: true
+  nodeSelector:
+    beta.kubernetes.io/os: linux
   containers:
   - name: kube-addon-manager
     # When updating version also bump it in:

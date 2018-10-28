@@ -12,6 +12,8 @@ spec:
         app: default-http-backend
     spec:
       terminationGracePeriodSeconds: 60
+      nodeSelector:
+        beta.kubernetes.io/os: linux
       containers:
       - name: default-http-backend
         # Any image is permissible as long as:

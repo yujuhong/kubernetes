@@ -49,6 +49,8 @@ metadata:
   name: fluentd-gcp-scaling-policy
   namespace: kube-system
 spec:
+  nodeSelector:
+    beta.kubernetes.io/os: linux
   containers:
   - name: fluentd-gcp
     resources:

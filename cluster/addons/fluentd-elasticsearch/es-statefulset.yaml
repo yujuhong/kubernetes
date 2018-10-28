@@ -72,6 +72,8 @@ spec:
         kubernetes.io/cluster-service: "true"
     spec:
       serviceAccountName: elasticsearch-logging
+      nodeSelector:
+        beta.kubernetes.io/os: linux
       containers:
       - image: k8s.gcr.io/elasticsearch:v6.2.5
         name: elasticsearch-logging

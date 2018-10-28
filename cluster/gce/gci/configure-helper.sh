@@ -2211,6 +2211,8 @@ metadata:
   name: fluentd-gcp-scaling-policy
   namespace: kube-system
 spec:
+  nodeSelector:
+    beta.kubernetes.io/os: linux
   containers:
   - name: fluentd-gcp
     resources:
@@ -2721,6 +2723,8 @@ spec:
   restartPolicy: Never
   volumes:
   - name: vol
+  nodeSelector:
+    beta.kubernetes.io/os: linux
   containers:
   - name: pv-recycler
     image: k8s.gcr.io/busybox:1.27

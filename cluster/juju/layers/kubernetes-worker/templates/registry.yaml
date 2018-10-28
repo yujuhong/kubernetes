@@ -35,6 +35,8 @@ spec:
         version: v0
         kubernetes.io/cluster-service: "true"
     spec:
+      nodeSelector:
+        beta.kubernetes.io/os: linux
       containers:
       - name: registry
         image: cdkbot/registry-{{ arch }}:2.6

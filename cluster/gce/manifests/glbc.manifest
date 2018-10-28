@@ -13,6 +13,8 @@ metadata:
 spec:
   terminationGracePeriodSeconds: 600
   hostNetwork: true
+  nodeSelector:
+    beta.kubernetes.io/os: linux
   containers:
   - image: k8s.gcr.io/ingress-gce-glbc-amd64:v1.2.3
     livenessProbe:

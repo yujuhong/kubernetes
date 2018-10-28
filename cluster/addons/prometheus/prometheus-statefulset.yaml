@@ -35,6 +35,8 @@ spec:
         - name: prometheus-data
           mountPath: /data
           subPath: ""
+      nodeSelector:
+        beta.kubernetes.io/os: linux
       containers:
         - name: prometheus-server-configmap-reload
           image: "jimmidyson/configmap-reload:v0.1"
