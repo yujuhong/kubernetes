@@ -29,6 +29,8 @@ spec:
         effect: NoSchedule
       - key: "CriticalAddonsOnly"
         operator: "Exists"
+      nodeSelector:
+        beta.kubernetes.io/os: linux
       containers:
         - name: influxdb
           image: k8s.gcr.io/heapster-influxdb-amd64:v1.3.3

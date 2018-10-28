@@ -19,6 +19,8 @@ spec:
       annotations:
         seccomp.security.alpha.kubernetes.io/pod: 'docker/default'
     spec:
+      nodeSelector:
+        beta.kubernetes.io/os: linux
       containers:
       - name: kibana-logging
         image: docker.elastic.co/kibana/kibana-oss:6.3.2

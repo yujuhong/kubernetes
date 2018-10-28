@@ -22,6 +22,8 @@ spec:
         operator: Exists
       hostNetwork: true
       serviceAccountName: calico
+      nodeSelector:
+        beta.kubernetes.io/os: linux
       containers:
       - image: gcr.io/projectcalico-org/typha:v0.5.6
         name: calico-typha

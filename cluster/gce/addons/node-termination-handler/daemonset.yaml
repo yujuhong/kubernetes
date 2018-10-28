@@ -47,6 +47,8 @@ spec:
           operator: Exists
         - effect: NoExecute
           operator: Exists
+      nodeSelector:
+        beta.kubernetes.io/os: linux
       containers:
         - image: k8s.gcr.io/gke-node-termination-handler@sha256:e08ca863a547754fa7b75064bdad04f04cbef86c7b0a181ecc7304e747623181
           name: node-termination-handler

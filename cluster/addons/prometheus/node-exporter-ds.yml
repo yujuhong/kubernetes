@@ -20,6 +20,8 @@ spec:
         scheduler.alpha.kubernetes.io/critical-pod: ''
     spec:
       priorityClassName: system-node-critical
+      nodeSelector:
+        beta.kubernetes.io/os: linux
       containers:
         - name: prometheus-node-exporter
           image: "prom/node-exporter:v0.15.2"

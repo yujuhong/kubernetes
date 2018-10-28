@@ -17,6 +17,8 @@ spec:
         scheduler.alpha.kubernetes.io/critical-pod: ''
     spec:
       priorityClassName: system-cluster-critical
+      nodeSelector:
+        beta.kubernetes.io/os: linux
       containers:
         - image: k8s.gcr.io/cpvpa-amd64:v0.6.0
           name: autoscaler

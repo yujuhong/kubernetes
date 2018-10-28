@@ -17,6 +17,8 @@ spec:
         scheduler.alpha.kubernetes.io/critical-pod: ''
     spec:
       priorityClassName: system-cluster-critical
+      nodeSelector:
+        beta.kubernetes.io/os: linux
       containers:
         - image: k8s.gcr.io/cluster-proportional-autoscaler-amd64:1.1.2-r2
           name: autoscaler

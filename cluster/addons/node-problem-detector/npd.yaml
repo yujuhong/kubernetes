@@ -41,6 +41,10 @@ spec:
         version: v0.4.1
         kubernetes.io/cluster-service: "true"
     spec:
+      nodeSelector:
+        # TODO(pjh): want node-problem-detector to run on Windows eventually
+        # too.
+        beta.kubernetes.io/os: linux
       containers:
       - name: node-problem-detector
         image: k8s.gcr.io/node-problem-detector:v0.4.1

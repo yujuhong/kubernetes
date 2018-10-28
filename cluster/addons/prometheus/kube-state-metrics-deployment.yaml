@@ -24,6 +24,8 @@ spec:
     spec:
       priorityClassName: system-cluster-critical
       serviceAccountName: kube-state-metrics
+      nodeSelector:
+        beta.kubernetes.io/os: linux
       containers:
       - name: kube-state-metrics
         image: quay.io/coreos/kube-state-metrics:v1.3.0

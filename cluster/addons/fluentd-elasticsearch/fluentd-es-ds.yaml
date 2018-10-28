@@ -97,6 +97,7 @@ spec:
           mountPath: /etc/fluent/config.d
       nodeSelector:
         beta.kubernetes.io/fluentd-ds-ready: "true"
+        beta.kubernetes.io/os: linux
       terminationGracePeriodSeconds: 30
       volumes:
       - name: varlog

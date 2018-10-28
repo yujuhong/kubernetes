@@ -17,6 +17,8 @@ spec:
         k8s-app: fluentd-gcp-scaler
     spec:
       serviceAccountName: fluentd-gcp-scaler
+      nodeSelector:
+        beta.kubernetes.io/os: linux
       containers:
       - name: fluentd-gcp-scaler
         image: k8s.gcr.io/fluentd-gcp-scaler:0.5

@@ -17,6 +17,8 @@ spec:
       labels:
         app: microbot
     spec:
+      nodeSelector:
+        beta.kubernetes.io/os: linux
       containers:
       - image: cdkbot/microbot-{{ arch }}:latest
         imagePullPolicy: ""

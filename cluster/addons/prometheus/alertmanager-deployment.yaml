@@ -23,6 +23,8 @@ spec:
         scheduler.alpha.kubernetes.io/critical-pod: ''
     spec:
       priorityClassName: system-cluster-critical
+      nodeSelector:
+        beta.kubernetes.io/os: linux
       containers:
         - name: prometheus-alertmanager
           image: "prom/alertmanager:v0.14.0"

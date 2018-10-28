@@ -34,6 +34,8 @@ spec:
       labels:
         app: logexporter
     spec:
+      nodeSelector:
+        beta.kubernetes.io/os: linux
       containers:
       - name: logexporter-test
         image: gcr.io/k8s-testimages/logexporter:v0.1.3

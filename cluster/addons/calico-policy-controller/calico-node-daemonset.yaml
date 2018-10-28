@@ -23,6 +23,7 @@ spec:
       priorityClassName: system-node-critical
       nodeSelector:
         projectcalico.org/ds-ready: "true"
+        beta.kubernetes.io/os: linux
       hostNetwork: true
       serviceAccountName: calico
       # Minimize downtime during a rolling upgrade or deletion; tell Kubernetes to do a "force
