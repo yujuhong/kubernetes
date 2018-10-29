@@ -72,10 +72,12 @@ steps.
     export KUBE_TEST_REPO_LIST=${KUBE_HOME}/repo-list.yaml
     ```
 
-*   Verify that all system pods are running successfully on Linux nodes:
+*   Verify that no system pods are attempting to run on Windows nodes, and that
+    no pods are still pending:
 
     ```
-    kubectl get pods --all-namespaces -o wide
+    # Should have no output:
+    kubectl get pods --all-namespaces -o wide | egrep "Pending\|windows"
     ```
 
 *   Taint the Linux nodes so that test pods will not land on them:
