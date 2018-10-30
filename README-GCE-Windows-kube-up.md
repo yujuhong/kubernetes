@@ -72,12 +72,25 @@ steps.
     export KUBE_TEST_REPO_LIST=${KUBE_HOME}/repo-list.yaml
     ```
 
+*   Download and configure the list of tests to exclude:
+
+    ```
+    curl https://raw.githubusercontent.com/e2e-win/e2e-win-prow-deployment/master/exclude_conformance_test.txt -o ${KUBE_HOME}/exclude_conformance_test.txt
+    export EXCLUDED_TESTS=$(cat exclude_conformance_test.txt |
+      tr -d '\r' |                # remove Windows carriage returns
+      tr -s '\n' '|' |            # coalesce newlines into |
+      tr -s ' ' '.' |             # coalesce spaces into .
+      sed -e 's/[]\[()]/\\&/g' |  # escape brackets and parentheses
+      sed -e 's/.$//g')           # remove final | added by tr
+    ```
+      sed -e 's/\]/\\\]/g' |  # escape close brackets
+
 *   Verify that no system pods are attempting to run on Windows nodes, and that
     no pods are still pending:
 
     ```
     # Should have no output:
-    kubectl get pods --all-namespaces -o wide | egrep "Pending\|windows"
+    kubectl get pods --all-namespaces -o wide | egrep "Pending|windows"
     ```
 
 *   Taint the Linux nodes so that test pods will not land on them:
@@ -100,7 +113,17 @@ steps.
     and that permit the `NoSchedule` Linux nodes:
 
     ```
-    go run ${KUBE_HOME}/hack/e2e.go -- --verbose-commands --check-version-skew=false --test --provider=local --test_args=--"ginkgo.focus=\[Conformance\] --allowed-not-ready-nodes=${LINUX_NODE_COUNT} --report-dir=${KUBE_HOME}/e2e-reports" &> ${KUBE_HOME}/conformance.out
+    export KUBETEST_ARGS="--ginkgo.noColor=true "\
+    "--report-dir=${KUBE_HOME}/e2e-reports "\
+    "--allowed-not-ready-nodes=${LINUX_NODE_COUNT} "\
+    "--ginkgo.dryRun=false "\
+    "--ginkgo.focus=\[Conformance\] "\
+    "--ginkgo.skip=${EXCLUDED_TESTS}"
+
+    go run ${KUBE_HOME}/hack/e2e.go -- --verbose-commands \
+      --ginkgo-parallel=4 \
+      --check-version-skew=false --test --provider=local \
+      --test_args="${KUBETEST_ARGS}" &> ${KUBE_HOME}/conformance.out
     ```
 
     TODO: skip known, incompatible tests so that the test suite can finish in a
