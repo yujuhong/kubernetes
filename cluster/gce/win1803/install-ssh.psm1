@@ -1,6 +1,10 @@
 # Install open-ssh using the instructions in
-# https://github.com/PowerShell/Win32-OpenSSH/wiki/Install-Win32-OpenSSH
-function Install-OpenSSH{
+# https://github.com/PowerShell/Win32-OpenSSH/wiki/Install-Win32-OpenSSH.
+# After installation, ssh to the Windows VM using:
+#   ssh user@IPaddress \
+#     -o PreferredAuthentications=keyboard-interactive,password \
+#     -o PubkeyAuthentication=no
+function InstallAndStart-OpenSSH{
   # Download open-ssh.
   $url = "https://github.com/PowerShell/Win32-OpenSSH/releases/download/v7.7.2.0p1-Beta/OpenSSH-Win32.zip"
   $ProgressPreference = 'SilentlyContinue'
@@ -13,9 +17,12 @@ function Install-OpenSSH{
   # Configure the firewall to allow inbound SSH connections
   New-NetFirewallRule -Name sshd -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
 
-  # Set up the service
-  Set-Service ssh-d -StartupType Automatic
-  Set-Service ssh-agent -StartupType Automatic
+  # Start the services and configure them to automatically start on subsequent
+  # boots:
+  ForEach ($service in ("sshd", "ssh-agent")) {
+    net start ${service}
+    Set-Service ${service} -StartupType Automatic
+  }
 }
 
 # Start a job to retreive ssh keys from the metadata server and write them to
@@ -49,5 +56,5 @@ function StartJob-WriteSSHKeys{
 }
 
 
-Export-ModuleMember -Function Install-OpenSSH
+Export-ModuleMember -Function InstallAndStart-OpenSSH
 Export-ModuleMember -Function StartJob-WriteSSHKeys

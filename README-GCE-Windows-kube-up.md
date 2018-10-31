@@ -83,7 +83,6 @@ steps.
       sed -e 's/[]\[()]/\\&/g' |  # escape brackets and parentheses
       sed -e 's/.$//g')           # remove final | added by tr
     ```
-      sed -e 's/\]/\\\]/g' |  # escape close brackets
 
 *   Verify that no system pods are attempting to run on Windows nodes, and that
     no pods are still pending:
@@ -126,5 +125,11 @@ steps.
       --test_args="${KUBETEST_ARGS}" &> ${KUBE_HOME}/conformance.out
     ```
 
-    TODO: skip known, incompatible tests so that the test suite can finish in a
-    reasonable time.
+    TODO: copy log files from Windows nodes using some command like:
+
+    ```
+    scp -r -o PreferredAuthentications=keyboard-interactive,password \
+      -o PubkeyAuthentication=no \
+      user@kubernetes-minion-windows-group-mk0p:C:\\etc\\kubernetes\\logs \
+      kubetest-logs/
+    ```

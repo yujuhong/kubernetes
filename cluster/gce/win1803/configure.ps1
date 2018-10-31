@@ -9,9 +9,18 @@ $ProgressPreference = 'SilentlyContinue'
 
 try {
   Invoke-WebRequest `
+    https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/win1803/install-ssh.psm1 `
+    -OutFile C:\install-ssh.psm1
+  Import-Module C:\install-ssh.psm1
+
+  Invoke-WebRequest `
     https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/win1803/k8s-node-setup.psm1 `
     -OutFile C:\k8s-node-setup.psm1
   Import-Module C:\k8s-node-setup.psm1
+
+  InstallAndStart-OpenSSH
+  Log "Installed OpenSSH, sshd is running"
+
   Set-EnvironmentVars
   Set-PrerequisiteOptions
   Create-Directories
