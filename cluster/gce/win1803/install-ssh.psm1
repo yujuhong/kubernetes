@@ -1,9 +1,15 @@
-# Install open-ssh using the instructions in
+# Installs open-ssh using the instructions in
 # https://github.com/PowerShell/Win32-OpenSSH/wiki/Install-Win32-OpenSSH.
-# After installation, ssh to the Windows VM using:
-#   ssh user@IPaddress \
+#
+# After installation, get a password for the 'kubernetes' user on the Windows
+# VM with:
+#   gcloud compute -q --project <project> reset-windows-password \
+#     --user kubernetes <instance> --zone <zone> \
+#     --format="value(password)" 2> /tmp/stderr.out
+# Then ssh to the Windows VM:
+#   ssh kubernetes@IPaddress \
 #     -o PreferredAuthentications=keyboard-interactive,password \
-#     -o PubkeyAuthentication=no
+#     -o PubkeyAuthentication=no -t "powershell -File -"
 function InstallAndStart-OpenSSH{
   # Download open-ssh.
   $url = "https://github.com/PowerShell/Win32-OpenSSH/releases/download/v7.7.2.0p1-Beta/OpenSSH-Win32.zip"
