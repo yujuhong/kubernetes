@@ -57,6 +57,20 @@ IFS=" " read -ra KUBE_SERVER_IMAGE_TARGETS <<< "$(kube::golang::server_image_tar
 readonly KUBE_SERVER_IMAGE_TARGETS
 readonly KUBE_SERVER_IMAGE_BINARIES=("${KUBE_SERVER_IMAGE_TARGETS[@]##*/}")
 
+# The set of conformance targets we build docker image for
+kube::golang::conformance_image_targets() {
+  # NOTE: this contains cmd targets for kube::release::build_conformance_image
+  local targets=(
+    vendor/github.com/onsi/ginkgo/ginkgo
+    test/e2e/e2e.test
+    cmd/kubectl
+  )
+  echo "${targets[@]}"
+}
+
+IFS=" " read -ra KUBE_CONFORMANCE_IMAGE_TARGETS <<< "$(kube::golang::conformance_image_targets)"
+readonly KUBE_CONFORMANCE_IMAGE_TARGETS
+
 # The set of server targets that we are only building for Kubernetes nodes
 # If you update this list, please also update build/BUILD.
 kube::golang::node_targets() {
@@ -360,7 +374,7 @@ EOF
   local go_version
   IFS=" " read -ra go_version <<< "$(go version)"
   local minimum_go_version
-  minimum_go_version=go1.10.2
+  minimum_go_version=go1.11.1
   if [[ "${minimum_go_version}" != $(echo -e "${minimum_go_version}\n${go_version[2]}" | sort -s -t. -k 1,1 -k 2,2n -k 3,3n | head -n1) && "${go_version[2]}" != "devel" ]]; then
     kube::log::usage_from_stdin <<EOF
 Detected go version: ${go_version[*]}.
@@ -541,7 +555,7 @@ kube::golang::build_some_binaries() {
 
         go test -c -o "$(kube::golang::outfile_for_binary "${package}" "${platform}")" \
           -covermode count \
-          -coverpkg k8s.io/... \
+          -coverpkg k8s.io/...,k8s.io/kubernetes/vendor/k8s.io/... \
           "${build_args[@]}" \
           -tags coverage \
           "${package}"

@@ -14,21 +14,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package cmd_test
+package cmd
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/renstrom/dedent"
+	"github.com/spf13/cobra"
 
 	kubeadmapiv1beta1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
-	"k8s.io/kubernetes/cmd/kubeadm/app/cmd"
+	"k8s.io/kubernetes/cmd/kubeadm/app/componentconfigs"
+	"k8s.io/kubernetes/cmd/kubeadm/app/constants"
 	"k8s.io/kubernetes/cmd/kubeadm/app/features"
+	kubeadmutil "k8s.io/kubernetes/cmd/kubeadm/app/util"
 	configutil "k8s.io/kubernetes/cmd/kubeadm/app/util/config"
 	utilruntime "k8s.io/kubernetes/cmd/kubeadm/app/util/runtime"
 	"k8s.io/utils/exec"
@@ -45,7 +51,7 @@ const (
 func TestNewCmdConfigImagesList(t *testing.T) {
 	var output bytes.Buffer
 	mockK8sVersion := dummyKubernetesVersion
-	images := cmd.NewCmdConfigImagesList(&output, &mockK8sVersion)
+	images := NewCmdConfigImagesList(&output, &mockK8sVersion)
 	images.Run(nil, nil)
 	actual := strings.Split(output.String(), "\n")
 	if len(actual) != defaultNumberOfImages {
@@ -102,7 +108,7 @@ func TestImagesListRunWithCustomConfigPath(t *testing.T) {
 				t.Fatalf("Failed writing a config file: %v", err)
 			}
 
-			i, err := cmd.NewImagesList(configFilePath, &kubeadmapiv1beta1.InitConfiguration{
+			i, err := NewImagesList(configFilePath, &kubeadmapiv1beta1.InitConfiguration{
 				ClusterConfiguration: kubeadmapiv1beta1.ClusterConfiguration{
 					KubernetesVersion: dummyKubernetesVersion,
 				},
@@ -173,7 +179,7 @@ func TestConfigImagesListRunWithoutPath(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			i, err := cmd.NewImagesList("", &tc.cfg)
+			i, err := NewImagesList("", &tc.cfg)
 			if err != nil {
 				t.Fatalf("did not expect an error while creating the Images command: %v", err)
 			}
@@ -219,7 +225,7 @@ func TestImagesPull(t *testing.T) {
 	}
 
 	images := []string{"a", "b", "c", "d", "a"}
-	ip := cmd.NewImagesPull(containerRuntime, images)
+	ip := NewImagesPull(containerRuntime, images)
 
 	err = ip.PullAll()
 	if err != nil {
@@ -242,7 +248,7 @@ func TestMigrate(t *testing.T) {
 	defer cleanup()
 
 	var output bytes.Buffer
-	command := cmd.NewCmdConfigMigrate(&output)
+	command := NewCmdConfigMigrate(&output)
 	if err := command.Flags().Set("old-config", configFile); err != nil {
 		t.Fatalf("failed to set old-config flag")
 	}
@@ -270,5 +276,98 @@ func tempConfig(t *testing.T, config []byte) (string, func()) {
 	}
 	return configFilePath, func() {
 		os.RemoveAll(tmpDir)
+	}
+}
+
+func TestNewCmdConfigPrintActionDefaults(t *testing.T) {
+	tests := []struct {
+		name             string
+		expectedKinds    []string // need to be sorted
+		componentConfigs string
+		cmdProc          func(out io.Writer) *cobra.Command
+	}{
+		{
+			name: "InitConfiguration: No component configs",
+			expectedKinds: []string{
+				constants.ClusterConfigurationKind,
+				constants.InitConfigurationKind,
+			},
+			cmdProc: NewCmdConfigPrintInitDefaults,
+		},
+		{
+			name: "InitConfiguration: KubeProxyConfiguration",
+			expectedKinds: []string{
+				constants.ClusterConfigurationKind,
+				constants.InitConfigurationKind,
+				string(componentconfigs.KubeProxyConfigurationKind),
+			},
+			componentConfigs: "KubeProxyConfiguration",
+			cmdProc:          NewCmdConfigPrintInitDefaults,
+		},
+		{
+			name: "InitConfiguration: KubeProxyConfiguration and KubeletConfiguration",
+			expectedKinds: []string{
+				constants.ClusterConfigurationKind,
+				constants.InitConfigurationKind,
+				string(componentconfigs.KubeProxyConfigurationKind),
+				string(componentconfigs.KubeletConfigurationKind),
+			},
+			componentConfigs: "KubeProxyConfiguration,KubeletConfiguration",
+			cmdProc:          NewCmdConfigPrintInitDefaults,
+		},
+		{
+			name: "JoinConfiguration: No component configs",
+			expectedKinds: []string{
+				constants.JoinConfigurationKind,
+			},
+			cmdProc: NewCmdConfigPrintJoinDefaults,
+		},
+		{
+			name: "JoinConfiguration: KubeProxyConfiguration",
+			expectedKinds: []string{
+				constants.JoinConfigurationKind,
+				string(componentconfigs.KubeProxyConfigurationKind),
+			},
+			componentConfigs: "KubeProxyConfiguration",
+			cmdProc:          NewCmdConfigPrintJoinDefaults,
+		},
+		{
+			name: "JoinConfiguration: KubeProxyConfiguration and KubeletConfiguration",
+			expectedKinds: []string{
+				constants.JoinConfigurationKind,
+				string(componentconfigs.KubeProxyConfigurationKind),
+				string(componentconfigs.KubeletConfigurationKind),
+			},
+			componentConfigs: "KubeProxyConfiguration,KubeletConfiguration",
+			cmdProc:          NewCmdConfigPrintJoinDefaults,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var output bytes.Buffer
+
+			command := test.cmdProc(&output)
+			if err := command.Flags().Set("component-configs", test.componentConfigs); err != nil {
+				t.Fatalf("failed to set component-configs flag")
+			}
+			command.Run(nil, nil)
+
+			gvkmap, err := kubeadmutil.SplitYAMLDocuments(output.Bytes())
+			if err != nil {
+				t.Fatalf("unexpected failure of SplitYAMLDocuments: %v", err)
+			}
+
+			gotKinds := []string{}
+			for gvk := range gvkmap {
+				gotKinds = append(gotKinds, gvk.Kind)
+			}
+
+			sort.Strings(gotKinds)
+
+			if !reflect.DeepEqual(gotKinds, test.expectedKinds) {
+				t.Fatalf("kinds not matching:\n\texpectedKinds: %v\n\tgotKinds: %v\n", test.expectedKinds, gotKinds)
+			}
+		})
 	}
 }

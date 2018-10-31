@@ -254,13 +254,21 @@ func TestRunJoinNodeChecks(t *testing.T) {
 		},
 		{
 			cfg: &kubeadmapi.JoinConfiguration{
-				DiscoveryTokenAPIServers: []string{"192.168.1.15"},
+				Discovery: kubeadmapi.Discovery{
+					BootstrapToken: &kubeadmapi.BootstrapTokenDiscovery{
+						APIServerEndpoint: "192.168.1.15",
+					},
+				},
 			},
 			expected: false,
 		},
 		{
 			cfg: &kubeadmapi.JoinConfiguration{
-				DiscoveryTokenAPIServers: []string{"2001:1234::1:15"},
+				Discovery: kubeadmapi.Discovery{
+					BootstrapToken: &kubeadmapi.BootstrapTokenDiscovery{
+						APIServerEndpoint: "2001:1234::1:15",
+					},
+				},
 			},
 			expected: false,
 		},
@@ -767,5 +775,26 @@ func TestImagePullCheck(t *testing.T) {
 	}
 	if len(errors) != 2 {
 		t.Fatalf("expected 2 errors but got %d: %q", len(errors), errors)
+	}
+}
+
+func TestNumCPUCheck(t *testing.T) {
+	var tests = []struct {
+		numCPU      int
+		numErrors   int
+		numWarnings int
+	}{
+		{0, 0, 0},
+		{999999999, 1, 0},
+	}
+
+	for _, rt := range tests {
+		warnings, errors := NumCPUCheck{NumCPU: rt.numCPU}.Check()
+		if len(warnings) != rt.numWarnings {
+			t.Errorf("expected %d warning(s) but got %d: %q", rt.numWarnings, len(warnings), warnings)
+		}
+		if len(errors) != rt.numErrors {
+			t.Errorf("expected %d warning(s) but got %d: %q", rt.numErrors, len(errors), errors)
+		}
 	}
 }

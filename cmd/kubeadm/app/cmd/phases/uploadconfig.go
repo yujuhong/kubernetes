@@ -19,6 +19,7 @@ package phases
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -61,7 +62,7 @@ func NewCmdUploadConfig() *cobra.Command {
 		Aliases: []string{"uploadconfig"},
 		Run: func(_ *cobra.Command, args []string) {
 			if len(cfgPath) == 0 {
-				kubeadmutil.CheckErr(fmt.Errorf("the --config flag is mandatory"))
+				kubeadmutil.CheckErr(errors.New("the --config flag is mandatory"))
 			}
 
 			kubeConfigFile = cmdutil.FindExistingKubeConfig(kubeConfigFile)
@@ -70,8 +71,7 @@ func NewCmdUploadConfig() *cobra.Command {
 
 			// KubernetesVersion is not used, but we set it explicitly to avoid the lookup
 			// of the version from the internet when executing ConfigFileAndDefaultsToInternalConfig
-			err = SetKubernetesVersion(client, cfg)
-			kubeadmutil.CheckErr(err)
+			SetKubernetesVersion(cfg)
 
 			internalcfg, err := configutil.ConfigFileAndDefaultsToInternalConfig(cfgPath, cfg)
 			kubeadmutil.CheckErr(err)

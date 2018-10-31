@@ -28,6 +28,7 @@ spec:
         seccomp.security.alpha.kubernetes.io/pod: 'docker/default'
     spec:
       serviceAccountName: metadata-agent
+      priorityClassName: system-node-critical
       nodeSelector:
         beta.kubernetes.io/os: linux
       containers:
@@ -59,6 +60,11 @@ spec:
       restartPolicy: Always
       schedulerName: default-scheduler
       terminationGracePeriodSeconds: 30
+      tolerations:
+      - operator: "Exists"
+        effect: "NoExecute"
+      - operator: "Exists"
+        effect: "NoSchedule"
   updateStrategy:
     rollingUpdate:
       maxUnavailable: 1
@@ -86,6 +92,7 @@ spec:
         seccomp.security.alpha.kubernetes.io/pod: 'docker/default'
     spec:
       serviceAccountName: metadata-agent
+      priorityClassName: system-cluster-critical
       nodeSelector:
         beta.kubernetes.io/os: linux
       containers:

@@ -167,7 +167,7 @@ func TestPlugin(t *testing.T) {
 
 	// Test Provisioner
 	options := volume.VolumeOptions{
-		PVC: volumetest.CreateTestPVC("100Mi", []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce}),
+		PVC:                           volumetest.CreateTestPVC("100Mi", []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce}),
 		PersistentVolumeReclaimPolicy: v1.PersistentVolumeReclaimDelete,
 	}
 	provisioner, err := plug.(*awsElasticBlockStorePlugin).newProvisionerInternal(options, &fakePDManager{})
@@ -371,7 +371,7 @@ func TestMountOptions(t *testing.T) {
 		t.Errorf("Expected success, got: %v", err)
 	}
 	mountOptions := fakeMounter.MountPoints[0].Opts
-	expectedMountOptions := []string{"bind", "_netdev"}
+	expectedMountOptions := []string{"_netdev", "bind"}
 	if !reflect.DeepEqual(mountOptions, expectedMountOptions) {
 		t.Errorf("Expected mount options to be %v got %v", expectedMountOptions, mountOptions)
 	}

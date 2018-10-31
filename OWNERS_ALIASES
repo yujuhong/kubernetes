@@ -39,7 +39,6 @@ aliases:
     - dims
     - dshulyak
     - eparis
-    - ericchiang
     - ghodss
     - juanvallejo
     - mengqiy
@@ -75,6 +74,7 @@ aliases:
     - vishh
     - yifan-gu
     - yujuhong
+    - krmayankk
   sig-network-approvers:
     - bowei
     - caseydavenport
@@ -124,7 +124,6 @@ aliases:
     - prydonius
     - bgrant0607
     - jdumars
-    - ericchiang
     - liggitt
     - deads2k
     - mwielgus
@@ -256,7 +255,6 @@ aliases:
     - derekwaynecarr  # Node
     - dghubble        # On Premise
     - directxman12    # Autoscaling
-    - ericchiang      # Auth
     - jdumars         # Architecture, Cluster Ops, Release
     - kow3ns          # Apps
     - lavalamp        # API Machinery

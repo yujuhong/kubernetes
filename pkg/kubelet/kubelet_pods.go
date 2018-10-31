@@ -128,7 +128,6 @@ func (kl *Kubelet) makeBlockVolumes(pod *v1.Pod, container *v1.Container, podVol
 
 // makeMounts determines the mount points for the given container.
 func makeMounts(pod *v1.Pod, podDir string, container *v1.Container, hostName, hostDomain, podIP string, podVolumes kubecontainer.VolumeMap, mounter mountutil.Interface, expandEnvs []kubecontainer.EnvVar) ([]kubecontainer.Mount, func(), error) {
-
 	// Kubernetes only mounts on /etc/hosts if:
 	// - container is not an infrastructure (pause) container
 	// - container is not already mounting on /etc/hosts
@@ -216,13 +215,13 @@ func makeMounts(pod *v1.Pod, podDir string, container *v1.Container, hostName, h
 		}
 
 		// Docker Volume Mounts fail on Windows if it is not of the form C:/
-		containerPath := mount.MountPath
-		if runtime.GOOS == "windows" {
-			if (strings.HasPrefix(hostPath, "/") || strings.HasPrefix(hostPath, "\\")) && !strings.Contains(hostPath, ":") {
-				hostPath = "c:" + hostPath
-			}
+		if volumeutil.IsWindowsLocalPath(runtime.GOOS, hostPath) {
+			hostPath = volumeutil.MakeAbsolutePath(runtime.GOOS, hostPath)
 		}
-		if !filepath.IsAbs(containerPath) {
+
+		containerPath := mount.MountPath
+		// IsAbs returns false for UNC path/SMB shares/named pipes in Windows. So check for those specifically and skip MakeAbsolutePath
+		if !volumeutil.IsWindowsUNCPath(runtime.GOOS, containerPath) && !filepath.IsAbs(containerPath) {
 			containerPath = volumeutil.MakeAbsolutePath(runtime.GOOS, containerPath)
 		}
 
@@ -1323,18 +1322,17 @@ func getPhase(spec *v1.PodSpec, info []v1.ContainerStatus) v1.PodPhase {
 func (kl *Kubelet) generateAPIPodStatus(pod *v1.Pod, podStatus *kubecontainer.PodStatus) v1.PodStatus {
 	glog.V(3).Infof("Generating status for %q", format.Pod(pod))
 
+	s := kl.convertStatusToAPIStatus(pod, podStatus)
+
 	// check if an internal module has requested the pod is evicted.
 	for _, podSyncHandler := range kl.PodSyncHandlers {
 		if result := podSyncHandler.ShouldEvict(pod); result.Evict {
-			return v1.PodStatus{
-				Phase:   v1.PodFailed,
-				Reason:  result.Reason,
-				Message: result.Message,
-			}
+			s.Phase = v1.PodFailed
+			s.Reason = result.Reason
+			s.Message = result.Message
+			return *s
 		}
 	}
-
-	s := kl.convertStatusToAPIStatus(pod, podStatus)
 
 	// Assume info is ready to process
 	spec := &pod.Spec

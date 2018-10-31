@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/golang/glog"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -304,10 +305,7 @@ func addGenericFlags(flagSet *pflag.FlagSet, cfgPath *string, skipTokenPrint *bo
 func createBootstrapToken(kubeConfigFile string, client clientset.Interface, cfgPath string, cfg *kubeadmapiv1beta1.InitConfiguration, skipTokenPrint bool) error {
 	// KubernetesVersion is not used, but we set it explicitly to avoid the lookup
 	// of the version from the internet when executing ConfigFileAndDefaultsToInternalConfig
-	err := SetKubernetesVersion(client, cfg)
-	if err != nil {
-		return err
-	}
+	SetKubernetesVersion(cfg)
 
 	// This call returns the ready-to-use configuration based on the configuration file that might or might not exist and the default cfg populated by flags
 	internalcfg, err := configutil.ConfigFileAndDefaultsToInternalConfig(cfgPath, cfg)
@@ -327,7 +325,7 @@ func createBootstrapToken(kubeConfigFile string, client clientset.Interface, cfg
 	if len(internalcfg.BootstrapTokens) > 0 {
 		joinCommand, err := cmdutil.GetJoinCommand(kubeConfigFile, internalcfg.BootstrapTokens[0].Token.String(), skipTokenPrint)
 		if err != nil {
-			return fmt.Errorf("failed to get join command: %v", err)
+			return errors.Wrap(err, "failed to get join command")
 		}
 		fmt.Println(joinCommand)
 	}

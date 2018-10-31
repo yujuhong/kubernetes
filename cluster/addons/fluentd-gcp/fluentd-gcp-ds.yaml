@@ -101,14 +101,12 @@ spec:
       nodeSelector:
         beta.kubernetes.io/fluentd-ds-ready: "true"
         beta.kubernetes.io/os: linux
+      terminationGracePeriodSeconds: 60
       tolerations:
-      - key: "node.alpha.kubernetes.io/ismaster"
-        effect: "NoSchedule"
       - operator: "Exists"
         effect: "NoExecute"
       - operator: "Exists"
         effect: "NoSchedule"
-      terminationGracePeriodSeconds: 60
       volumes:
       - name: varlog
         hostPath:

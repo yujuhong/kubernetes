@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -38,8 +39,8 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions/resource"
 	"k8s.io/client-go/dynamic"
 	watchtools "k8s.io/client-go/tools/watch"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 )
 
 var (
@@ -102,11 +103,11 @@ func NewCmdWait(restClientGetter genericclioptions.RESTClientGetter, streams gen
 	flags := NewWaitFlags(restClientGetter, streams)
 
 	cmd := &cobra.Command{
-		Use: "wait resource.group/name [--for=delete|--for condition=available]",
+		Use:                   "wait resource.group/name [--for=delete|--for condition=available]",
 		DisableFlagsInUseLine: true,
-		Short:   "Experimental: Wait for a specific condition on one or many resources.",
-		Long:    wait_long,
-		Example: wait_example,
+		Short:                 "Experimental: Wait for a specific condition on one or many resources.",
+		Long:                  wait_long,
+		Example:               wait_example,
 		Run: func(cmd *cobra.Command, args []string) {
 			o, err := flags.ToOptions(args)
 			cmdutil.CheckErr(err)
@@ -145,7 +146,7 @@ func (flags *WaitFlags) ToOptions(args []string) (*WaitOptions, error) {
 	if err != nil {
 		return nil, err
 	}
-	conditionFn, err := conditionFuncFor(flags.ForCondition)
+	conditionFn, err := conditionFuncFor(flags.ForCondition, flags.ErrOut)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +169,7 @@ func (flags *WaitFlags) ToOptions(args []string) (*WaitOptions, error) {
 	return o, nil
 }
 
-func conditionFuncFor(condition string) (ConditionFunc, error) {
+func conditionFuncFor(condition string, errOut io.Writer) (ConditionFunc, error) {
 	if strings.ToLower(condition) == "delete" {
 		return IsDeleted, nil
 	}
@@ -183,6 +184,7 @@ func conditionFuncFor(condition string) (ConditionFunc, error) {
 		return ConditionalWait{
 			conditionName:   conditionName,
 			conditionStatus: conditionValue,
+			errOut:          errOut,
 		}.IsConditionMet, nil
 	}
 
@@ -281,7 +283,7 @@ func IsDeleted(info *resource.Info, o *WaitOptions) (runtime.Object, bool, error
 		}
 
 		ctx, cancel := watchtools.ContextWithOptionalTimeout(context.Background(), o.Timeout)
-		watchEvent, err := watchtools.UntilWithoutRetry(ctx, objWatch, isDeleted)
+		watchEvent, err := watchtools.UntilWithoutRetry(ctx, objWatch, Wait{errOut: o.ErrOut}.IsDeleted)
 		cancel()
 		switch {
 		case err == nil:
@@ -299,14 +301,33 @@ func IsDeleted(info *resource.Info, o *WaitOptions) (runtime.Object, bool, error
 	}
 }
 
-func isDeleted(event watch.Event) (bool, error) {
-	return event.Type == watch.Deleted, nil
+// Wait has helper methods for handling watches, including error handling.
+type Wait struct {
+	errOut io.Writer
+}
+
+// IsDeleted returns true if the object is deleted. It prints any errors it encounters.
+func (w Wait) IsDeleted(event watch.Event) (bool, error) {
+	switch event.Type {
+	case watch.Error:
+		// keep waiting in the event we see an error - we expect the watch to be closed by
+		// the server if the error is unrecoverable.
+		err := apierrors.FromObject(event.Object)
+		fmt.Fprintf(w.errOut, "error: An error occurred while waiting for the object to be deleted: %v", err)
+		return false, nil
+	case watch.Deleted:
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 // ConditionalWait hold information to check an API status condition
 type ConditionalWait struct {
 	conditionName   string
 	conditionStatus string
+	// errOut is written to if an error occurs
+	errOut io.Writer
 }
 
 // IsConditionMet is a conditionfunc for waiting on an API condition to be met
@@ -389,6 +410,13 @@ func (w ConditionalWait) checkCondition(obj *unstructured.Unstructured) (bool, e
 }
 
 func (w ConditionalWait) isConditionMet(event watch.Event) (bool, error) {
+	if event.Type == watch.Error {
+		// keep waiting in the event we see an error - we expect the watch to be closed by
+		// the server
+		err := apierrors.FromObject(event.Object)
+		fmt.Fprintf(w.errOut, "error: An error occurred while waiting for the condition to be satisfied: %v", err)
+		return false, nil
+	}
 	if event.Type == watch.Deleted {
 		// this will chain back out, result in another get and an return false back up the chain
 		return false, nil

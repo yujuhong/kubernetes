@@ -25,10 +25,11 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/kubernetes/pkg/cloudprovider"
+	cloudprovider "k8s.io/cloud-provider"
 	"k8s.io/kubernetes/pkg/cloudprovider/providers/aws"
 	"k8s.io/kubernetes/pkg/volume"
 	volumeutil "k8s.io/kubernetes/pkg/volume/util"
@@ -168,7 +169,7 @@ func populateVolumeOptions(pluginName, pvcName string, capacityGB resource.Quant
 				return nil, fmt.Errorf("invalid encrypted boolean value %q, must be true or false: %v", v, err)
 			}
 		case "kmskeyid":
-			volumeOptions.KmsKeyId = v
+			volumeOptions.KmsKeyID = v
 		case volume.VolumeParameterFSType:
 			// Do nothing but don't make this fail
 		default:

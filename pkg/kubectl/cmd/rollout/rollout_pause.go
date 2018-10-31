@@ -27,11 +27,11 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions/printers"
 	"k8s.io/cli-runtime/pkg/genericclioptions/resource"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/set"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 	"k8s.io/kubernetes/pkg/kubectl/polymorphichelpers"
 	"k8s.io/kubernetes/pkg/kubectl/scheme"
 	"k8s.io/kubernetes/pkg/kubectl/util/i18n"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 )
 
 // PauseOptions is the start of the data required to perform the operation.  As new fields are added, add them here instead of
@@ -74,11 +74,11 @@ func NewCmdRolloutPause(f cmdutil.Factory, streams genericclioptions.IOStreams) 
 	validArgs := []string{"deployment"}
 
 	cmd := &cobra.Command{
-		Use: "pause RESOURCE",
+		Use:                   "pause RESOURCE",
 		DisableFlagsInUseLine: true,
-		Short:   i18n.T("Mark the provided resource as paused"),
-		Long:    pause_long,
-		Example: pause_example,
+		Short:                 i18n.T("Mark the provided resource as paused"),
+		Long:                  pause_long,
+		Example:               pause_example,
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f, cmd, args))
 			cmdutil.CheckErr(o.Validate())

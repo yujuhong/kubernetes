@@ -1300,7 +1300,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -1833,7 +1832,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -2366,7 +2364,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -2899,7 +2896,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -3432,7 +3428,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -4139,7 +4134,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -6020,7 +6014,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -6553,7 +6546,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -7434,7 +7426,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -8141,7 +8132,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -8674,7 +8664,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -9121,7 +9110,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -10088,7 +10076,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -10848,7 +10835,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -12143,7 +12129,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -18333,7 +18318,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -19099,7 +19083,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -19616,7 +19599,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -20631,7 +20613,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -21596,7 +21577,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -22528,7 +22508,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -23813,7 +23792,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -24346,7 +24324,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -25053,7 +25030,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -25934,7 +25910,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -26815,7 +26790,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -29825,7 +29799,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -30358,7 +30331,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -31337,7 +31309,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -33675,7 +33646,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -34208,7 +34178,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -34915,7 +34884,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -35796,7 +35764,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -36677,7 +36644,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -39051,6 +39017,804 @@
      }
     ]
    },
+   "/apis/auditregistration.k8s.io/": {
+    "get": {
+     "description": "get information of a group",
+     "consumes": [
+      "application/json",
+      "application/yaml",
+      "application/vnd.kubernetes.protobuf"
+     ],
+     "produces": [
+      "application/json",
+      "application/yaml",
+      "application/vnd.kubernetes.protobuf"
+     ],
+     "schemes": [
+      "https"
+     ],
+     "tags": [
+      "auditregistration"
+     ],
+     "operationId": "getAuditregistrationAPIGroup",
+     "responses": {
+      "200": {
+       "description": "OK",
+       "schema": {
+        "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.APIGroup"
+       }
+      },
+      "401": {
+       "description": "Unauthorized"
+      }
+     }
+    }
+   },
+   "/apis/auditregistration.k8s.io/v1alpha1/": {
+    "get": {
+     "description": "get available resources",
+     "consumes": [
+      "application/json",
+      "application/yaml",
+      "application/vnd.kubernetes.protobuf"
+     ],
+     "produces": [
+      "application/json",
+      "application/yaml",
+      "application/vnd.kubernetes.protobuf"
+     ],
+     "schemes": [
+      "https"
+     ],
+     "tags": [
+      "auditregistration_v1alpha1"
+     ],
+     "operationId": "getAuditregistrationV1alpha1APIResources",
+     "responses": {
+      "200": {
+       "description": "OK",
+       "schema": {
+        "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.APIResourceList"
+       }
+      },
+      "401": {
+       "description": "Unauthorized"
+      }
+     }
+    }
+   },
+   "/apis/auditregistration.k8s.io/v1alpha1/auditsinks": {
+    "get": {
+     "description": "list or watch objects of kind AuditSink",
+     "consumes": [
+      "*/*"
+     ],
+     "produces": [
+      "application/json",
+      "application/yaml",
+      "application/vnd.kubernetes.protobuf",
+      "application/json;stream=watch",
+      "application/vnd.kubernetes.protobuf;stream=watch"
+     ],
+     "schemes": [
+      "https"
+     ],
+     "tags": [
+      "auditregistration_v1alpha1"
+     ],
+     "operationId": "listAuditregistrationV1alpha1AuditSink",
+     "parameters": [
+      {
+       "uniqueItems": true,
+       "type": "string",
+       "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
+       "name": "continue",
+       "in": "query"
+      },
+      {
+       "uniqueItems": true,
+       "type": "string",
+       "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
+       "name": "fieldSelector",
+       "in": "query"
+      },
+      {
+       "uniqueItems": true,
+       "type": "string",
+       "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
+       "name": "labelSelector",
+       "in": "query"
+      },
+      {
+       "uniqueItems": true,
+       "type": "integer",
+       "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
+       "name": "limit",
+       "in": "query"
+      },
+      {
+       "uniqueItems": true,
+       "type": "string",
+       "description": "When specified with a watch call, shows changes that occur after that particular version of a resource. Defaults to changes from the beginning of history. When specified for list: - if unset, then the result is returned from remote storage based on quorum-read flag; - if it's 0, then we simply return what we currently have in cache, no guarantee; - if set to non zero, then the result is at least as fresh as given rv.",
+       "name": "resourceVersion",
+       "in": "query"
+      },
+      {
+       "uniqueItems": true,
+       "type": "integer",
+       "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
+       "name": "timeoutSeconds",
+       "in": "query"
+      },
+      {
+       "uniqueItems": true,
+       "type": "boolean",
+       "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
+       "name": "watch",
+       "in": "query"
+      }
+     ],
+     "responses": {
+      "200": {
+       "description": "OK",
+       "schema": {
+        "$ref": "#/definitions/io.k8s.api.auditregistration.v1alpha1.AuditSinkList"
+       }
+      },
+      "401": {
+       "description": "Unauthorized"
+      }
+     },
+     "x-kubernetes-action": "list",
+     "x-kubernetes-group-version-kind": {
+      "group": "auditregistration.k8s.io",
+      "kind": "AuditSink",
+      "version": "v1alpha1"
+     }
+    },
+    "post": {
+     "description": "create an AuditSink",
+     "consumes": [
+      "*/*"
+     ],
+     "produces": [
+      "application/json",
+      "application/yaml",
+      "application/vnd.kubernetes.protobuf"
+     ],
+     "schemes": [
+      "https"
+     ],
+     "tags": [
+      "auditregistration_v1alpha1"
+     ],
+     "operationId": "createAuditregistrationV1alpha1AuditSink",
+     "parameters": [
+      {
+       "name": "body",
+       "in": "body",
+       "required": true,
+       "schema": {
+        "$ref": "#/definitions/io.k8s.api.auditregistration.v1alpha1.AuditSink"
+       }
+      },
+      {
+       "uniqueItems": true,
+       "type": "string",
+       "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+       "name": "dryRun",
+       "in": "query"
+      }
+     ],
+     "responses": {
+      "200": {
+       "description": "OK",
+       "schema": {
+        "$ref": "#/definitions/io.k8s.api.auditregistration.v1alpha1.AuditSink"
+       }
+      },
+      "201": {
+       "description": "Created",
+       "schema": {
+        "$ref": "#/definitions/io.k8s.api.auditregistration.v1alpha1.AuditSink"
+       }
+      },
+      "202": {
+       "description": "Accepted",
+       "schema": {
+        "$ref": "#/definitions/io.k8s.api.auditregistration.v1alpha1.AuditSink"
+       }
+      },
+      "401": {
+       "description": "Unauthorized"
+      }
+     },
+     "x-kubernetes-action": "post",
+     "x-kubernetes-group-version-kind": {
+      "group": "auditregistration.k8s.io",
+      "kind": "AuditSink",
+      "version": "v1alpha1"
+     }
+    },
+    "delete": {
+     "description": "delete collection of AuditSink",
+     "consumes": [
+      "*/*"
+     ],
+     "produces": [
+      "application/json",
+      "application/yaml",
+      "application/vnd.kubernetes.protobuf"
+     ],
+     "schemes": [
+      "https"
+     ],
+     "tags": [
+      "auditregistration_v1alpha1"
+     ],
+     "operationId": "deleteAuditregistrationV1alpha1CollectionAuditSink",
+     "parameters": [
+      {
+       "uniqueItems": true,
+       "type": "string",
+       "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
+       "name": "continue",
+       "in": "query"
+      },
+      {
+       "uniqueItems": true,
+       "type": "string",
+       "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
+       "name": "fieldSelector",
+       "in": "query"
+      },
+      {
+       "uniqueItems": true,
+       "type": "string",
+       "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
+       "name": "labelSelector",
+       "in": "query"
+      },
+      {
+       "uniqueItems": true,
+       "type": "integer",
+       "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
+       "name": "limit",
+       "in": "query"
+      },
+      {
+       "uniqueItems": true,
+       "type": "string",
+       "description": "When specified with a watch call, shows changes that occur after that particular version of a resource. Defaults to changes from the beginning of history. When specified for list: - if unset, then the result is returned from remote storage based on quorum-read flag; - if it's 0, then we simply return what we currently have in cache, no guarantee; - if set to non zero, then the result is at least as fresh as given rv.",
+       "name": "resourceVersion",
+       "in": "query"
+      },
+      {
+       "uniqueItems": true,
+       "type": "integer",
+       "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
+       "name": "timeoutSeconds",
+       "in": "query"
+      },
+      {
+       "uniqueItems": true,
+       "type": "boolean",
+       "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
+       "name": "watch",
+       "in": "query"
+      }
+     ],
+     "responses": {
+      "200": {
+       "description": "OK",
+       "schema": {
+        "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
+       }
+      },
+      "401": {
+       "description": "Unauthorized"
+      }
+     },
+     "x-kubernetes-action": "deletecollection",
+     "x-kubernetes-group-version-kind": {
+      "group": "auditregistration.k8s.io",
+      "kind": "AuditSink",
+      "version": "v1alpha1"
+     }
+    },
+    "parameters": [
+     {
+      "uniqueItems": true,
+      "type": "boolean",
+      "description": "If true, partially initialized resources are included in the response.",
+      "name": "includeUninitialized",
+      "in": "query"
+     },
+     {
+      "uniqueItems": true,
+      "type": "string",
+      "description": "If 'true', then the output is pretty printed.",
+      "name": "pretty",
+      "in": "query"
+     }
+    ]
+   },
+   "/apis/auditregistration.k8s.io/v1alpha1/auditsinks/{name}": {
+    "get": {
+     "description": "read the specified AuditSink",
+     "consumes": [
+      "*/*"
+     ],
+     "produces": [
+      "application/json",
+      "application/yaml",
+      "application/vnd.kubernetes.protobuf"
+     ],
+     "schemes": [
+      "https"
+     ],
+     "tags": [
+      "auditregistration_v1alpha1"
+     ],
+     "operationId": "readAuditregistrationV1alpha1AuditSink",
+     "parameters": [
+      {
+       "uniqueItems": true,
+       "type": "boolean",
+       "description": "Should the export be exact.  Exact export maintains cluster-specific fields like 'Namespace'.",
+       "name": "exact",
+       "in": "query"
+      },
+      {
+       "uniqueItems": true,
+       "type": "boolean",
+       "description": "Should this value be exported.  Export strips fields that a user can not specify.",
+       "name": "export",
+       "in": "query"
+      }
+     ],
+     "responses": {
+      "200": {
+       "description": "OK",
+       "schema": {
+        "$ref": "#/definitions/io.k8s.api.auditregistration.v1alpha1.AuditSink"
+       }
+      },
+      "401": {
+       "description": "Unauthorized"
+      }
+     },
+     "x-kubernetes-action": "get",
+     "x-kubernetes-group-version-kind": {
+      "group": "auditregistration.k8s.io",
+      "kind": "AuditSink",
+      "version": "v1alpha1"
+     }
+    },
+    "put": {
+     "description": "replace the specified AuditSink",
+     "consumes": [
+      "*/*"
+     ],
+     "produces": [
+      "application/json",
+      "application/yaml",
+      "application/vnd.kubernetes.protobuf"
+     ],
+     "schemes": [
+      "https"
+     ],
+     "tags": [
+      "auditregistration_v1alpha1"
+     ],
+     "operationId": "replaceAuditregistrationV1alpha1AuditSink",
+     "parameters": [
+      {
+       "name": "body",
+       "in": "body",
+       "required": true,
+       "schema": {
+        "$ref": "#/definitions/io.k8s.api.auditregistration.v1alpha1.AuditSink"
+       }
+      },
+      {
+       "uniqueItems": true,
+       "type": "string",
+       "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+       "name": "dryRun",
+       "in": "query"
+      }
+     ],
+     "responses": {
+      "200": {
+       "description": "OK",
+       "schema": {
+        "$ref": "#/definitions/io.k8s.api.auditregistration.v1alpha1.AuditSink"
+       }
+      },
+      "201": {
+       "description": "Created",
+       "schema": {
+        "$ref": "#/definitions/io.k8s.api.auditregistration.v1alpha1.AuditSink"
+       }
+      },
+      "401": {
+       "description": "Unauthorized"
+      }
+     },
+     "x-kubernetes-action": "put",
+     "x-kubernetes-group-version-kind": {
+      "group": "auditregistration.k8s.io",
+      "kind": "AuditSink",
+      "version": "v1alpha1"
+     }
+    },
+    "delete": {
+     "description": "delete an AuditSink",
+     "consumes": [
+      "*/*"
+     ],
+     "produces": [
+      "application/json",
+      "application/yaml",
+      "application/vnd.kubernetes.protobuf"
+     ],
+     "schemes": [
+      "https"
+     ],
+     "tags": [
+      "auditregistration_v1alpha1"
+     ],
+     "operationId": "deleteAuditregistrationV1alpha1AuditSink",
+     "parameters": [
+      {
+       "name": "body",
+       "in": "body",
+       "schema": {
+        "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
+       }
+      },
+      {
+       "uniqueItems": true,
+       "type": "string",
+       "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+       "name": "dryRun",
+       "in": "query"
+      },
+      {
+       "uniqueItems": true,
+       "type": "integer",
+       "description": "The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately.",
+       "name": "gracePeriodSeconds",
+       "in": "query"
+      },
+      {
+       "uniqueItems": true,
+       "type": "boolean",
+       "description": "Deprecated: please use the PropagationPolicy, this field will be deprecated in 1.7. Should the dependent objects be orphaned. If true/false, the \"orphan\" finalizer will be added to/removed from the object's finalizers list. Either this field or PropagationPolicy may be set, but not both.",
+       "name": "orphanDependents",
+       "in": "query"
+      },
+      {
+       "uniqueItems": true,
+       "type": "string",
+       "description": "Whether and how garbage collection will be performed. Either this field or OrphanDependents may be set, but not both. The default policy is decided by the existing finalizer set in the metadata.finalizers and the resource-specific default policy. Acceptable values are: 'Orphan' - orphan the dependents; 'Background' - allow the garbage collector to delete the dependents in the background; 'Foreground' - a cascading policy that deletes all dependents in the foreground.",
+       "name": "propagationPolicy",
+       "in": "query"
+      }
+     ],
+     "responses": {
+      "200": {
+       "description": "OK",
+       "schema": {
+        "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
+       }
+      },
+      "202": {
+       "description": "Accepted",
+       "schema": {
+        "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.Status"
+       }
+      },
+      "401": {
+       "description": "Unauthorized"
+      }
+     },
+     "x-kubernetes-action": "delete",
+     "x-kubernetes-group-version-kind": {
+      "group": "auditregistration.k8s.io",
+      "kind": "AuditSink",
+      "version": "v1alpha1"
+     }
+    },
+    "patch": {
+     "description": "partially update the specified AuditSink",
+     "consumes": [
+      "application/json-patch+json",
+      "application/merge-patch+json",
+      "application/strategic-merge-patch+json"
+     ],
+     "produces": [
+      "application/json",
+      "application/yaml",
+      "application/vnd.kubernetes.protobuf"
+     ],
+     "schemes": [
+      "https"
+     ],
+     "tags": [
+      "auditregistration_v1alpha1"
+     ],
+     "operationId": "patchAuditregistrationV1alpha1AuditSink",
+     "parameters": [
+      {
+       "name": "body",
+       "in": "body",
+       "required": true,
+       "schema": {
+        "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.Patch"
+       }
+      },
+      {
+       "uniqueItems": true,
+       "type": "string",
+       "description": "When present, indicates that modifications should not be persisted. An invalid or unrecognized dryRun directive will result in an error response and no further processing of the request. Valid values are: - All: all dry run stages will be processed",
+       "name": "dryRun",
+       "in": "query"
+      }
+     ],
+     "responses": {
+      "200": {
+       "description": "OK",
+       "schema": {
+        "$ref": "#/definitions/io.k8s.api.auditregistration.v1alpha1.AuditSink"
+       }
+      },
+      "401": {
+       "description": "Unauthorized"
+      }
+     },
+     "x-kubernetes-action": "patch",
+     "x-kubernetes-group-version-kind": {
+      "group": "auditregistration.k8s.io",
+      "kind": "AuditSink",
+      "version": "v1alpha1"
+     }
+    },
+    "parameters": [
+     {
+      "uniqueItems": true,
+      "type": "string",
+      "description": "name of the AuditSink",
+      "name": "name",
+      "in": "path",
+      "required": true
+     },
+     {
+      "uniqueItems": true,
+      "type": "string",
+      "description": "If 'true', then the output is pretty printed.",
+      "name": "pretty",
+      "in": "query"
+     }
+    ]
+   },
+   "/apis/auditregistration.k8s.io/v1alpha1/watch/auditsinks": {
+    "get": {
+     "description": "watch individual changes to a list of AuditSink. deprecated: use the 'watch' parameter with a list operation instead.",
+     "consumes": [
+      "*/*"
+     ],
+     "produces": [
+      "application/json",
+      "application/yaml",
+      "application/vnd.kubernetes.protobuf",
+      "application/json;stream=watch",
+      "application/vnd.kubernetes.protobuf;stream=watch"
+     ],
+     "schemes": [
+      "https"
+     ],
+     "tags": [
+      "auditregistration_v1alpha1"
+     ],
+     "operationId": "watchAuditregistrationV1alpha1AuditSinkList",
+     "responses": {
+      "200": {
+       "description": "OK",
+       "schema": {
+        "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.WatchEvent"
+       }
+      },
+      "401": {
+       "description": "Unauthorized"
+      }
+     },
+     "x-kubernetes-action": "watchlist",
+     "x-kubernetes-group-version-kind": {
+      "group": "auditregistration.k8s.io",
+      "kind": "AuditSink",
+      "version": "v1alpha1"
+     }
+    },
+    "parameters": [
+     {
+      "uniqueItems": true,
+      "type": "string",
+      "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
+      "name": "continue",
+      "in": "query"
+     },
+     {
+      "uniqueItems": true,
+      "type": "string",
+      "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
+      "name": "fieldSelector",
+      "in": "query"
+     },
+     {
+      "uniqueItems": true,
+      "type": "boolean",
+      "description": "If true, partially initialized resources are included in the response.",
+      "name": "includeUninitialized",
+      "in": "query"
+     },
+     {
+      "uniqueItems": true,
+      "type": "string",
+      "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
+      "name": "labelSelector",
+      "in": "query"
+     },
+     {
+      "uniqueItems": true,
+      "type": "integer",
+      "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
+      "name": "limit",
+      "in": "query"
+     },
+     {
+      "uniqueItems": true,
+      "type": "string",
+      "description": "If 'true', then the output is pretty printed.",
+      "name": "pretty",
+      "in": "query"
+     },
+     {
+      "uniqueItems": true,
+      "type": "string",
+      "description": "When specified with a watch call, shows changes that occur after that particular version of a resource. Defaults to changes from the beginning of history. When specified for list: - if unset, then the result is returned from remote storage based on quorum-read flag; - if it's 0, then we simply return what we currently have in cache, no guarantee; - if set to non zero, then the result is at least as fresh as given rv.",
+      "name": "resourceVersion",
+      "in": "query"
+     },
+     {
+      "uniqueItems": true,
+      "type": "integer",
+      "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
+      "name": "timeoutSeconds",
+      "in": "query"
+     },
+     {
+      "uniqueItems": true,
+      "type": "boolean",
+      "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
+      "name": "watch",
+      "in": "query"
+     }
+    ]
+   },
+   "/apis/auditregistration.k8s.io/v1alpha1/watch/auditsinks/{name}": {
+    "get": {
+     "description": "watch changes to an object of kind AuditSink. deprecated: use the 'watch' parameter with a list operation instead, filtered to a single item with the 'fieldSelector' parameter.",
+     "consumes": [
+      "*/*"
+     ],
+     "produces": [
+      "application/json",
+      "application/yaml",
+      "application/vnd.kubernetes.protobuf",
+      "application/json;stream=watch",
+      "application/vnd.kubernetes.protobuf;stream=watch"
+     ],
+     "schemes": [
+      "https"
+     ],
+     "tags": [
+      "auditregistration_v1alpha1"
+     ],
+     "operationId": "watchAuditregistrationV1alpha1AuditSink",
+     "responses": {
+      "200": {
+       "description": "OK",
+       "schema": {
+        "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.WatchEvent"
+       }
+      },
+      "401": {
+       "description": "Unauthorized"
+      }
+     },
+     "x-kubernetes-action": "watch",
+     "x-kubernetes-group-version-kind": {
+      "group": "auditregistration.k8s.io",
+      "kind": "AuditSink",
+      "version": "v1alpha1"
+     }
+    },
+    "parameters": [
+     {
+      "uniqueItems": true,
+      "type": "string",
+      "description": "The continue option should be set when retrieving more results from the server. Since this value is server defined, clients may only use the continue value from a previous query result with identical query parameters (except for the value of continue) and the server may reject a continue value it does not recognize. If the specified continue value is no longer valid whether due to expiration (generally five to fifteen minutes) or a configuration change on the server, the server will respond with a 410 ResourceExpired error together with a continue token. If the client needs a consistent list, it must restart their list without the continue field. Otherwise, the client may send another list request with the token received with the 410 error, the server will respond with a list starting from the next key, but from the latest snapshot, which is inconsistent from the previous list results - objects that are created, modified, or deleted after the first list request will be included in the response, as long as their keys are after the \"next key\".\n\nThis field is not supported when watch is true. Clients may start a watch from the last resourceVersion value returned by the server and not miss any modifications.",
+      "name": "continue",
+      "in": "query"
+     },
+     {
+      "uniqueItems": true,
+      "type": "string",
+      "description": "A selector to restrict the list of returned objects by their fields. Defaults to everything.",
+      "name": "fieldSelector",
+      "in": "query"
+     },
+     {
+      "uniqueItems": true,
+      "type": "boolean",
+      "description": "If true, partially initialized resources are included in the response.",
+      "name": "includeUninitialized",
+      "in": "query"
+     },
+     {
+      "uniqueItems": true,
+      "type": "string",
+      "description": "A selector to restrict the list of returned objects by their labels. Defaults to everything.",
+      "name": "labelSelector",
+      "in": "query"
+     },
+     {
+      "uniqueItems": true,
+      "type": "integer",
+      "description": "limit is a maximum number of responses to return for a list call. If more items exist, the server will set the `continue` field on the list metadata to a value that can be used with the same initial query to retrieve the next set of results. Setting a limit may return fewer than the requested amount of items (up to zero items) in the event all requested objects are filtered out and clients should only use the presence of the continue field to determine whether more results are available. Servers may choose not to support the limit argument and will return all of the available results. If limit is specified and the continue field is empty, clients may assume that no more results are available. This field is not supported if watch is true.\n\nThe server guarantees that the objects returned when using continue will be identical to issuing a single list call without a limit - that is, no objects created, modified, or deleted after the first request is issued will be included in any subsequent continued requests. This is sometimes referred to as a consistent snapshot, and ensures that a client that is using limit to receive smaller chunks of a very large result can ensure they see all possible objects. If objects are updated during a chunked list the version of the object that was present at the time the first list result was calculated is returned.",
+      "name": "limit",
+      "in": "query"
+     },
+     {
+      "uniqueItems": true,
+      "type": "string",
+      "description": "name of the AuditSink",
+      "name": "name",
+      "in": "path",
+      "required": true
+     },
+     {
+      "uniqueItems": true,
+      "type": "string",
+      "description": "If 'true', then the output is pretty printed.",
+      "name": "pretty",
+      "in": "query"
+     },
+     {
+      "uniqueItems": true,
+      "type": "string",
+      "description": "When specified with a watch call, shows changes that occur after that particular version of a resource. Defaults to changes from the beginning of history. When specified for list: - if unset, then the result is returned from remote storage based on quorum-read flag; - if it's 0, then we simply return what we currently have in cache, no guarantee; - if set to non zero, then the result is at least as fresh as given rv.",
+      "name": "resourceVersion",
+      "in": "query"
+     },
+     {
+      "uniqueItems": true,
+      "type": "integer",
+      "description": "Timeout for the list/watch call. This limits the duration of the call, regardless of any activity or inactivity.",
+      "name": "timeoutSeconds",
+      "in": "query"
+     },
+     {
+      "uniqueItems": true,
+      "type": "boolean",
+      "description": "Watch for changes to the described resources and return them as a stream of add, update, and remove notifications. Specify resourceVersion.",
+      "name": "watch",
+      "in": "query"
+     }
+    ]
+   },
    "/apis/authentication.k8s.io/": {
     "get": {
      "description": "get information of a group",
@@ -40650,7 +41414,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -41830,7 +42593,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -43010,7 +43772,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -44223,7 +44984,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -45403,7 +46163,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -46583,7 +47342,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -47684,7 +48442,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -48838,7 +49595,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -49877,7 +50633,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -51124,7 +51879,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -51831,7 +52585,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -52810,7 +53563,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -53517,7 +54269,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -54050,7 +54801,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -55201,7 +55951,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -57792,7 +58541,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -58831,7 +59579,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -59634,7 +60381,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -60753,7 +61499,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -61254,7 +61999,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -61763,7 +62507,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -62280,7 +63023,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -64134,7 +64876,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -64635,7 +65376,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -65144,7 +65884,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -65661,7 +66400,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -67515,7 +68253,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -68016,7 +68753,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -68525,7 +69261,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -69042,7 +69777,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -70945,7 +71679,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -71711,7 +72444,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -72518,7 +73250,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -73549,7 +74280,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -74315,7 +75045,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -75081,7 +75810,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -75598,7 +76326,6 @@
       {
        "name": "body",
        "in": "body",
-       "required": true,
        "schema": {
         "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.DeleteOptions"
        }
@@ -76571,12 +77298,9 @@
    },
    "io.k8s.api.admissionregistration.v1beta1.WebhookClientConfig": {
     "description": "WebhookClientConfig contains the information to make a TLS connection with the webhook",
-    "required": [
-     "caBundle"
-    ],
     "properties": {
      "caBundle": {
-      "description": "`caBundle` is a PEM encoded CA bundle which will be used to validate the webhook's server certificate. Required.",
+      "description": "`caBundle` is a PEM encoded CA bundle which will be used to validate the webhook's server certificate. If unspecified, system trust roots on the apiserver are used.",
       "type": "string",
       "format": "byte"
      },
@@ -77000,6 +77724,7 @@
      },
      "strategy": {
       "description": "The deployment strategy to use to replace existing pods with new ones.",
+      "x-kubernetes-patch-strategy": "retainKeys",
       "$ref": "#/definitions/io.k8s.api.apps.v1.DeploymentStrategy"
      },
      "template": {
@@ -77720,6 +78445,7 @@
      },
      "strategy": {
       "description": "The deployment strategy to use to replace existing pods with new ones.",
+      "x-kubernetes-patch-strategy": "retainKeys",
       "$ref": "#/definitions/io.k8s.api.apps.v1beta1.DeploymentStrategy"
      },
      "template": {
@@ -78505,6 +79231,7 @@
      },
      "strategy": {
       "description": "The deployment strategy to use to replace existing pods with new ones.",
+      "x-kubernetes-patch-strategy": "retainKeys",
       "$ref": "#/definitions/io.k8s.api.apps.v1beta2.DeploymentStrategy"
      },
      "template": {
@@ -79040,6 +79767,172 @@
      "type": {
       "description": "Type indicates the type of the StatefulSetUpdateStrategy. Default is RollingUpdate.",
       "type": "string"
+     }
+    }
+   },
+   "io.k8s.api.auditregistration.v1alpha1.AuditSink": {
+    "description": "AuditSink represents a cluster level audit sink",
+    "properties": {
+     "apiVersion": {
+      "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+      "type": "string"
+     },
+     "kind": {
+      "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+      "type": "string"
+     },
+     "metadata": {
+      "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta"
+     },
+     "spec": {
+      "description": "Spec defines the audit configuration spec",
+      "$ref": "#/definitions/io.k8s.api.auditregistration.v1alpha1.AuditSinkSpec"
+     }
+    },
+    "x-kubernetes-group-version-kind": [
+     {
+      "group": "auditregistration.k8s.io",
+      "kind": "AuditSink",
+      "version": "v1alpha1"
+     }
+    ]
+   },
+   "io.k8s.api.auditregistration.v1alpha1.AuditSinkList": {
+    "description": "AuditSinkList is a list of AuditSink items.",
+    "required": [
+     "items"
+    ],
+    "properties": {
+     "apiVersion": {
+      "description": "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
+      "type": "string"
+     },
+     "items": {
+      "description": "List of audit configurations.",
+      "type": "array",
+      "items": {
+       "$ref": "#/definitions/io.k8s.api.auditregistration.v1alpha1.AuditSink"
+      }
+     },
+     "kind": {
+      "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
+      "type": "string"
+     },
+     "metadata": {
+      "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.ListMeta"
+     }
+    },
+    "x-kubernetes-group-version-kind": [
+     {
+      "group": "auditregistration.k8s.io",
+      "kind": "AuditSinkList",
+      "version": "v1alpha1"
+     }
+    ]
+   },
+   "io.k8s.api.auditregistration.v1alpha1.AuditSinkSpec": {
+    "description": "AuditSinkSpec holds the spec for the audit sink",
+    "required": [
+     "policy",
+     "webhook"
+    ],
+    "properties": {
+     "policy": {
+      "description": "Policy defines the policy for selecting which events should be sent to the webhook required",
+      "$ref": "#/definitions/io.k8s.api.auditregistration.v1alpha1.Policy"
+     },
+     "webhook": {
+      "description": "Webhook to send events required",
+      "$ref": "#/definitions/io.k8s.api.auditregistration.v1alpha1.Webhook"
+     }
+    }
+   },
+   "io.k8s.api.auditregistration.v1alpha1.Policy": {
+    "description": "Policy defines the configuration of how audit events are logged",
+    "required": [
+     "level"
+    ],
+    "properties": {
+     "level": {
+      "description": "The Level that all requests are recorded at. available options: None, Metadata, Request, RequestResponse required",
+      "type": "string"
+     },
+     "stages": {
+      "description": "Stages is a list of stages for which events are created.",
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "io.k8s.api.auditregistration.v1alpha1.ServiceReference": {
+    "description": "ServiceReference holds a reference to Service.legacy.k8s.io",
+    "required": [
+     "namespace",
+     "name"
+    ],
+    "properties": {
+     "name": {
+      "description": "`name` is the name of the service. Required",
+      "type": "string"
+     },
+     "namespace": {
+      "description": "`namespace` is the namespace of the service. Required",
+      "type": "string"
+     },
+     "path": {
+      "description": "`path` is an optional URL path which will be sent in any request to this service.",
+      "type": "string"
+     }
+    }
+   },
+   "io.k8s.api.auditregistration.v1alpha1.Webhook": {
+    "description": "Webhook holds the configuration of the webhook",
+    "required": [
+     "clientConfig"
+    ],
+    "properties": {
+     "clientConfig": {
+      "description": "ClientConfig holds the connection parameters for the webhook required",
+      "$ref": "#/definitions/io.k8s.api.auditregistration.v1alpha1.WebhookClientConfig"
+     },
+     "throttle": {
+      "description": "Throttle holds the options for throttling the webhook",
+      "$ref": "#/definitions/io.k8s.api.auditregistration.v1alpha1.WebhookThrottleConfig"
+     }
+    }
+   },
+   "io.k8s.api.auditregistration.v1alpha1.WebhookClientConfig": {
+    "description": "WebhookClientConfig contains the information to make a connection with the webhook",
+    "properties": {
+     "caBundle": {
+      "description": "`caBundle` is a PEM encoded CA bundle which will be used to validate the webhook's server certificate. If unspecified, system trust roots on the apiserver are used.",
+      "type": "string",
+      "format": "byte"
+     },
+     "service": {
+      "description": "`service` is a reference to the service for this webhook. Either `service` or `url` must be specified.\n\nIf the webhook is running within the cluster, then you should use `service`.\n\nPort 443 will be used if it is open, otherwise it is an error.",
+      "$ref": "#/definitions/io.k8s.api.auditregistration.v1alpha1.ServiceReference"
+     },
+     "url": {
+      "description": "`url` gives the location of the webhook, in standard URL form (`[scheme://]host:port/path`). Exactly one of `url` or `service` must be specified.\n\nThe `host` should not refer to a service running in the cluster; use the `service` field instead. The host might be resolved via external DNS in some apiservers (e.g., `kube-apiserver` cannot resolve in-cluster DNS as that would be a layering violation). `host` may also be an IP address.\n\nPlease note that using `localhost` or `127.0.0.1` as a `host` is risky unless you take great care to run this webhook on all hosts which run an apiserver which might need to make calls to this webhook. Such installs are likely to be non-portable, i.e., not easy to turn up in a new cluster.\n\nThe scheme must be \"https\"; the URL must begin with \"https://\".\n\nA path is optional, and if present may be any string permissible in a URL. You may use the path to pass an arbitrary string to the webhook, for example, a cluster identifier.\n\nAttempting to use a user or basic auth e.g. \"user:password@\" is not allowed. Fragments (\"#...\") and query parameters (\"?...\") are not allowed, either.",
+      "type": "string"
+     }
+    }
+   },
+   "io.k8s.api.auditregistration.v1alpha1.WebhookThrottleConfig": {
+    "description": "WebhookThrottleConfig holds the configuration for throttling events",
+    "properties": {
+     "burst": {
+      "description": "ThrottleBurst is the maximum number of events sent at the same moment default 15 QPS",
+      "type": "integer",
+      "format": "int64"
+     },
+     "qps": {
+      "description": "ThrottleQPS maximum number of batches per second default 10 QPS",
+      "type": "integer",
+      "format": "int64"
      }
     }
    },
@@ -81890,7 +82783,7 @@
     ],
     "properties": {
      "controllerPublishSecretRef": {
-      "description": "ControllerPublishSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI ControllerPublishVolume and ControllerUnpublishVolume calls. This field is optional, and  may be empty if no secret is required. If the secret object contains more than one secret, all secrets are passed.",
+      "description": "ControllerPublishSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI ControllerPublishVolume and ControllerUnpublishVolume calls. This field is optional, and may be empty if no secret is required. If the secret object contains more than one secret, all secrets are passed.",
       "$ref": "#/definitions/io.k8s.api.core.v1.SecretReference"
      },
      "driver": {
@@ -81902,11 +82795,11 @@
       "type": "string"
      },
      "nodePublishSecretRef": {
-      "description": "NodePublishSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI NodePublishVolume and NodeUnpublishVolume calls. This field is optional, and  may be empty if no secret is required. If the secret object contains more than one secret, all secrets are passed.",
+      "description": "NodePublishSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI NodePublishVolume and NodeUnpublishVolume calls. This field is optional, and may be empty if no secret is required. If the secret object contains more than one secret, all secrets are passed.",
       "$ref": "#/definitions/io.k8s.api.core.v1.SecretReference"
      },
      "nodeStageSecretRef": {
-      "description": "NodeStageSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI NodeStageVolume and NodeStageVolume and NodeUnstageVolume calls. This field is optional, and  may be empty if no secret is required. If the secret object contains more than one secret, all secrets are passed.",
+      "description": "NodeStageSecretRef is a reference to the secret object containing sensitive information to pass to the CSI driver to complete the CSI NodeStageVolume and NodeStageVolume and NodeUnstageVolume calls. This field is optional, and may be empty if no secret is required. If the secret object contains more than one secret, all secrets are passed.",
       "$ref": "#/definitions/io.k8s.api.core.v1.SecretReference"
      },
      "readOnly": {
@@ -82408,6 +83301,11 @@
       "items": {
        "$ref": "#/definitions/io.k8s.api.core.v1.ContainerPort"
       },
+      "x-kubernetes-list-map-keys": [
+       "containerPort",
+       "protocol"
+      ],
+      "x-kubernetes-list-type": "map",
       "x-kubernetes-patch-merge-key": "containerPort",
       "x-kubernetes-patch-strategy": "merge"
      },
@@ -87324,7 +88222,7 @@
       "format": "int32"
      },
      "revisionHistoryLimit": {
-      "description": "The number of old ReplicaSets to retain to allow rollback. This is a pointer to distinguish between explicit zero and not specified.",
+      "description": "The number of old ReplicaSets to retain to allow rollback. This is a pointer to distinguish between explicit zero and not specified. This is set to the max value of int32 (i.e. 2147483647) by default, which means \"retaining all old RelicaSets\".",
       "type": "integer",
       "format": "int32"
      },
@@ -87985,6 +88883,10 @@
        "type": "string"
       }
      },
+     "runAsGroup": {
+      "description": "RunAsGroup is the strategy that will dictate the allowable RunAsGroup values that may be set. If this field is omitted, the pod's RunAsGroup can take any value. This field requires the RunAsGroup feature gate to be enabled.",
+      "$ref": "#/definitions/io.k8s.api.extensions.v1beta1.RunAsGroupStrategyOptions"
+     },
      "runAsUser": {
       "description": "runAsUser is the strategy that will dictate the allowable RunAsUser values that may be set.",
       "$ref": "#/definitions/io.k8s.api.extensions.v1beta1.RunAsUserStrategyOptions"
@@ -88195,6 +89097,25 @@
      "maxUnavailable": {
       "description": "The maximum number of pods that can be unavailable during the update. Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%). Absolute number is calculated from percentage by rounding down. This can not be 0 if MaxSurge is 0. By default, a fixed value of 1 is used. Example: when this is set to 30%, the old RC can be scaled down to 70% of desired pods immediately when the rolling update starts. Once new pods are ready, old RC can be scaled down further, followed by scaling up the new RC, ensuring that the total number of pods available at all times during the update is at least 70% of desired pods.",
       "$ref": "#/definitions/io.k8s.apimachinery.pkg.util.intstr.IntOrString"
+     }
+    }
+   },
+   "io.k8s.api.extensions.v1beta1.RunAsGroupStrategyOptions": {
+    "description": "RunAsGroupStrategyOptions defines the strategy type and any options used to create the strategy. Deprecated: use RunAsGroupStrategyOptions from policy API Group instead.",
+    "required": [
+     "rule"
+    ],
+    "properties": {
+     "ranges": {
+      "description": "ranges are the allowed ranges of gids that may be used. If you would like to force a single gid then supply a single range with the same start and end. Required for MustRunAs.",
+      "type": "array",
+      "items": {
+       "$ref": "#/definitions/io.k8s.api.extensions.v1beta1.IDRange"
+      }
+     },
+     "rule": {
+      "description": "rule is the strategy that will dictate the allowable RunAsGroup values that may be set.",
+      "type": "string"
      }
     }
    },
@@ -88893,6 +89814,10 @@
        "type": "string"
       }
      },
+     "runAsGroup": {
+      "description": "RunAsGroup is the strategy that will dictate the allowable RunAsGroup values that may be set. If this field is omitted, the pod's RunAsGroup can take any value. This field requires the RunAsGroup feature gate to be enabled.",
+      "$ref": "#/definitions/io.k8s.api.policy.v1beta1.RunAsGroupStrategyOptions"
+     },
      "runAsUser": {
       "description": "runAsUser is the strategy that will dictate the allowable RunAsUser values that may be set.",
       "$ref": "#/definitions/io.k8s.api.policy.v1beta1.RunAsUserStrategyOptions"
@@ -88911,6 +89836,25 @@
       "items": {
        "type": "string"
       }
+     }
+    }
+   },
+   "io.k8s.api.policy.v1beta1.RunAsGroupStrategyOptions": {
+    "description": "RunAsGroupStrategyOptions defines the strategy type and any options used to create the strategy.",
+    "required": [
+     "rule"
+    ],
+    "properties": {
+     "ranges": {
+      "description": "ranges are the allowed ranges of gids that may be used. If you would like to force a single gid then supply a single range with the same start and end. Required for MustRunAs.",
+      "type": "array",
+      "items": {
+       "$ref": "#/definitions/io.k8s.api.policy.v1beta1.IDRange"
+      }
+     },
+     "rule": {
+      "description": "rule is the strategy that will dictate the allowable RunAsGroup values that may be set.",
+      "type": "string"
      }
     }
    },
@@ -91627,6 +92571,11 @@
       "version": "v1beta2"
      },
      {
+      "group": "auditregistration.k8s.io",
+      "kind": "DeleteOptions",
+      "version": "v1alpha1"
+     },
+     {
       "group": "authentication.k8s.io",
       "kind": "DeleteOptions",
       "version": "v1"
@@ -91962,7 +92911,7 @@
     }
    },
    "io.k8s.apimachinery.pkg.apis.meta.v1.OwnerReference": {
-    "description": "OwnerReference contains enough information to let you identify an owning object. Currently, an owning object must be in the same namespace, so there is no namespace field.",
+    "description": "OwnerReference contains enough information to let you identify an owning object. An owning object must be in the same namespace as the dependent, or be cluster-scoped, so there is no namespace field.",
     "required": [
      "apiVersion",
      "kind",
@@ -92190,6 +93139,11 @@
       "group": "apps",
       "kind": "WatchEvent",
       "version": "v1beta2"
+     },
+     {
+      "group": "auditregistration.k8s.io",
+      "kind": "WatchEvent",
+      "version": "v1alpha1"
      },
      {
       "group": "authentication.k8s.io",
@@ -92484,7 +93438,7 @@
     ],
     "properties": {
      "caBundle": {
-      "description": "CABundle is a PEM encoded CA bundle which will be used to validate an API server's serving certificate.",
+      "description": "CABundle is a PEM encoded CA bundle which will be used to validate an API server's serving certificate. If unspecified, system trust roots on the apiserver are used.",
       "type": "string",
       "format": "byte"
      },
@@ -92643,7 +93597,7 @@
     ],
     "properties": {
      "caBundle": {
-      "description": "CABundle is a PEM encoded CA bundle which will be used to validate an API server's serving certificate.",
+      "description": "CABundle is a PEM encoded CA bundle which will be used to validate an API server's serving certificate. If unspecified, system trust roots on the apiserver are used.",
       "type": "string",
       "format": "byte"
      },

@@ -81,12 +81,18 @@ const (
 	// EtcdServerKeyName defines etcd's server key name
 	EtcdServerKeyName = "etcd/server.key"
 
+	// EtcdListenClientPort defines the port etcd listen on for client traffic
+	EtcdListenClientPort = 2379
+
 	// EtcdPeerCertAndKeyBaseName defines etcd's peer certificate and key base name
 	EtcdPeerCertAndKeyBaseName = "etcd/peer"
 	// EtcdPeerCertName defines etcd's peer certificate name
 	EtcdPeerCertName = "etcd/peer.crt"
 	// EtcdPeerKeyName defines etcd's peer key name
 	EtcdPeerKeyName = "etcd/peer.key"
+
+	// EtcdListenPeerPort defines the port etcd listen on for peer traffic
+	EtcdListenPeerPort = 2380
 
 	// EtcdHealthcheckClientCertAndKeyBaseName defines etcd's healthcheck client certificate and key base name
 	EtcdHealthcheckClientCertAndKeyBaseName = "etcd/healthcheck-client"
@@ -300,7 +306,7 @@ const (
 	KubeDNSVersion = "1.14.13"
 
 	// CoreDNSVersion is the version of CoreDNS to be deployed if it is used
-	CoreDNSVersion = "1.2.2"
+	CoreDNSVersion = "1.2.4"
 
 	// ClusterConfigurationKind is the string kind value for the ClusterConfiguration struct
 	ClusterConfigurationKind = "ClusterConfiguration"
@@ -317,6 +323,9 @@ const (
 
 	// DefaultAPIServerBindAddress is the default bind address for the API Server
 	DefaultAPIServerBindAddress = "0.0.0.0"
+
+	// MasterNumCPU is the number of CPUs required on master
+	MasterNumCPU = 2
 )
 
 var (

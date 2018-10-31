@@ -11,8 +11,8 @@ go_library(
     srcs = [
         "cluster.go",
         "common.go",
-        "masterconfig.go",
-        "nodeconfig.go",
+        "initconfiguration.go",
+        "joinconfiguration.go",
     ],
     importpath = "k8s.io/kubernetes/cmd/kubeadm/app/util/config",
     deps = [
@@ -25,6 +25,7 @@ go_library(
         "//cmd/kubeadm/app/util:go_default_library",
         "//pkg/util/node:go_default_library",
         "//staging/src/k8s.io/api/core/v1:go_default_library",
+        "//staging/src/k8s.io/apimachinery/pkg/api/errors:go_default_library",
         "//staging/src/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
         "//staging/src/k8s.io/apimachinery/pkg/runtime:go_default_library",
         "//staging/src/k8s.io/apimachinery/pkg/runtime/schema:go_default_library",
@@ -35,6 +36,7 @@ go_library(
         "//staging/src/k8s.io/client-go/util/cert:go_default_library",
         "//staging/src/k8s.io/cluster-bootstrap/token/util:go_default_library",
         "//vendor/github.com/golang/glog:go_default_library",
+        "//vendor/github.com/pkg/errors:go_default_library",
     ],
 )
 
@@ -43,8 +45,8 @@ go_test(
     srcs = [
         "cluster_test.go",
         "common_test.go",
-        "masterconfig_test.go",
-        "nodeconfig_test.go",
+        "initconfiguration_test.go",
+        "joinconfiguration_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":go_default_library"],

@@ -27,11 +27,11 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions/printers"
 	"k8s.io/cli-runtime/pkg/genericclioptions/resource"
 	"k8s.io/kubernetes/pkg/kubectl/cmd/set"
-	"k8s.io/kubernetes/pkg/kubectl/cmd/templates"
 	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
 	"k8s.io/kubernetes/pkg/kubectl/polymorphichelpers"
 	"k8s.io/kubernetes/pkg/kubectl/scheme"
 	"k8s.io/kubernetes/pkg/kubectl/util/i18n"
+	"k8s.io/kubernetes/pkg/kubectl/util/templates"
 )
 
 // ResumeOptions is the start of the data required to perform the operation.  As new fields are added, add them here instead of
@@ -77,11 +77,11 @@ func NewCmdRolloutResume(f cmdutil.Factory, streams genericclioptions.IOStreams)
 	validArgs := []string{"deployment"}
 
 	cmd := &cobra.Command{
-		Use: "resume RESOURCE",
+		Use:                   "resume RESOURCE",
 		DisableFlagsInUseLine: true,
-		Short:   i18n.T("Resume a paused resource"),
-		Long:    resume_long,
-		Example: resume_example,
+		Short:                 i18n.T("Resume a paused resource"),
+		Long:                  resume_long,
+		Example:               resume_example,
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f, cmd, args))
 			cmdutil.CheckErr(o.Validate())
