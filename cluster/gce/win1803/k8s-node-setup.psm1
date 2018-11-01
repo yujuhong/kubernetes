@@ -332,10 +332,12 @@ function Get-MgmtSubnet {
 }
 
 function Configure-CniNetworking {
-  # TODO(pjh): create all necessary dirs up-front in a separate function?
   Invoke-WebRequest `
-    https://github.com/Microsoft/SDN/raw/master/Kubernetes/windows/cni/wincni.exe `
-    -OutFile ${env:CNI_DIR}\wincni.exe
+    https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/windows-cni-plugins.zip `
+    -OutFile C:\${env:CNI_DIR}\windows-cni-plugins.zip
+  Expand-Archive C:\${env:CNI_DIR}\windows-cni-plugins.zip C:\${env:CNI_DIR}
+  mv C:\${env:CNI_DIR}\bin\*.exe C:\${env:CNI_DIR}\
+  rmdir C:\${env:CNI_DIR}\bin
 
   $vethIp = (Get-NetAdapter | Where-Object Name -Like "vEthernet (nat*" |`
     Get-NetIPAddress -AddressFamily IPv4).IPAddress
@@ -346,10 +348,8 @@ function Configure-CniNetworking {
   # TODO(pjh): add -Force to overwrite if exists? Or do we want to fail?
   New-Item -ItemType file ${l2bridgeConf}
 
-  Todo "switch to using win-bridge plugin instead of wincni and update l2bridge.conf if needed."
-  # https://github.com/containernetworking/plugins/tree/master/plugins/main/windows/win-bridge
-
   # TODO(pjh): validate these values against CNI config on Linux node.
+  # TODO(pjh): rename "l2bridge" to "cbr0" to match Linux?
   #
   # Explanation of the CNI config values:
   #   DNS_SERVER_IP: ...
@@ -362,8 +362,7 @@ function Configure-CniNetworking {
 '{
   "cniVersion":  "0.2.0",
   "name":  "l2bridge",
-  "type":  "wincni.exe",
-  "master":  "Ethernet",
+  "type":  "win-bridge",
   "capabilities":  {
     "portMappings":  true
   },
@@ -375,7 +374,7 @@ function Configure-CniNetworking {
       "DNS_DOMAIN"
     ]
   },
-  "AdditionalArgs":  [
+  "Policies":  [
     {
       "Name":  "EndpointPolicy",
       "Value":  {
