@@ -20,6 +20,11 @@ function InstallAndStart-OpenSSH{
   Expand-Archive c:\openssh-win32.zip -DestinationPath "C:\Program Files\OpenSSH"
   powershell.exe -ExecutionPolicy Bypass -File "C:\Program Files\OpenSSH\OpenSSH-Win32\install-sshd.ps1"
 
+  # Disable password-based authentication.
+  $sshd_config="C:\ProgramData\ssh\sshd_config"
+  (Get-Content $sshd_config).replace('#PasswordAuthentication yes', 'PasswordAuthentication no') `
+  | Set-Content $sshd_config
+
   # Configure the firewall to allow inbound SSH connections
   New-NetFirewallRule -Name sshd -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
 
