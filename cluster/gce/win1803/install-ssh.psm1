@@ -23,6 +23,7 @@ function InstallAndStart-OpenSSH{
   # Disable password-based authentication.
   $sshd_config_default="C:\Program Files\OpenSSH\OpenSSH-Win32\sshd_config_default"
   $sshd_config="C:\ProgramData\ssh\sshd_config"
+  New-Item -ItemType Directory -Force -Path "C:\ProgramData\ssh\"
   (Get-Content $sshd_config_default).replace('#PasswordAuthentication yes', 'PasswordAuthentication no') `
   | Set-Content $sshd_config
 
