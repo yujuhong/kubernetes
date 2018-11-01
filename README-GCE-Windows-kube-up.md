@@ -24,9 +24,7 @@ export CLOUDSDK_CORE_PROJECT=<your_project_name>
 
 # Build the kubernetes binaries locally. This eliminates the need to run
 # get-kube.
-# TODO(pjh): figure out how to get docker-based build working. Does kube-up
-# really need all of the release binaries built, or just kubectl?
-make bazel-build && make bazel-release
+make quick-release
 
 # Invoke kube-up.sh with these environment variables:
 #   PROJECT: text name of your GCP project.
