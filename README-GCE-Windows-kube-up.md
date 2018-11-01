@@ -17,6 +17,11 @@ rm -rf ./kubernetes/; rm -f kubernetes.tar.gz; rm -f ~/.kube/config
 # Set environment variables needed by kube-up scripts:
 source cluster/gce/kube-up-gce-windows-netd.env
 
+# Set the default gcloud project for this shell. This is optional but convenient
+# if you're working with multiple projects and don't want to repeatedly switch
+# between gcloud config configurations.
+export CLOUDSDK_CORE_PROJECT=<your_project_name>
+
 # Build the kubernetes binaries locally. This eliminates the need to run
 # get-kube.
 # TODO(pjh): figure out how to get docker-based build working. Does kube-up
@@ -26,7 +31,7 @@ make bazel-build && make bazel-release
 # Invoke kube-up.sh with these environment variables:
 #   PROJECT: text name of your GCP project.
 #   KUBERNETES_SKIP_CONFIRM: skips any kube-up prompts.
-PROJECT=<your_project_name> KUBERNETES_SKIP_CONFIRM=y ./cluster/kube-up.sh
+PROJECT=${CLOUDSDK_CORE_PROJECT} KUBERNETES_SKIP_CONFIRM=y ./cluster/kube-up.sh
 ```
 
 The result should be a Kubernetes cluster with one Linux master node, two Linux
@@ -36,7 +41,7 @@ CNI plugin and the Windows nodes will use `wincni`.
 To teardown the cluster run:
 
 ```
-PROJECT=<your_project_name> KUBERNETES_SKIP_CONFIRM=y ./cluster/kube-down.sh
+PROJECT=${CLOUDSDK_CORE_PROJECT} KUBERNETES_SKIP_CONFIRM=y ./cluster/kube-down.sh
 ```
 
 TODO(pjh): add NUM_LINUX_NODES and NUM_WINDOWS_NODES to
