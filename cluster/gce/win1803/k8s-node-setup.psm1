@@ -333,6 +333,85 @@ function Get-MgmtSubnet {
 
 function Configure-CniNetworking {
   Invoke-WebRequest `
+    https://github.com/Microsoft/SDN/raw/master/Kubernetes/windows/cni/wincni.exe `
+    -OutFile ${env:CNI_DIR}\wincni.exe
+
+  $vethIp = (Get-NetAdapter | Where-Object Name -Like "vEthernet (nat*" |`
+    Get-NetIPAddress -AddressFamily IPv4).IPAddress
+  $mgmtSubnet = Get-MgmtSubnet
+  Log "using mgmt IP ${vethIp} and mgmt subnet ${mgmtSubnet} for CNI config"
+
+  $l2bridgeConf = "${env:CNI_CONFIG_DIR}\l2bridge.conf"
+  # TODO(pjh): add -Force to overwrite if exists? Or do we want to fail?
+  New-Item -ItemType file ${l2bridgeConf}
+
+  # TODO(pjh): validate these values against CNI config on Linux node.
+  #
+  # Explanation of the CNI config values:
+  #   DNS_SERVER_IP: ...
+  #   DNS_DOMAIN: ...
+  #   CLUSTER_CIDR: TODO: validate this against Linux kube-proxy-config.yaml.
+  #   SERVER_CIDR: SERVICE_CLUSTER_IP_RANGE from kubeEnv?
+  #   MGMT_SUBNET: $mgmtSubnet.
+  #   MGMT_IP: $vethIp.
+  Set-Content ${l2bridgeConf} `
+'{
+  "cniVersion":  "0.2.0",
+  "name":  "l2bridge",
+  "type":  "wincni.exe",
+  "master":  "Ethernet",
+  "capabilities":  {
+    "portMappings":  true
+  },
+  "dns":  {
+    "Nameservers":  [
+      "DNS_SERVER_IP"
+    ],
+    "Search": [
+      "DNS_DOMAIN"
+    ]
+  },
+  "AdditionalArgs":  [
+    {
+      "Name":  "EndpointPolicy",
+      "Value":  {
+        "Type":  "OutBoundNAT",
+        "ExceptionList":  [
+          "CLUSTER_CIDR",
+          "SERVER_CIDR",
+          "MGMT_SUBNET"
+        ]
+      }
+    },
+    {
+      "Name":  "EndpointPolicy",
+      "Value":  {
+        "Type":  "ROUTE",
+        "DestinationPrefix":  "SERVER_CIDR",
+        "NeedEncap":  true
+      }
+    },
+    {
+      "Name":  "EndpointPolicy",
+      "Value":  {
+        "Type":  "ROUTE",
+        "DestinationPrefix":  "MGMT_IP/32",
+        "NeedEncap":  true
+      }
+    }
+  ]
+}'.replace('DNS_SERVER_IP', ${kubeEnv}['DNS_SERVER_IP']).`
+  replace('DNS_DOMAIN', ${kubeEnv}['DNS_DOMAIN']).`
+  replace('MGMT_IP', ${vethIp}).`
+  replace('CLUSTER_CIDR', ${kubeEnv}['CLUSTER_IP_RANGE']).`
+  replace('SERVER_CIDR', ${kubeEnv}['SERVICE_CLUSTER_IP_RANGE']).`
+  replace('MGMT_SUBNET', ${mgmtSubnet})
+
+  Log "CNI config:`n$(Get-Content -Raw ${l2bridgeConf})"
+}
+
+function Configure-WinBridgeCniNetworking {
+  Invoke-WebRequest `
     https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/windows-cni-plugins.zip `
     -OutFile ${env:CNI_DIR}\windows-cni-plugins.zip
   Expand-Archive ${env:CNI_DIR}\windows-cni-plugins.zip ${env:CNI_DIR}
