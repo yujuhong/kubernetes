@@ -334,10 +334,10 @@ function Get-MgmtSubnet {
 function Configure-CniNetworking {
   Invoke-WebRequest `
     https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/windows-cni-plugins.zip `
-    -OutFile C:\${env:CNI_DIR}\windows-cni-plugins.zip
-  Expand-Archive C:\${env:CNI_DIR}\windows-cni-plugins.zip C:\${env:CNI_DIR}
-  mv C:\${env:CNI_DIR}\bin\*.exe C:\${env:CNI_DIR}\
-  rmdir C:\${env:CNI_DIR}\bin
+    -OutFile ${env:CNI_DIR}\windows-cni-plugins.zip
+  Expand-Archive ${env:CNI_DIR}\windows-cni-plugins.zip ${env:CNI_DIR}
+  mv ${env:CNI_DIR}\bin\*.exe ${env:CNI_DIR}\
+  rmdir ${env:CNI_DIR}\bin
 
   $vethIp = (Get-NetAdapter | Where-Object Name -Like "vEthernet (nat*" |`
     Get-NetIPAddress -AddressFamily IPv4).IPAddress
