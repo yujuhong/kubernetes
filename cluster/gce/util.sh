@@ -32,6 +32,12 @@ else
   exit 1
 fi
 
+
+# Source the windows node helper. This assumes that the functions in windows
+# node-helpers should not having naming conflicts with gce/gci/node-helpers.
+source "${KUBE_ROOT}/cluster/gce/${WINDOWS_NODE_OS_DISTRIBUTION}/node-helper.sh"
+
+
 if [[ "${MASTER_OS_DISTRIBUTION}" == "trusty" || "${MASTER_OS_DISTRIBUTION}" == "gci" || "${MASTER_OS_DISTRIBUTION}" == "ubuntu" ]]; then
   source "${KUBE_ROOT}/cluster/gce/${MASTER_OS_DISTRIBUTION}/master-helper.sh"
 else
@@ -71,7 +77,18 @@ function set-node-image() {
     fi
 }
 
+function set-windows-node-image() {
+    WINDOWS_NODE_IMAGE_PROJECT="windows-cloud"
+    if [[ "${WINDOWS_NODE_OS_DISTRIBUTION}" == "win1803" ]]; then
+        WINDOWS_NODE_IMAGE_FAMILY="windows-1803-core-for-containers"
+    else
+        echo "Unknown WINDOWS_NODE_OS_DISTRIBUTION ${WINDOWS_NODE_OS_DISTRIBUTION}"
+        exit 1
+    fi
+}
+
 set-node-image
+set-windows-node-image
 
 # Verfiy cluster autoscaler configuration.
 if [[ "${ENABLE_CLUSTER_AUTOSCALER}" == "true" ]]; then
@@ -530,6 +547,16 @@ function write-node-env {
   build-kubelet-config false "${KUBE_TEMP}/node-kubelet-config.yaml"
 }
 
+function write-windows-node-env {
+  if [[ -z "${KUBERNETES_MASTER_NAME:-}" ]]; then
+    KUBERNETES_MASTER_NAME="${MASTER_NAME}"
+  fi
+
+  construct-windows-kubelet-flags false
+  build-kube-env false "${KUBE_TEMP}/windows-node-kube-env.yaml"
+  build-kubelet-config false "${KUBE_TEMP}/windows-node-kubelet-config.yaml"
+}
+
 function build-node-labels {
   local master=$1
   local node_labels=""
@@ -545,6 +572,15 @@ function build-node-labels {
     node_labels="${node_labels:+${node_labels},}${NON_MASTER_NODE_LABELS}"
   fi
   echo $node_labels
+}
+
+function build-windows-node-labels {
+  # Note: Running masters on windows is not supported yet.
+  local node_labels=""
+  if [[ -n "${NODE_LABELS:-}" ]]; then
+    node_labels="${node_labels:+${node_labels},}${NODE_LABELS}"
+  fi
+    echo $node_labels
 }
 
 # yaml-map-string-stringarray converts the encoded structure to yaml format, and echoes the result
@@ -697,6 +733,57 @@ function construct-kubelet-flags {
 
   KUBELET_ARGS="${flags}"
 }
+
+# TODO(yujuhong): clean this up.
+function construct-windows-kubelet-flags {
+  local master=$1  # unused, no Windows master yet.
+  local flags="${KUBELET_TEST_LOG_LEVEL:-"--v=2"} ${KUBELET_TEST_ARGS:-}"
+
+  # NOTE: Currently, many flags are set in the windows startup script with
+  # custom directories used for various paths, e.g., --cert-dir,
+  # --bootstrap-kubeconfig, --kubeconfig, etc.
+  # TODO: configure those flags here to avoid unnecessary inconsistency between
+  # windows and linux nodes.
+
+  flags+=" --allow-privileged=true"
+  flags+=" --cloud-provider=gce"
+  # Configure the directory that the Kubelet should use to store dynamic config checkpoints
+  flags+=" --dynamic-config-dir=/var/lib/kubelet/dynamic-config"
+
+  # Note: NODE_KUBELET_TEST_ARGS is empty in typical kube-up runs.
+  flags+=" ${NODE_KUBELET_TEST_ARGS:-}"
+
+  # Configuration of CNI plugins is currently handled completely in the windows
+  # startup scripts (e.g., see gce/win1803).
+  if [[ -n "${NON_MASQUERADE_CIDR:-}" ]]; then
+    flags+=" --non-masquerade-cidr=${NON_MASQUERADE_CIDR}"
+  fi
+  flags+=" --volume-plugin-dir=${VOLUME_PLUGIN_DIR}"
+
+  local node_labels=$(build-windows-node-labels)
+  if [[ -n "${node_labels:-}" ]]; then
+    flags+=" --node-labels=${node_labels}"
+  fi
+  if [[ -n "${NODE_TAINTS:-}" ]]; then
+    flags+=" --register-with-taints=${NODE_TAINTS}"
+  fi
+  # TODO(mtaufen): ROTATE_CERTIFICATES seems unused; delete it?
+  if [[ -n "${ROTATE_CERTIFICATES:-}" ]]; then
+    flags+=" --rotate-certificates=true"
+  fi
+  if [[ -n "${CONTAINER_RUNTIME:-}" ]]; then
+    flags+=" --container-runtime=${CONTAINER_RUNTIME}"
+  fi
+  if [[ -n "${CONTAINER_RUNTIME_ENDPOINT:-}" ]]; then
+    flags+=" --container-runtime-endpoint=${CONTAINER_RUNTIME_ENDPOINT}"
+  fi
+  if [[ -n "${MAX_PODS_PER_NODE:-}" ]]; then
+    flags+=" --max-pods=${MAX_PODS_PER_NODE}"
+  fi
+
+  KUBELET_ARGS="${flags}"
+}
+
 
 # $1: if 'true', we're rendering config for a master, else a node
 function build-kubelet-config {
@@ -1742,6 +1829,109 @@ function create-node-template() {
   done
 }
 
+# Robustly try to create an instance template.
+# $1: The name of the instance template.
+# $2: The scopes flag.
+# $3: String of comma-separated metadata entries (must all be from a file).
+# TODO: This function largely copies the create-node-template function.
+# Refactor to reuse the code.
+function create-windows-node-template() {
+  detect-project
+  detect-subnetworks
+  local template_name="$1"
+
+  # First, ensure the template doesn't exist.
+  # TODO(zmerlynn): To make this really robust, we need to parse the output and
+  #                 add retries. Just relying on a non-zero exit code doesn't
+  #                 distinguish an ephemeral failed call from a "not-exists".
+  if gcloud compute instance-templates describe "$template_name" --project "${PROJECT}" &>/dev/null; then
+    echo "Instance template ${1} already exists; deleting." >&2
+    if ! gcloud compute instance-templates delete "$template_name" --project "${PROJECT}" --quiet &>/dev/null; then
+      echo -e "${color_yellow}Failed to delete existing instance template${color_norm}" >&2
+      exit 2
+    fi
+  fi
+
+  local gcloud="gcloud"
+
+  # TODO: Support accelerators on Windows nodes.
+
+  local preemptible_minions=""
+  if [[ "${PREEMPTIBLE_NODE}" == "true" ]]; then
+    preemptible_minions="--preemptible --maintenance-policy TERMINATE"
+  fi
+
+  local local_ssds=""
+  local_ssd_ext_count=0
+  if [[ ! -z ${NODE_LOCAL_SSDS_EXT:-} ]]; then
+    IFS=";" read -r -a ssdgroups <<< "${NODE_LOCAL_SSDS_EXT:-}"
+    for ssdgroup in "${ssdgroups[@]}"
+    do
+      IFS="," read -r -a ssdopts <<< "${ssdgroup}"
+      validate-node-local-ssds-ext "${ssdopts}"
+      for i in $(seq ${ssdopts[0]}); do
+        local_ssds="$local_ssds--local-ssd=interface=${ssdopts[1]} "
+      done
+    done
+  fi
+
+  if [[ ! -z ${NODE_LOCAL_SSDS+x} ]]; then
+    # The NODE_LOCAL_SSDS check below fixes issue #49171
+    # Some versions of seq will count down from 1 if "seq 0" is specified
+    if [[ ${NODE_LOCAL_SSDS} -ge 1 ]]; then
+      for i in $(seq ${NODE_LOCAL_SSDS}); do
+        local_ssds="$local_ssds--local-ssd=interface=SCSI "
+      done
+    fi
+  fi
+
+  local network=$(make-gcloud-network-argument \
+    "${NETWORK_PROJECT}" \
+    "${REGION}" \
+    "${NETWORK}" \
+    "${SUBNETWORK:-}" \
+    "" \
+    "${ENABLE_IP_ALIASES:-}" \
+    "${IP_ALIAS_SIZE:-}")
+
+  local attempt=1
+  while true; do
+    echo "Attempt ${attempt} to create ${1}" >&2
+    if ! ${gcloud} compute instance-templates create \
+      "$template_name" \
+      --project "${PROJECT}" \
+      --machine-type "${NODE_SIZE}" \
+      --boot-disk-type "${NODE_DISK_TYPE}" \
+      --boot-disk-size "${NODE_DISK_SIZE}" \
+      --image-project="${WINDOWS_NODE_IMAGE_PROJECT}" \
+      --image-family "${WINDOWS_NODE_IMAGE_FAMILY}" \
+      --service-account "${NODE_SERVICE_ACCOUNT}" \
+      --tags "${NODE_TAG}" \
+      ${local_ssds} \
+      --region "${REGION}" \
+      ${network} \
+      ${preemptible_minions} \
+      $2 \
+      --metadata-from-file $3 >&2; then
+        if (( attempt > 5 )); then
+          echo -e "${color_red}Failed to create instance template $template_name ${color_norm}" >&2
+          exit 2
+        fi
+        echo -e "${color_yellow}Attempt ${attempt} failed to create instance template $template_name. Retrying.${color_norm}" >&2
+        attempt=$(($attempt+1))
+        sleep $(($attempt * 5))
+
+        # In case the previous attempt failed with something like a
+        # Backend Error and left the entry laying around, delete it
+        # before we try again.
+        gcloud compute instance-templates delete "$template_name" --project "${PROJECT}" &>/dev/null || true
+    else
+        break
+    fi
+  done
+}
+
+
 # Instantiate a kubernetes cluster
 #
 # Assumed vars
@@ -1767,6 +1957,7 @@ function kube-up() {
     create-subnetworks
     detect-subnetworks
     create-nodes
+    create-windows-nodes
   elif [[ ${KUBE_REPLICATE_EXISTING_MASTER:-} == "true" ]]; then
     if  [[ "${MASTER_OS_DISTRIBUTION}" != "gci" && "${MASTER_OS_DISTRIBUTION}" != "ubuntu" ]]; then
       echo "Master replication supported only for gci and ubuntu"
@@ -1790,6 +1981,7 @@ function kube-up() {
     create-nodes-firewall
     create-nodes-template
     create-nodes
+    create-windows-nodes
     check-cluster
   fi
 }
@@ -2306,11 +2498,19 @@ function create-nodes-template() {
 
   local template_name="${NODE_INSTANCE_PREFIX}-template"
   create-node-instance-template $template_name
+
+  if [[ -z "${NUM_WINDOWS_NODES}" || "${NUM_WINDOWS_NODES}" -le "0" ]]; then
+    # Don't create the windows node template if no windows nodes are to be
+    # created.
+    write-windows-node-env
+    create-windows-node-instance-template $template_name
+  fi
 }
 
 # Assumes:
 # - MAX_INSTANCES_PER_MIG
-# - NUM_NODES
+# - NUM_LINUX_NODES
+# - NUM_WINDOWS_NODES
 # exports:
 # - NUM_MIGS
 function set_num_migs() {
@@ -2320,38 +2520,39 @@ function set_num_migs() {
     echo "MAX_INSTANCES_PER_MIG cannot be negative. Assuming default 1000"
     defaulted_max_instances_per_mig=1000
   fi
-  export NUM_MIGS=$(((${NUM_NODES} + ${defaulted_max_instances_per_mig} - 1) / ${defaulted_max_instances_per_mig}))
+  export NUM_LINUX_MIGS=$(((${NUM_LINUX_NODES} + ${defaulted_max_instances_per_mig} - 1) / ${defaulted_max_instances_per_mig}))
+  export NUM_WINDOWS_MIGS=$(((${NUM_WINDOWS_NODES} + ${defaulted_max_instances_per_mig} - 1) / ${defaulted_max_instances_per_mig}))
 }
 
 # Assumes:
 # - NUM_MIGS
 # - NODE_INSTANCE_PREFIX
-# - NUM_NODES
+# - NUM_LINUX_NODES
 # - PROJECT
 # - ZONE
 function create-nodes() {
   local template_name="${NODE_INSTANCE_PREFIX}-template"
 
   if [[ -z "${HEAPSTER_MACHINE_TYPE:-}" ]]; then
-    local -r nodes="${NUM_NODES}"
+    local -r nodes="${NUM_LINUX_NODES}"
   else
     echo "Creating a special node for heapster with machine-type ${HEAPSTER_MACHINE_TYPE}"
     create-heapster-node
-    local -r nodes=$(( NUM_NODES - 1 ))
+    local -r nodes=$(( NUM_LINUX_NODES - 1 ))
   fi
 
   local instances_left=${nodes}
 
   #TODO: parallelize this loop to speed up the process
-  for ((i=1; i<=${NUM_MIGS}; i++)); do
+  for ((i=1; i<=${NUM_LINUX_MIGS}; i++)); do
     local group_name="${NODE_INSTANCE_PREFIX}-group-$i"
-    if [[ $i == ${NUM_MIGS} ]]; then
+    if [[ $i == ${NUM_LINUX_MIGS} ]]; then
       # TODO: We don't add a suffix for the last group to keep backward compatibility when there's only one MIG.
       # We should change it at some point, but note #18545 when changing this.
       group_name="${NODE_INSTANCE_PREFIX}-group"
     fi
     # Spread the remaining number of nodes evenly
-    this_mig_size=$((${instances_left} / (${NUM_MIGS}-${i}+1)))
+    this_mig_size=$((${instances_left} / (${NUM_LINUX_MIGS}-${i}+1)))
     instances_left=$((instances_left-${this_mig_size}))
 
     gcloud compute instance-groups managed \
@@ -2368,6 +2569,46 @@ function create-nodes() {
         --timeout "${MIG_WAIT_UNTIL_STABLE_TIMEOUT}" || true;
   done
 }
+
+# Assumes:
+# - NUM_WINDOWS_MIGS
+# - NODE_INSTANCE_PREFIX
+# - NUM_WINDOWS_NODES
+# - PROJECT
+# - ZONE
+function create-windows-nodes() {
+  local template_name="${NODE_INSTANCE_PREFIX}-template-windows"
+
+  local -r nodes="${NUM_WINDOWS_NODES}"
+  local instances_left=${nodes}
+
+  #TODO: parallelize this loop to speed up the process
+  for ((i=1; i<=${NUM_WINDOWS_MIGS}; i++)); do
+    local group_name="${NODE_INSTANCE_PREFIX}-windows-group-$i"
+    if [[ $i == ${NUM_WINDOWS_MIGS} ]]; then
+      # TODO: We don't add a suffix for the last group to keep backward compatibility when there's only one MIG.
+      # We should change it at some point, but note #18545 when changing this.
+      group_name="${NODE_INSTANCE_PREFIX}-windows-group"
+    fi
+    # Spread the remaining number of nodes evenly
+    this_mig_size=$((${instances_left} / (${NUM_WINDOWS_MIGS}-${i}+1)))
+    instances_left=$((instances_left-${this_mig_size}))
+
+    gcloud compute instance-groups managed \
+        create "${group_name}" \
+        --project "${PROJECT}" \
+        --zone "${ZONE}" \
+        --base-instance-name "${group_name}" \
+        --size "${this_mig_size}" \
+        --template "$template_name" || true;
+    gcloud compute instance-groups managed wait-until-stable \
+        "${group_name}" \
+        --zone "${ZONE}" \
+        --project "${PROJECT}" \
+        --timeout "${MIG_WAIT_UNTIL_WINDOWS_STABLE_TIMEOUT}" || true;
+  done
+}
+
 
 # Assumes:
 # - NODE_INSTANCE_PREFIX
@@ -2890,6 +3131,8 @@ function get-template() {
 #   REGION
 # Vars set:
 #   KUBE_RESOURCE_FOUND
+#
+# TODO: Support windows instance groups.
 function check-resources() {
   detect-project
   detect-node-names

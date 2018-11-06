@@ -29,6 +29,8 @@ RELEASE_REGION_FALLBACK=${RELEASE_REGION_FALLBACK:-false}
 REGIONAL_KUBE_ADDONS=${REGIONAL_KUBE_ADDONS:-true}
 NODE_SIZE=${NODE_SIZE:-n1-standard-2}
 NUM_NODES=${NUM_NODES:-3}
+NUM_WINDOWS_NODES=${NUM_WINDOWS_NODES:-0}
+NUM_LINUX_NODES="$((${NUM_NODES} - ${NUM_WINDOWS_NODES}))"
 MASTER_SIZE=${MASTER_SIZE:-n1-standard-$(get-master-size)}
 MASTER_MIN_CPU_ARCHITECTURE=${MASTER_MIN_CPU_ARCHITECTURE:-} # To allow choosing better architectures.
 MASTER_DISK_TYPE=pd-ssd
@@ -76,6 +78,8 @@ fi
 if [[ "${NODE_OS_DISTRIBUTION}" == "debian" ]]; then
     NODE_ACCELERATORS=""
 fi
+
+NODE_WINDOWS_OS_DISTRIBUTION=${KUBE_NODE_WINDOWS_OS_DISTRIBUTION:-win1803}
 
 # By default a cluster will be started with the master and nodes
 # on Container-optimized OS (cos, previously known as gci). If
