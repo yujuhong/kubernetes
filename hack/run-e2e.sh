@@ -10,6 +10,7 @@ set -o pipefail
 # TODO: remove this once the issue is resolved:
 # https://github.com/kubernetes/kubernetes/issues/69892
 LINUX_NODES=$(kubectl get nodes -l beta.kubernetes.io/os=linux -o name)
+LINUX_NODE_COUNT=$(echo ${LINUX_NODES} | wc -w)
 for node in $LINUX_NODES; do
   kubectl taint node $node node-under-test=false:NoSchedule
 done
