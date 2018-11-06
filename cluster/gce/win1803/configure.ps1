@@ -19,14 +19,40 @@ $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $ProgressPreference = 'SilentlyContinue'
 
+function Get-MetadataValue {
+  param (
+    [parameter(Mandatory=$true)] [string]$key,
+    [parameter(Mandatory=$false)] [string]$default
+  )
+
+  $url = "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$key"
+  try {
+    $client = New-Object Net.WebClient
+    $client.Headers.Add('Metadata-Flavor', 'Google')
+    return ($client.DownloadString($url)).Trim()
+  }
+  catch [System.Net.WebException] {
+    if ($default) {
+      return $default
+    }
+    else {
+      Write-Output "Failed to retrieve value for $key."
+      return $null
+    }
+  }
+}
+
 try {
+  $githubRepo = Get-MetadataValue 'github-repo'
+  $githubBranch = Get-MetadataValue 'github-branch'
+
   Invoke-WebRequest `
-    https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/win1803/install-ssh.psm1 `
+    https://github.com/${githubRepo}/kubernetes/raw/${githubBranch}/cluster/gce/win1803/install-ssh.psm1 `
     -OutFile C:\install-ssh.psm1
   Import-Module C:\install-ssh.psm1
 
   Invoke-WebRequest `
-    https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/win1803/k8s-node-setup.psm1 `
+    https://github.com/${githubRepo}/kubernetes/raw/${githubBranch}/cluster/gce/win1803/k8s-node-setup.psm1 `
     -OutFile C:\k8s-node-setup.psm1
   Import-Module C:\k8s-node-setup.psm1
 

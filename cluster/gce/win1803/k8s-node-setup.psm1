@@ -423,8 +423,10 @@ function Configure-CniNetworking {
 }
 
 function Configure-WinBridgeCniNetworking {
+  $githubRepo = Get-MetadataValue 'github-repo'
+  $githubBranch = Get-MetadataValue 'github-branch'
   Invoke-WebRequest `
-    https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/windows-cni-plugins.zip `
+    https://github.com/${githubRepo}/kubernetes/raw/${githubBranch}/cluster/gce/windows-cni-plugins.zip `
     -OutFile ${env:CNI_DIR}\windows-cni-plugins.zip
   Expand-Archive ${env:CNI_DIR}\windows-cni-plugins.zip ${env:CNI_DIR}
   mv ${env:CNI_DIR}\bin\*.exe ${env:CNI_DIR}\
