@@ -2,6 +2,7 @@
 
 set -o nounset
 set -o pipefail
+set -o xtrace
 
 # When running in prow, the working directory is the root of the test-infra
 # repository.
