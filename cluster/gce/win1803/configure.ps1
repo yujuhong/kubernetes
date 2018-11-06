@@ -56,6 +56,13 @@ try {
     -OutFile C:\k8s-node-setup.psm1
   Import-Module C:\k8s-node-setup.psm1
 
+  # TODO(pjh): ensure that k8s-node-setup2 is identical to k8s-node-setup, then
+  # remove the latter and rename the former.
+  $nodeSetupModule = Get-MetadataValue 'k8s-node-setup-psm1'
+  New-Item -ItemType file C:\k8s-node-setup2.psm1
+  Set-Content C:\k8s-node-setup2.psm1 $nodeSetupModule
+  #Import-Module C:\k8s-node-setup.psm1
+
   InstallAndStart-OpenSSH
   Log "Installed OpenSSH, sshd is running"
 
