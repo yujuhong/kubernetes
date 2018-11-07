@@ -45,6 +45,15 @@ PROJECT=${CLOUDSDK_CORE_PROJECT} KUBERNETES_SKIP_CONFIRM=y ./cluster/kube-down.s
 TODO(pjh): add NUM_LINUX_NODES and NUM_WINDOWS_NODES to
 kube-up-gce-windows-netd.env.
 
+## Validating the cluster
+
+Invoke this script to run a smoke test that verifies that the cluster has been
+brought up correctly:
+
+```
+cluster/gce/win1803/smoke-test.sh
+```
+
 ## Running tests against the cluster
 
 These steps are based on the
@@ -85,14 +94,6 @@ steps.
       tr -s ' ' '.' |             # coalesce spaces into .
       sed -e 's/[]\[()]/\\&/g' |  # escape brackets and parentheses
       sed -e 's/.$//g')           # remove final | added by tr
-    ```
-
-*   Verify that no system pods are attempting to run on Windows nodes, and that
-    no pods are still pending:
-
-    ```
-    # Should have no output:
-    kubectl get pods --all-namespaces -o wide | egrep "Pending|windows"
     ```
 
 *   Taint the Linux nodes so that test pods will not land on them:

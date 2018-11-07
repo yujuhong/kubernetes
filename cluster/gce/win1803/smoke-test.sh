@@ -68,7 +68,10 @@ EOF
 
 client/bin/kubectl create -f windows-iis-deployment.yaml
 
-timeout=60
+# It may take a while for the IIS pods to start running because the IIS
+# container (based on the large windowsservercore container) must be fetched on
+# the Windows nodes.
+timeout=120
 while [[ $timeout -gt 0 ]]; do
   echo "Waiting for IIS pods to become Ready"
   statuses=$(client/bin/kubectl get pods -l app=iis \
@@ -77,8 +80,8 @@ while [[ $timeout -gt 0 ]]; do
   if [[ $statuses -eq 0 ]]; then
     break
   else
-    sleep 5
-    let timeout=timeout-5
+    sleep 10
+    let timeout=timeout-10
   fi
 done
 
