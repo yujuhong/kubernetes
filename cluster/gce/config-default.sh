@@ -200,6 +200,8 @@ CUSTOM_TYPHA_DEPLOYMENT_YAML="${KUBE_CUSTOM_TYPHA_DEPLOYMENT_YAML:-}"
 
 # To avoid running netd on a node that is not configured appropriately,
 # label each Node so that the DaemonSet can run the Pods only on ready Nodes.
+# TODO(pjh): need to update this so that netd pods do not run on Windows nodes
+# when IP alias is also enabled.
 if [[ ${ENABLE_NETD:-} == "true" ]]; then
 	NON_MASTER_NODE_LABELS="${NON_MASTER_NODE_LABELS:+${NON_MASTER_NODE_LABELS},}cloud.google.com/gke-netd-ready=true"
 fi
@@ -310,7 +312,7 @@ fi
 # IP_ALIAS_SIZE is the size of the podCIDR allocated to a node.
 # IP_ALIAS_SUBNETWORK is the subnetwork to allocate from. If empty, a
 #   new subnetwork will be created for the cluster.
-ENABLE_IP_ALIASES=${KUBE_GCE_ENABLE_IP_ALIASES:-false}
+ENABLE_IP_ALIASES=${KUBE_GCE_ENABLE_IP_ALIASES:-true}
 NODE_IPAM_MODE=${KUBE_GCE_NODE_IPAM_MODE:-RangeAllocator}
 if [ ${ENABLE_IP_ALIASES} = true ]; then
   # Number of Pods that can run on this node.
