@@ -67,10 +67,10 @@ try {
   Create-PauseImage
   DownloadAndInstall-KubernetesBinaries
   Configure-CniNetworking
+  Set-PodCidr
   Create-NodePki
   Create-KubeletKubeconfig
   Create-KubeproxyKubeconfig
-  RunKubeletOnceToGet-PodCidr
   Write-Host 'Stopping before Configure-HostNetworkingService'
   Configure-HostNetworkingService
   Configure-Kubelet

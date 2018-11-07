@@ -28,6 +28,8 @@ statuses=$(client/bin/kubectl get nodes -l beta.kubernetes.io/os=windows \
 for status in $statuses; do
   if [[ $status == "False" ]]; then
     echo "ERROR: some Windows node has status != Ready"
+    echo "kubectl get nodes -l beta.kubernetes.io/os=windows"
+    client/bin/kubectl get nodes -l beta.kubernetes.io/os=windows
     exit 1
   fi
 done
@@ -37,7 +39,9 @@ windows_system_pods=$(client/bin/kubectl get pods --namespace kube-system \
   -o wide | egrep "Pending|windows" | wc -w)
 if [[ $windows_system_pods -ne 0 ]]; then
   echo "ERROR: there are kube-system pods trying to run on Windows nodes"
-  exit 1
+  echo "kubectl get pods --namespace kube-system -o wide"
+  client/bin/kubectl get pods --namespace kube-system -o wide
+  #exit 1
 fi
 echo "Verified that all system pods are running on Linux nodes"
 
@@ -89,6 +93,8 @@ if [[ $timeout -gt 0 ]]; then
   echo "All IIS pods became Ready"
 else
   echo "ERROR: Not all IIS pods became Ready"
+  echo "kubectl get pods -l app=iis"
+  client/bin/kubectl get pods -l app=iis
   client/bin/kubectl delete deployment iis-deployment
   exit 1
 fi
