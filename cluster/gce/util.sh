@@ -350,7 +350,7 @@ function detect-node-names() {
   INSTANCE_GROUPS=()
   INSTANCE_GROUPS+=($(gcloud compute instance-groups managed list \
     --project "${PROJECT}" \
-    --filter "name ~ '${NODE_INSTANCE_PREFIX}-.+' AND zone:(${ZONE})" \
+    --filter "name ~ '${NODE_INSTANCE_PREFIX}-.+' AND zone:(${ZONE}) AND NOT name ~ '-windows-'" \
     --format='value(name)' || true))
   NODE_NAMES=()
   if [[ -n "${INSTANCE_GROUPS[@]:-}" ]]; then
@@ -369,6 +369,30 @@ function detect-node-names() {
   echo "NODE_NAMES=${NODE_NAMES[*]:-}" >&2
   echo "PJH: detect-node-names: INSTANCE_GROUPS=${INSTANCE_GROUPS[*]:-}" >&2
   echo "PJH: detect-node-names: NODE_NAMES=${NODE_NAMES[*]:-}" >&2
+}
+
+# Detect nodes created in the windows minion group
+#
+# Assumed vars:
+#   NODE_INSTANCE_PREFIX
+# Vars set:
+#   NODE_NAMES
+#   INSTANCE_GROUPS
+function detect-windows-node-names() {
+  detect-project
+  INSTANCE_GROUPS=()
+  INSTANCE_GROUPS+=($(gcloud compute instance-groups managed list \
+    --project "${PROJECT}" \
+    --filter "name ~ '${NODE_INSTANCE_PREFIX}-windows-.+' AND zone:(${ZONE})" \
+    --format='value(name)' || true))
+  NODE_NAMES=()
+  if [[ -n "${INSTANCE_GROUPS[@]:-}" ]]; then
+    for group in "${INSTANCE_GROUPS[@]}"; do
+      NODE_NAMES+=($(gcloud compute instance-groups managed list-instances \
+        "${group}" --zone "${ZONE}" --project "${PROJECT}" \
+        --format='value(instance)'))
+    done
+  fi
 }
 
 # Detect the information about the minions

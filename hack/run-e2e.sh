@@ -34,4 +34,6 @@ EXCLUDED_TESTS=$(cat ${WORKSPACE}/exclude_conformance_test.txt |
 # The test framework will not proceed to run tests unless all nodes are ready
 # AND schedulable. Allow not-ready nodes since we make Linux nodes
 # unschedulable.
-./hack/ginkgo-e2e.sh $@ --report-dir=${ARTIFACTS} --disable-log-dump=true --allowed-not-ready-nodes=${LINUX_NODE_COUNT} --ginkgo.skip=${EXCLUDED_TESTS}
+# Do not set --disable-log-dump because upstream cannot handle dumping logs
+# from windows nodes yet.
+./hack/ginkgo-e2e.sh $@ --report-dir=${ARTIFACTS} --allowed-not-ready-nodes=${LINUX_NODE_COUNT} --ginkgo.skip=${EXCLUDED_TESTS}
