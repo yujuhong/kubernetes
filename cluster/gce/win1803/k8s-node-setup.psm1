@@ -877,7 +877,7 @@ function Start-WorkerServices {
     # Windows images are large and we don't have gcri mirrors yet. Allow
     # longer pull progress deadline.
     "--image-pull-progress-deadline=5m",
-    "--enable-debugging-handlers"
+    "--enable-debugging-handlers=true"
 
     # These flags come from Microsoft/SDN, not sure what they do or if
     # they're needed.
