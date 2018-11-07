@@ -21,6 +21,8 @@
 set -o errexit
 set -o nounset
 set -o pipefail
+# TODO: remove this once we no longer to debug log-dump.
+set -o xtrace
 
 readonly report_dir="${1:-_artifacts}"
 readonly gcs_artifacts_dir="${2:-}"
@@ -51,6 +53,9 @@ readonly kern_logfile="kern.log"
 readonly initd_logfiles="docker/log"
 readonly supervisord_logfiles="kubelet.log supervisor/supervisord.log supervisor/kubelet-stdout.log supervisor/kubelet-stderr.log supervisor/docker-stdout.log supervisor/docker-stderr.log"
 readonly systemd_services="kubelet kubelet-monitor kube-container-runtime-monitor ${LOG_DUMP_SYSTEMD_SERVICES:-docker}"
+readonly windows_node_logfiles="kubelet.log kube-proxy.log"
+# TODO: the log directory should not be hard-coded.
+readonly windows_log_dir="/etc/kubernetes/logs"
 
 # Limit the number of concurrent node connections so that we don't run out of
 # file descriptors for large clusters.
@@ -123,6 +128,28 @@ function copy-logs-from-node() {
     fi
 }
 
+# This function shouldn't ever trigger errexit, but doesn't block stderr.
+function copy-logs-from-windows-node() {
+    local -r node="${1}"
+    local -r dir="${2}"
+    local files=( ${3} )
+
+    # TODO: handle rotated logs and copying mulitple files at the same time.
+    for file in "${files}"
+    do
+      scp_file="${windows_log_dir}/${file}"
+      if [[ "${gcloud_supported_providers}" =~ "${KUBERNETES_PROVIDER}" ]]; then
+        # get-serial-port-output lets you ask for ports 1-4, but currently (11/21/2016) only port 1 contains useful information
+        gcloud compute instances get-serial-port-output --project "${PROJECT}" --zone "${ZONE}" --port 1 "${node}" > "${dir}/serial-1.log" || true
+        gcloud compute scp --recurse --project "${PROJECT}" --zone "${ZONE}" "${node}:${scp_file}" "${dir}" > /dev/null || true
+      elif  [[ -n "${use_custom_instance_list}" ]]; then
+        scp -oLogLevel=quiet -oConnectTimeout=30 -oStrictHostKeyChecking=no -i "${LOG_DUMP_SSH_KEY}" "${LOG_DUMP_SSH_USER}@${node}:${scp_file}" "${dir}" > /dev/null || true
+      else
+        echo "Unknown/unsupported cloud-provider '${KUBERNETES_PROVIDER}' and use_custom_instance_list is unset too - skipping logdump for '${node}'"
+      fi
+    done
+}
+
 # Save logs for node $1 into directory $2. Pass in any non-common files in $3.
 # Pass in any non-common systemd services in $4.
 # $3 and $4 should be a space-separated list of files.
@@ -188,6 +215,14 @@ function save-logs() {
 
     echo "Copying '${files}' from ${node_name}"
     copy-logs-from-node "${node_name}" "${dir}" "${files}"
+}
+
+function save-windows-logs() {
+    local -r node_name="${1}"
+    local -r dir="${2}"
+    local files="${3}"
+
+    copy-logs-from-windows-node "${node_name}" "${dir}" "${files}"
 }
 
 # Execute a command in container $2 on node $1.
@@ -304,6 +339,66 @@ function dump_nodes() {
     wait
   fi
 }
+
+function dump_windows_nodes() {
+  local node_names=()
+  if [[ -n "${1:-}" ]]; then
+    echo "Dumping logs for nodes provided as args to dump_nodes() function"
+    node_names=( "$@" )
+  elif [[ -n "${use_custom_instance_list}" ]]; then
+    echo "Dumping logs for nodes provided by log_dump_custom_get_instances() function"
+    node_names=( $(log_dump_custom_get_instances node) )
+  elif [[ ! "${node_ssh_supported_providers}" =~ "${KUBERNETES_PROVIDER}" ]]; then
+    echo "Node SSH not supported for ${KUBERNETES_PROVIDER}"
+    return
+  else
+    echo "Detecting windows nodes in the cluster"
+    detect-windows-node-names &> /dev/null
+    if [[ -n "${NODE_NAMES:-}" ]]; then
+      node_names=( "${NODE_NAMES[@]}" )
+    fi
+  fi
+
+  if [[ "${#node_names[@]}" == 0 ]]; then
+    echo "No nodes found!"
+    return
+  fi
+  echo "node names: ${node_names}"
+
+  nodes_selected_for_logs=()
+  if [[ -n "${LOGDUMP_ONLY_N_RANDOM_NODES:-}" ]]; then
+    # We randomly choose 'LOGDUMP_ONLY_N_RANDOM_NODES' many nodes for fetching logs.
+    for index in `shuf -i 0-$(( ${#node_names[*]} - 1 )) -n ${LOGDUMP_ONLY_N_RANDOM_NODES}`
+    do
+      nodes_selected_for_logs+=("${node_names[$index]}")
+    done
+  else
+    nodes_selected_for_logs=( "${node_names[@]}" )
+  fi
+
+  proc=${max_dump_processes}
+  for node_name in "${nodes_selected_for_logs[@]}"; do
+    node_dir="${report_dir}/${node_name}"
+    mkdir -p "${node_dir}"
+    # Save logs in the background. This speeds up things when there are
+    # many nodes.
+    save-windows-logs "${node_name}" "${node_dir}" "${windows_node_logfiles}" &
+
+    # We don't want to run more than ${max_dump_processes} at a time, so
+    # wait once we hit that many nodes. This isn't ideal, since one might
+    # take much longer than the others, but it should help.
+    proc=$((proc - 1))
+    if [[ proc -eq 0 ]]; then
+      proc=${max_dump_processes}
+      wait
+    fi
+  done
+  # Wait for any remaining processes.
+  if [[ proc -gt 0 && proc -lt ${max_dump_processes} ]]; then
+    wait
+  fi
+}
+
 
 # Collect names of nodes which didn't run logexporter successfully.
 # Note: This step is O(#nodes^2) as we check if each node is present in the list of succeeded nodes.
@@ -446,6 +541,7 @@ function main() {
   else
     echo "Dumping logs from nodes locally to '${report_dir}'"
     dump_nodes
+    dump_windows_nodes
   fi
 }
 
