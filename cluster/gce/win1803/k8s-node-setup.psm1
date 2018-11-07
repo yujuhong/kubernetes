@@ -873,13 +873,15 @@ function Start-WorkerServices {
     "--network-plugin=cni",
     "--cni-bin-dir=${env:CNI_DIR}",
     "--cni-conf-dir=${env:CNI_CONFIG_DIR}",
-    "--pod-manifest-path=${env:MANIFESTS_DIR}"
+    "--pod-manifest-path=${env:MANIFESTS_DIR}",
+    # Windows images are large and we don't have gcri mirrors yet. Allow
+    # longer pull progress deadline.
+    "--image-pull-progress-deadline=5m",
+    "--enable-debugging-handlers"
 
     # These flags come from Microsoft/SDN, not sure what they do or if
     # they're needed.
     # --log-dir=c:\k --logtostderr=false
-    #"--enable-debugging-handlers",
-    #"--image-pull-progress-deadline=20m",
   )
   $kubeletArgs = ${kubeletArgs} + ${additionalArgList}
 
