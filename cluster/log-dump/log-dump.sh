@@ -290,7 +290,7 @@ function dump_nodes() {
     return
   else
     echo "Detecting nodes in the cluster"
-    detect-node-names &> /dev/null
+    detect-linux-node-names &> /dev/null
     if [[ -n "${NODE_NAMES:-}" ]]; then
       node_names=( "${NODE_NAMES[@]}" )
     fi
