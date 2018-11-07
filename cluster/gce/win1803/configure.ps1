@@ -43,25 +43,15 @@ function Get-MetadataValue {
 }
 
 try {
-  $githubRepo = Get-MetadataValue 'github-repo'
-  $githubBranch = Get-MetadataValue 'github-branch'
-
-  Invoke-WebRequest `
-    https://github.com/${githubRepo}/kubernetes/raw/${githubBranch}/cluster/gce/win1803/install-ssh.psm1 `
-    -OutFile C:\install-ssh.psm1
-  Import-Module C:\install-ssh.psm1
-
-  Invoke-WebRequest `
-    https://github.com/${githubRepo}/kubernetes/raw/${githubBranch}/cluster/gce/win1803/k8s-node-setup.psm1 `
-    -OutFile C:\k8s-node-setup.psm1
+  $nodeSetupModule = Get-MetadataValue 'k8s-node-setup-psm1'
+  New-Item -ItemType file C:\k8s-node-setup.psm1
+  Set-Content C:\k8s-node-setup.psm1 $nodeSetupModule
   Import-Module C:\k8s-node-setup.psm1
 
-  # TODO(pjh): ensure that k8s-node-setup2 is identical to k8s-node-setup, then
-  # remove the latter and rename the former.
-  $nodeSetupModule = Get-MetadataValue 'k8s-node-setup-psm1'
-  New-Item -ItemType file C:\k8s-node-setup2.psm1
-  Set-Content C:\k8s-node-setup2.psm1 $nodeSetupModule
-  #Import-Module C:\k8s-node-setup.psm1
+  $installSshModule = Get-MetadataValue 'install-ssh-psm1'
+  New-Item -ItemType file C:\install-ssh.psm1
+  Set-Content C:\install-ssh.psm1 $installSshModule
+  Import-Module C:\install-ssh.psm1
 
   InstallAndStart-OpenSSH
   Log "Installed OpenSSH, sshd is running"
