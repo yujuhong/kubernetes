@@ -59,7 +59,7 @@ function StartJob-WriteSSHKeys{
   Start-Job -Name Write-Keys -ScriptBlock {
     # TODO: log and report errors.
     while($true) {
-      $response = Invoke-RestMethod -Headers @{"Metadata-Flavor"="Google"} -Uri "http://metadata.google.internal/computeMetadata/v1/project/attributes/sshKeys"
+      $response = Invoke-RestMethod -Headers @{"Metadata-Flavor"="Google"} -Uri "http://metadata.google.internal/computeMetadata/v1/project/attributes/ssh-keys"
       # Split the response into lines; handle both '\r\n' and '\n' line breaks.
       $tuples = $response -split '\r?\n'
       foreach($line in $tuples) {
