@@ -2009,6 +2009,16 @@ function create-network() {
       --source-ranges "0.0.0.0/0" \
       --allow "tcp:22" &
   fi
+
+  # Open up TCP 3389 to allow RDP connections.
+  # TODO: Only do this for windows nodes.
+  if ! gcloud compute firewall-rules describe --project "${NETWORK_PROJECT}" "${NETWORK}-default-rdp" &>/dev/null; then
+    gcloud compute firewall-rules create "${NETWORK}-default-rdp" \
+      --project "${NETWORK_PROJECT}" \
+      --network "${NETWORK}" \
+      --source-ranges "0.0.0.0/0" \
+      --allow "tcp:3389" &
+  fi
 }
 
 function expand-default-subnetwork() {
