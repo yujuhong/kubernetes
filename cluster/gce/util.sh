@@ -364,9 +364,12 @@ function detect-node-names() {
   if [[ -n "${HEAPSTER_MACHINE_TYPE:-}" ]]; then
     NODE_NAMES+=("${NODE_INSTANCE_PREFIX}-heapster")
   fi
+
+  echo "INSTANCE_GROUPS=${INSTANCE_GROUPS[*]:-}" >&2
+  echo "NODE_NAMES=${NODE_NAMES[*]:-}" >&2
 }
 
-# Detect minions created in the minion group
+# Detect Linux minions created in the minion group
 #
 # Assumed vars:
 #   NODE_INSTANCE_PREFIX
@@ -393,10 +396,8 @@ function detect-linux-node-names() {
     NODE_NAMES+=("${NODE_INSTANCE_PREFIX}-heapster")
   fi
 
-  echo "INSTANCE_GROUPS=${INSTANCE_GROUPS[*]:-}" >&2
-  echo "NODE_NAMES=${NODE_NAMES[*]:-}" >&2
-  echo "PJH: detect-node-names: INSTANCE_GROUPS=${INSTANCE_GROUPS[*]:-}" >&2
-  echo "PJH: detect-node-names: NODE_NAMES=${NODE_NAMES[*]:-}" >&2
+  echo "Linux INSTANCE_GROUPS=${INSTANCE_GROUPS[*]:-}" >&2
+  echo "Linux NODE_NAMES=${NODE_NAMES[*]:-}" >&2
 }
 
 # Detect nodes created in the windows minion group
@@ -421,6 +422,9 @@ function detect-windows-node-names() {
         --format='value(instance)'))
     done
   fi
+
+  echo "Windows INSTANCE_GROUPS=${INSTANCE_GROUPS[*]:-}" >&2
+  echo "Windows NODE_NAMES=${NODE_NAMES[*]:-}" >&2
 }
 
 # Detect the information about the minions
@@ -3140,7 +3144,6 @@ function check-resources() {
     return 1
   fi
 
-  # TODO(pjh): this won't find the -windows template, will it?
   if gcloud compute instance-templates describe --project "${PROJECT}" "${NODE_INSTANCE_PREFIX}-template" &>/dev/null; then
     KUBE_RESOURCE_FOUND="Instance template ${NODE_INSTANCE_PREFIX}-template"
     return 1
