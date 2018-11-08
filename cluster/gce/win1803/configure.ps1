@@ -56,8 +56,8 @@ try {
   InstallAndStart-OpenSSH
   Log "Installed OpenSSH, sshd is running"
 
-  StartJob-WriteSSHKeys
-  Log "Started job to write SSH keys"
+  StartProcess-WriteSshKeys
+  Log "Started background process to write SSH keys"
 
   Set-EnvironmentVars
   Set-PrerequisiteOptions
