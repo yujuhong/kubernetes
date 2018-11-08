@@ -36,4 +36,4 @@ EXCLUDED_TESTS=$(cat ${WORKSPACE}/exclude_conformance_test.txt |
 # unschedulable.
 # Do not set --disable-log-dump because upstream cannot handle dumping logs
 # from windows nodes yet.
-./hack/ginkgo-e2e.sh $@ --report-dir=${ARTIFACTS} --allowed-not-ready-nodes=${LINUX_NODE_COUNT} --ginkgo.skip=${EXCLUDED_TESTS}
+./hack/ginkgo-e2e.sh $@ --report-dir=${ARTIFACTS} --allowed-not-ready-nodes=${LINUX_NODE_COUNT} --ginkgo.skip="${EXCLUDED_TESTS}|\[Serial\]"
