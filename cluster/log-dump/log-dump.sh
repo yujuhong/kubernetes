@@ -343,7 +343,7 @@ function dump_nodes() {
 function dump_windows_nodes() {
   local node_names=()
   if [[ -n "${1:-}" ]]; then
-    echo "Dumping logs for nodes provided as args to dump_nodes() function"
+    echo "Dumping logs for nodes provided as args to dump_windows_nodes() function"
     node_names=( "$@" )
   elif [[ -n "${use_custom_instance_list}" ]]; then
     echo "Dumping logs for nodes provided by log_dump_custom_get_instances() function"
@@ -446,6 +446,7 @@ function dump_nodes_with_logexporter() {
     echo "Failed to create logexporter daemonset.. falling back to logdump through SSH"
     "${KUBECTL}" delete namespace "${logexporter_namespace}" || true
     dump_nodes "${NODE_NAMES[@]}"
+    # TODO(pjh): call dump_windows_nodes here too?
     return
   fi
 
@@ -499,6 +500,7 @@ function dump_nodes_with_logexporter() {
         echo "Final attempt to list marker files failed.. falling back to logdump through SSH"
         "${KUBECTL}" delete namespace "${logexporter_namespace}" || true
         dump_nodes "${NODE_NAMES[@]}"
+        # TODO(pjh): call dump_windows_nodes here too?
         return
       fi
       sleep 2
@@ -521,6 +523,7 @@ function dump_nodes_with_logexporter() {
   if [[ "${#failed_nodes[@]}" != 0 ]]; then
     echo -e "Dumping logs through SSH for the following nodes:\n${failed_nodes[@]}"
     dump_nodes "${failed_nodes[@]}"
+    # TODO(pjh): call dump_windows_nodes here too?
   fi
 }
 

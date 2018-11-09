@@ -225,9 +225,6 @@ function Create-Directories {
 }
 
 function Create-PauseImage {
-  #$winVersion = "$([System.Text.Encoding]::ASCII.GetString((`
-  #  Invoke-WebRequest -UseBasicParsing -H @{'Metadata-Flavor' = 'Google'} `
-  #  http://metadata.google.internal/computeMetadata/v1/instance/attributes/win-version).Content))"
   $winVersion = Get-MetadataValue 'win-version'
 
   mkdir -Force ${env:K8S_DIR}\pauseimage
