@@ -79,6 +79,8 @@ function StartProcess-WriteSshKeys{
 # For [System.Web.Security.Membership]::GeneratePassword():
 Add-Type -AssemblyName System.Web
 
+$pollInterval = 10
+
 while($true) {
   try {
     $response = Invoke-RestMethod -Headers @{"Metadata-Flavor"="Google"} -Uri `
@@ -87,7 +89,7 @@ while($true) {
     # Invoke-RestMethod may fail when the connection to the metadata server gets
     # disrupted while we set up container networking on the node. Just wait and
     # try again.
-    Start-Sleep -sec 60
+    Start-Sleep -sec $pollInterval
     continue
   }
   # Split the response into lines; handle both \r\n and \n line breaks.
@@ -119,6 +121,11 @@ while($true) {
     # we need to create the user first before we can put the authorized_keys
     # file in that user profile directory. The user-profile.psm1 module (NOT
     # FOR PRODUCTION USE!) has Create-NewProfile which achieves this.
+    #
+    # Run "Get-Command -Module Microsoft.PowerShell.LocalAccounts" to see the
+    # build-in commands for users and groups. For some reason the New-LocalUser
+    # command does not create the user profile directory, so we use the
+    # auxiliary user-profile.psm1 instead.
 
     $pw = [System.Web.Security.Membership]::GeneratePassword(16,2)
     try {
@@ -127,6 +134,10 @@ while($true) {
       #   "The account already exists."
       # Just catch it and ignore it.
       Create-NewProfile $username $pw -ErrorAction Stop
+
+      # Add the user to the Administrators group, otherwise we will not have
+      # privilege when we ssh.
+      Add-LocalGroupMember -Group Administrators -Member $username
     } catch {}
 
     $userDir = -join("C:\Users\", $username)
@@ -145,7 +156,7 @@ while($true) {
       Add-Content -Encoding UTF8 $keysFile $sshKey
     }
   }
-  Start-Sleep -sec 60
+  Start-Sleep -sec $pollInterval
 }'
   Log "${writeSshKeys}:`n$(Get-Content -Raw ${writeSshKeys})"
 
