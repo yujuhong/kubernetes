@@ -141,7 +141,13 @@ function copy-logs-from-windows-node() {
       if [[ "${gcloud_supported_providers}" =~ "${KUBERNETES_PROVIDER}" ]]; then
         # get-serial-port-output lets you ask for ports 1-4, but currently (11/21/2016) only port 1 contains useful information
         gcloud compute instances get-serial-port-output --project "${PROJECT}" --zone "${ZONE}" --port 1 "${node}" > "${dir}/serial-1.log" || true
-        gcloud compute scp --recurse --project "${PROJECT}" --zone "${ZONE}" "${node}:${scp_file}" "${dir}" > /dev/null || true
+        # Retry up to 3 times to allow ssh keys to be properly propgated and
+        # stored.
+        # TODO: only retry when needed!
+        for retry in {1..3}; do
+          gcloud compute scp --recurse --project "${PROJECT}" --zone "${ZONE}" "${node}:${scp_file}" "${dir}" > /dev/null || true
+          sleep 10
+        done
       elif  [[ -n "${use_custom_instance_list}" ]]; then
         scp -oLogLevel=quiet -oConnectTimeout=30 -oStrictHostKeyChecking=no -i "${LOG_DUMP_SSH_KEY}" "${LOG_DUMP_SSH_USER}@${node}:${scp_file}" "${dir}" > /dev/null || true
       else
