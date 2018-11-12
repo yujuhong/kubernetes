@@ -83,8 +83,13 @@ $pollInterval = 10
 
 while($true) {
   try {
-    $response = Invoke-RestMethod -Headers @{"Metadata-Flavor"="Google"} -Uri `
+    # Try both the new "ssh-keys" and the legacy "sshSkeys" attributes for
+    # compatibility.
+    $r1 = Invoke-RestMethod -Headers @{"Metadata-Flavor"="Google"} -Uri `
       "http://metadata.google.internal/computeMetadata/v1/project/attributes/ssh-keys"
+    $r2 = Invoke-RestMethod -Headers @{"Metadata-Flavor"="Google"} -Uri `
+      "http://metadata.google.internal/computeMetadata/v1/project/attributes/sshKeys"
+    $response=$r1 + $r2
   } catch {
     # Invoke-RestMethod may fail when the connection to the metadata server gets
     # disrupted while we set up container networking on the node. Just wait and
