@@ -145,7 +145,7 @@ function copy-logs-from-windows-node() {
         # stored.
         # TODO: only retry when needed!
         for retry in {1..3}; do
-          gcloud compute scp --verbosity=debug --recurse --project "${PROJECT}" --zone "${ZONE}" "${node}:${scp_file}" "${dir}" > /dev/null || true
+          gcloud compute scp --recurse --project "${PROJECT}" --zone "${ZONE}" "${node}:${scp_file}" "${dir}" > /dev/null || true
           sleep 10
         done
       elif  [[ -n "${use_custom_instance_list}" ]]; then
