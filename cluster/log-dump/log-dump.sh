@@ -21,8 +21,6 @@
 set -o errexit
 set -o nounset
 set -o pipefail
-# TODO: remove this once we no longer to debug log-dump.
-set -o xtrace
 
 readonly report_dir="${1:-_artifacts}"
 readonly gcs_artifacts_dir="${2:-}"
@@ -128,6 +126,12 @@ function copy-logs-from-node() {
     fi
 }
 
+function save-docker-logs-on-windows-node() {
+    local -r node="${1}"
+    # TODO: don't hard-code the log directory.
+    gcloud compute ssh --project "${PROJECT}" --zone "${ZONE}" "${node}" --command powershell --command 'powershell -command "$log=$(Get-EventLog -LogName Application -Source Docker); Set-Content "C:\etc\kubernetes\logs\docker.log" $log.Message'
+}
+
 # This function shouldn't ever trigger errexit, but doesn't block stderr.
 function copy-logs-from-windows-node() {
     local -r node="${1}"
@@ -227,7 +231,8 @@ function save-windows-logs() {
     local -r node_name="${1}"
     local -r dir="${2}"
     local files="${3}"
-
+    files="${files} docker.log"
+    save-docker-logs-on-windows-node "${node_name}"
     copy-logs-from-windows-node "${node_name}" "${dir}" "${files}"
 }
 
