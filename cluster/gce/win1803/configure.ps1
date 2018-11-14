@@ -66,12 +66,11 @@ try {
   $kubeEnv = Download-KubeEnv
   Create-PauseImage
   DownloadAndInstall-KubernetesBinaries
-  Configure-CniNetworking
   Set-PodCidr
+  Configure-CniNetworking
   Create-NodePki
   Create-KubeletKubeconfig
   Create-KubeproxyKubeconfig
-  Write-Host 'Stopping before Configure-HostNetworkingService'
   Configure-HostNetworkingService
   Configure-Kubelet
 
