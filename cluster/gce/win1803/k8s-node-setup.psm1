@@ -29,6 +29,10 @@ Export-ModuleMember -Variable infraContainer
 $gceMetadataServer = "169.254.169.254"
 # The name of the primary "physical" network adapter for the Windows VM.
 $primaryNetAdapterName = "Ethernet"
+# TODO: describe what the "management" interface is for.
+# Earlier versions of this script used "vEthernet (nat*" for the management interface, but
+# node-to-pod traffic did not work until switching to "Ethernet" instead.
+$mgmtAdapterName = "Ethernet"
 
 function Log {
   param (
@@ -326,8 +330,7 @@ ConvertTo-MaskLength
 #
 # TODO(pjh): update this to return both $addr as well as $mgmtSubnet.
 function Get-MgmtSubnet {
-  # TODO(pjh): make "vEthernet (nat*" a constant somewhere.
-  $netAdapter = Get-NetAdapter | Where-Object Name -Like "vEthernet (nat*"
+  $netAdapter = Get-NetAdapter | Where-Object Name -Like ${mgmtAdapterName}
   if (!${netAdapter}) {
     throw "Failed to find a suitable network adapter, check your network settings."
   }
@@ -355,7 +358,7 @@ function Configure-CniNetworking {
   mv ${env:CNI_DIR}\bin\*.exe ${env:CNI_DIR}\
   rmdir ${env:CNI_DIR}\bin
 
-  $vethIp = (Get-NetAdapter | Where-Object Name -Like "vEthernet (nat*" |`
+  $vethIp = (Get-NetAdapter | Where-Object Name -Like ${mgmtAdapterName} |`
     Get-NetIPAddress -AddressFamily IPv4).IPAddress
   $mgmtSubnet = Get-MgmtSubnet
   Log "using mgmt IP ${vethIp} and mgmt subnet ${mgmtSubnet} for CNI config"
