@@ -30,8 +30,9 @@ $gceMetadataServer = "169.254.169.254"
 # The name of the primary "physical" network adapter for the Windows VM.
 $primaryNetAdapterName = "Ethernet"
 # TODO: describe what the "management" interface is for.
+# Earlier versions of this script used "vEthernet (nat*" for the management interface, but
+# node-to-pod traffic did not work until switching to "Ethernet" instead.
 $mgmtAdapterName = "Ethernet"
-#$mgmtAdapterName = "vEthernet (nat*"
 
 function Log {
   param (
