@@ -29,10 +29,11 @@ Export-ModuleMember -Variable infraContainer
 $gceMetadataServer = "169.254.169.254"
 # The name of the primary "physical" network adapter for the Windows VM.
 $primaryNetAdapterName = "Ethernet"
-# TODO: describe what the "management" interface is for.
-# Earlier versions of this script used "vEthernet (nat*" for the management interface, but
-# node-to-pod traffic did not work until switching to "Ethernet" instead.
-$mgmtAdapterName = "Ethernet"
+# The "management" interface is used by the kubelet and by Windows pods to talk
+# to the rest of the Kubernetes cluster *without NAT*. This interface does not
+# exist until an initial HNS network has been created on the Windows node - see
+# Add-InitialHnsNetwork().
+$mgmtAdapterName = "vEthernet (Ethernet*"
 
 function Log {
   param (
@@ -187,7 +188,7 @@ function Set-EnvironmentVars {
     "KUBECONFIG" = "${k8sDir}\kubelet.kubeconfig"
     "BOOTSTRAP_KUBECONFIG" = "${k8sDir}\kubelet.bootstrap-kubeconfig"
     "KUBEPROXY_KUBECONFIG" = "${k8sDir}\kubeproxy.kubeconfig"
-    "KUBE_NETWORK" = "l2bridge"
+    "KUBE_NETWORK" = "l2bridge".ToLower()
     "PKI_DIR" = "${k8sDir}\pki"
     "CA_CERT_BUNDLE_PATH" = "${k8sDir}\pki\ca-certificates.crt"
     "KUBELET_CERT_PATH" = "${k8sDir}\pki\kubelet.crt"
@@ -226,6 +227,12 @@ function Create-Directories {
     "${env:PKI_DIR}")) {
     mkdir -Force $dir
   }
+}
+
+function Download-HelperScripts {
+  Invoke-WebRequest `
+    https://github.com/Microsoft/SDN/raw/master/Kubernetes/windows/hns.psm1 `
+    -OutFile ${env:K8S_DIR}\hns.psm1
 }
 
 function Create-PauseImage {
@@ -268,7 +275,7 @@ function DownloadAndInstall-KubernetesBinaries {
 # TODO(pjh): this is copied from
 # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L98.
 # See if there's a way to fetch or construct the "management subnet" so that
-# this os not needed.
+# this is not needed.
 function
 ConvertTo-DecimalIP
 {
@@ -287,7 +294,7 @@ ConvertTo-DecimalIP
 # TODO(pjh): this is copied from
 # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L98.
 # See if there's a way to fetch or construct the "management subnet" so that
-# this os not needed.
+# this is not needed.
 function
 ConvertTo-DottedDecimalIP
 {
@@ -309,7 +316,7 @@ ConvertTo-DottedDecimalIP
 # TODO(pjh): this is copied from
 # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L98.
 # See if there's a way to fetch or construct the "management subnet" so that
-# this os not needed.
+# this is not needed.
 function
 ConvertTo-MaskLength
 {
@@ -323,12 +330,7 @@ ConvertTo-MaskLength
     return $Bits.Length
 }
 
-# TODO(pjh): copied from
-# https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L98.
-# Not sure what the "Management subnet" is or why this function works the way
-# it does.
-#
-# TODO(pjh): update this to return both $addr as well as $mgmtSubnet.
+# This function will fail if Add-InitialHnsNetwork() has not been called first.
 function Get-MgmtSubnet {
   $netAdapter = Get-NetAdapter | Where-Object Name -Like ${mgmtAdapterName}
   if (!${netAdapter}) {
@@ -343,99 +345,6 @@ function Get-MgmtSubnet {
     (ConvertTo-DecimalIP ${addr}) -band (ConvertTo-DecimalIP ${mask})
   $mgmtSubnet = ConvertTo-DottedDecimalIP ${mgmtSubnet}
   return "${mgmtSubnet}/$(ConvertTo-MaskLength $mask)"
-}
-
-# $env:POD_CIDR must have been set by Set-PodCidr before calling this function.
-function Configure-CniNetworking {
-  $githubRepo = Get-MetadataValue 'github-repo'
-  $githubBranch = Get-MetadataValue 'github-branch'
-  Invoke-WebRequest `
-    https://github.com/${githubRepo}/kubernetes/raw/${githubBranch}/cluster/gce/windows-cni-plugins.zip `
-    -OutFile ${env:CNI_DIR}\windows-cni-plugins.zip
-  Expand-Archive ${env:CNI_DIR}\windows-cni-plugins.zip ${env:CNI_DIR}
-  # TODO(pjh): test that the two CNI plugins that we need, win-bridge.exe and
-  # host-local.exe (for IPAM), are present in CNI_DIR.
-  mv ${env:CNI_DIR}\bin\*.exe ${env:CNI_DIR}\
-  rmdir ${env:CNI_DIR}\bin
-
-  $vethIp = (Get-NetAdapter | Where-Object Name -Like ${mgmtAdapterName} |`
-    Get-NetIPAddress -AddressFamily IPv4).IPAddress
-  $mgmtSubnet = Get-MgmtSubnet
-  Log "using mgmt IP ${vethIp} and mgmt subnet ${mgmtSubnet} for CNI config"
-
-  $l2bridgeConf = "${env:CNI_CONFIG_DIR}\l2bridge.conf"
-  # TODO(pjh): add -Force to overwrite if exists? Or do we want to fail?
-  New-Item -ItemType file ${l2bridgeConf}
-
-  # TODO(pjh): validate these values against CNI config on Linux node.
-  # TODO(pjh): rename "l2bridge" to "cbr0" to match Linux?
-  #
-  # Explanation of the CNI config values:
-  #   POD_CIDR: ...
-  #   DNS_SERVER_IP: ...
-  #   DNS_DOMAIN: ...
-  #   CLUSTER_CIDR: TODO: validate this against Linux kube-proxy-config.yaml.
-  #   SERVER_CIDR: SERVICE_CLUSTER_IP_RANGE from kubeEnv?
-  #   MGMT_SUBNET: $mgmtSubnet.
-  #   MGMT_IP: $vethIp.
-  Set-Content ${l2bridgeConf} `
-'{
-  "cniVersion":  "0.2.0",
-  "name":  "l2bridge",
-  "type":  "win-bridge",
-  "capabilities":  {
-    "portMappings":  true
-  },
-  "ipam":  {
-    "type": "host-local",
-    "subnet": "POD_CIDR"
-  },
-  "dns":  {
-    "Nameservers":  [
-      "DNS_SERVER_IP"
-    ],
-    "Search": [
-      "DNS_DOMAIN"
-    ]
-  },
-  "Policies":  [
-    {
-      "Name":  "EndpointPolicy",
-      "Value":  {
-        "Type":  "OutBoundNAT",
-        "ExceptionList":  [
-          "CLUSTER_CIDR",
-          "SERVER_CIDR",
-          "MGMT_SUBNET"
-        ]
-      }
-    },
-    {
-      "Name":  "EndpointPolicy",
-      "Value":  {
-        "Type":  "ROUTE",
-        "DestinationPrefix":  "SERVER_CIDR",
-        "NeedEncap":  true
-      }
-    },
-    {
-      "Name":  "EndpointPolicy",
-      "Value":  {
-        "Type":  "ROUTE",
-        "DestinationPrefix":  "MGMT_IP/32",
-        "NeedEncap":  true
-      }
-    }
-  ]
-}'.replace('POD_CIDR', ${env:POD_CIDR}).`
-  replace('DNS_SERVER_IP', ${kubeEnv}['DNS_SERVER_IP']).`
-  replace('DNS_DOMAIN', ${kubeEnv}['DNS_DOMAIN']).`
-  replace('MGMT_IP', ${vethIp}).`
-  replace('CLUSTER_CIDR', ${kubeEnv}['CLUSTER_IP_RANGE']).`
-  replace('SERVER_CIDR', ${kubeEnv}['SERVICE_CLUSTER_IP_RANGE']).`
-  replace('MGMT_SUBNET', ${mgmtSubnet})
-
-  Log "CNI config:`n$(Get-Content -Raw ${l2bridgeConf})"
 }
 
 # Decodes the base64 $data string and writes it as binary to $file.
@@ -602,18 +511,30 @@ function Set-PodCidr {
   Set-CurrentShellEnvironmentVar "POD_CIDR" ${podCidr}
 }
 
-# $env:POD_CIDR must have been set by Set-PodCidr before calling this function.
+# This function adds an initial HNS network on the Windows node, which forces
+# the creation of a virtual switch and the "management" interface that will be
+# used to communicate with the rest of the Kubernetes cluster without NAT.
+function Add-InitialHnsNetwork {
+  Import-Module -Force ${env:K8S_DIR}\hns.psm1
+  # This comes from
+  # https://github.com/Microsoft/SDN/blob/master/Kubernetes/flannel/l2bridge/start.ps1#L74
+  # (or
+  # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L206).
+  Log "Creating initial HNS network to force creation of ${mgmtAdapterName} interface"
+  # Note: RDP connection will hiccup when running this command.
+  New-HNSNetwork -Type "L2Bridge" -AddressPrefix "192.168.255.0/30" `
+    -Gateway "192.168.255.1" -Name "External" -Verbose
+}
+
+# Prerequisites:
+#   $env:POD_CIDR is set (by Set-PodCidr).
+#   The "management" interface exists (Add-InitialHnsNetwork).
 function Configure-HostNetworkingService {
   $endpointName = "cbr0"
   $vnicName = "vEthernet (${endpointName})"
 
-  Verify-GceMetadataServerRouteIsPresent
-
-  # TODO: move this to install-prerequisites method.
-  Invoke-WebRequest `
-    https://github.com/Microsoft/SDN/raw/master/Kubernetes/windows/hns.psm1 `
-    -OutFile ${env:K8S_DIR}\hns.psm1
   Import-Module -Force ${env:K8S_DIR}\hns.psm1
+  Verify-GceMetadataServerRouteIsPresent
 
   # For Windows nodes the pod gateway IP address is the .1 address in the pod
   # CIDR for the host, but from inside containers it's the .2 address.
@@ -625,13 +546,15 @@ function Configure-HostNetworkingService {
 
   # Note: RDP connection will hiccup when running this command.
   Todo "update Configure-HostNetworkingService so that it checks for existing HNS network and overrides/removes it."
-  New-HNSNetwork -Type "L2Bridge" -AddressPrefix ${env:POD_CIDR} `
+  $hnsNetwork = New-HNSNetwork -Type "L2Bridge" -AddressPrefix ${env:POD_CIDR} `
     -Gateway ${podGateway} -Name ${env:KUBE_NETWORK} -Verbose
-  $hnsNetwork = Get-HnsNetwork | ? Type -EQ "L2Bridge"
+  #$hnsNetwork = Get-HnsNetwork | ? Name -eq "${env:KUBE_NETWORK}"
   $hnsEndpoint = New-HnsEndpoint -NetworkId ${hnsNetwork}.Id `
     -Name ${endpointName} -IPAddress ${podEndpointGateway} `
     -Gateway "0.0.0.0" -Verbose
   Attach-HnsHostEndpoint -EndpointID ${hnsEndpoint}.Id -CompartmentID 1 -Verbose
+  #netsh interface ipv4 set interface "vEthernet (nat)" forwarding=enabled
+  #netsh interface ipv4 set interface "vEthernet (Ethernet)" forwarding=enabled
   netsh interface ipv4 set interface "${vnicName}" forwarding=enabled
   Get-HNSPolicyList | Remove-HnsPolicyList
 
@@ -651,6 +574,101 @@ function Configure-HostNetworkingService {
   Verify-GceMetadataServerRouteIsPresent
 
   Log "Host network setup complete"
+}
+
+# Prerequisites:
+#   $env:POD_CIDR is set (by Set-PodCidr).
+#   The "management" interface exists (Add-InitialHnsNetwork).
+#   The "cbr0" HNS network for pod networking has been configured
+#     (Configure-HostNetworkingService).
+function Configure-CniNetworking {
+  $githubRepo = Get-MetadataValue 'github-repo'
+  $githubBranch = Get-MetadataValue 'github-branch'
+  Invoke-WebRequest `
+    https://github.com/${githubRepo}/kubernetes/raw/${githubBranch}/cluster/gce/windows-cni-plugins.zip `
+    -OutFile ${env:CNI_DIR}\windows-cni-plugins.zip
+  Expand-Archive ${env:CNI_DIR}\windows-cni-plugins.zip ${env:CNI_DIR}
+  # TODO(pjh): test that the two CNI plugins that we need, win-bridge.exe and
+  # host-local.exe (for IPAM), are present in CNI_DIR.
+  mv ${env:CNI_DIR}\bin\*.exe ${env:CNI_DIR}\
+  rmdir ${env:CNI_DIR}\bin
+
+  $vethIp = (Get-NetAdapter | Where-Object Name -Like ${mgmtAdapterName} |`
+    Get-NetIPAddress -AddressFamily IPv4).IPAddress
+  $mgmtSubnet = Get-MgmtSubnet
+  Log "using mgmt IP ${vethIp} and mgmt subnet ${mgmtSubnet} for CNI config"
+
+  $l2bridgeConf = "${env:CNI_CONFIG_DIR}\l2bridge.conf"
+  New-Item -ItemType file ${l2bridgeConf}
+
+  # TODO(pjh): validate these values against CNI config on Linux node.
+  #
+  # Explanation of the CNI config values:
+  #   POD_CIDR: ...
+  #   DNS_SERVER_IP: ...
+  #   DNS_DOMAIN: ...
+  #   CLUSTER_CIDR: TODO: validate this against Linux kube-proxy-config.yaml.
+  #   SERVICE_CIDR: SERVICE_CLUSTER_IP_RANGE from kubeEnv?
+  #   MGMT_SUBNET: $mgmtSubnet.
+  #   MGMT_IP: $vethIp.
+  Set-Content ${l2bridgeConf} `
+'{
+  "cniVersion":  "0.2.0",
+  "name":  "l2bridge",
+  "type":  "win-bridge",
+  "capabilities":  {
+    "portMappings":  true
+  },
+  "ipam":  {
+    "type": "host-local",
+    "subnet": "POD_CIDR"
+  },
+  "dns":  {
+    "Nameservers":  [
+      "DNS_SERVER_IP"
+    ],
+    "Search": [
+      "DNS_DOMAIN"
+    ]
+  },
+  "Policies":  [
+    {
+      "Name":  "EndpointPolicy",
+      "Value":  {
+        "Type":  "OutBoundNAT",
+        "ExceptionList":  [
+          "CLUSTER_CIDR",
+          "SERVICE_CIDR",
+          "MGMT_SUBNET"
+        ]
+      }
+    },
+    {
+      "Name":  "EndpointPolicy",
+      "Value":  {
+        "Type":  "ROUTE",
+        "DestinationPrefix":  "SERVICE_CIDR",
+        "NeedEncap":  true
+      }
+    },
+    {
+      "Name":  "EndpointPolicy",
+      "Value":  {
+        "Type":  "ROUTE",
+        "DestinationPrefix":  "MGMT_IP/32",
+        "NeedEncap":  true
+      }
+    }
+  ]
+}'.replace('POD_CIDR', ${env:POD_CIDR}).`
+  replace('DNS_SERVER_IP', ${kubeEnv}['DNS_SERVER_IP']).`
+  replace('DNS_DOMAIN', ${kubeEnv}['DNS_DOMAIN']).`
+  replace('MGMT_IP', ${vethIp}).`
+  replace('CLUSTER_CIDR', ${kubeEnv}['CLUSTER_IP_RANGE']).`
+  replace('SERVICE_CIDR', ${kubeEnv}['SERVICE_CLUSTER_IP_RANGE']).`
+  replace('MGMT_SUBNET', ${mgmtSubnet})
+
+  Log "CNI config:`n$(Get-Content -Raw ${l2bridgeConf})"
 }
 
 function Configure-Kubelet {
@@ -882,6 +900,7 @@ Export-ModuleMember -Function Set-CurrentShellEnvironmentVar
 Export-ModuleMember -Function Set-EnvironmentVars
 Export-ModuleMember -Function Set-PrerequisiteOptions
 Export-ModuleMember -Function Create-Directories
+Export-ModuleMember -Function Download-HelperScripts
 Export-ModuleMember -Function Create-PauseImage
 Export-ModuleMember -Function DownloadAndInstall-KubernetesBinaries
 Export-ModuleMember -Function Get-MgmtSubnet
@@ -890,6 +909,7 @@ Export-ModuleMember -Function Create-NodePki
 Export-ModuleMember -Function Create-KubeletKubeconfig
 Export-ModuleMember -Function Create-KubeproxyKubeconfig
 Export-ModuleMember -Function Set-PodCidr
+Export-ModuleMember -Function Add-InitialHnsNetwork
 Export-ModuleMember -Function Configure-HostNetworkingService
 Export-ModuleMember -Function Configure-Kubelet
 Export-ModuleMember -Function Start-WorkerServices
