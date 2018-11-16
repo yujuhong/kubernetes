@@ -632,8 +632,6 @@ function Configure-HostNetworkingService {
     -Name ${endpointName} -IPAddress ${podEndpointGateway} `
     -Gateway "0.0.0.0" -Verbose
   Attach-HnsHostEndpoint -EndpointID ${hnsEndpoint}.Id -CompartmentID 1 -Verbose
-  netsh interface ipv4 set interface "vEthernet (nat)" forwarding=enabled
-  netsh interface ipv4 set interface "vEthernet (Ethernet)" forwarding=enabled
   netsh interface ipv4 set interface "${vnicName}" forwarding=enabled
   Get-HNSPolicyList | Remove-HnsPolicyList
 
