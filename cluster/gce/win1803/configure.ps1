@@ -62,16 +62,18 @@ try {
   Set-EnvironmentVars
   Set-PrerequisiteOptions
   Create-Directories
+  Download-HelperScripts
 
   $kubeEnv = Download-KubeEnv
   Create-PauseImage
   DownloadAndInstall-KubernetesBinaries
-  Set-PodCidr
-  Configure-CniNetworking
   Create-NodePki
   Create-KubeletKubeconfig
   Create-KubeproxyKubeconfig
+  Set-PodCidr
+  Add-InitialHnsNetwork
   Configure-HostNetworkingService
+  Configure-CniNetworking
   Configure-Kubelet
 
   Start-WorkerServices
