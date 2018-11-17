@@ -7,6 +7,9 @@ set -o xtrace
 # When running in prow, the working directory is the root of the test-infra
 # repository.
 
+# Wait 5 minutes for the test images to be pulled onto the nodes
+sleep 5m
+
 # Taint the Linux nodes to prevent the test workloads from landing on them.
 # TODO: remove this once the issue is resolved:
 # https://github.com/kubernetes/kubernetes/issues/69892
