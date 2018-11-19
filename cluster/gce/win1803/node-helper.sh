@@ -41,6 +41,7 @@ function get-windows-node-instance-metadata-from-file {
   # kube-up.
   metadata+="windows-startup-script-ps1=${KUBE_ROOT}/cluster/gce/win${win_version}/configure.ps1,"
   metadata+="install-ssh-psm1=${KUBE_ROOT}/cluster/gce/win${win_version}/install-ssh.psm1,"
+  metadata+="prepull-images-psm1=${KUBE_ROOT}/cluster/gce/win${win_version}/prepull-images.psm1,"
   metadata+="k8s-node-setup-psm1=${KUBE_ROOT}/cluster/gce/win${win_version}/k8s-node-setup.psm1,"
   metadata+="${NODE_EXTRA_METADATA}"
   echo "${metadata}"

@@ -80,6 +80,13 @@ try {
   Write-Host 'Waiting 15 seconds for node to join cluster.'
   Start-Sleep 15
   Verify-WorkerServices
+
+  $prepullImagesModule = Get-MetadataValue 'prepull-images-psm1'
+  New-Item -ItemType file C:\prepull-images.psm1
+  Set-Content C:\prepull-images.psm1 $prepullImagesModule
+  Import-Module C:\prepull-images.psm1
+
+  Prepull-E2EImages
 }
 catch {
   Write-Host 'Exception caught in script:'
