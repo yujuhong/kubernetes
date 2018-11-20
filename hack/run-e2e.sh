@@ -20,7 +20,7 @@ for node in $LINUX_NODES; do
 done
 
 # Download and set the list of test image repositories to use.
-curl https://raw.githubusercontent.com/e2e-win/e2e-win-prow-deployment/master/repo-list.txt -o ${WORKSPACE}/repo-list.yaml
+curl https://raw.githubusercontent.com/e2e-win/e2e-win-prow-deployment/master/repo-list -o ${WORKSPACE}/repo-list.yaml
 export KUBE_TEST_REPO_LIST=${WORKSPACE}/repo-list.yaml
 
 # Download the list of tests to exclude.
