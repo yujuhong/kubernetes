@@ -759,8 +759,9 @@ function Start-WorkerServices {
     # Windows images are large and we don't have gcri mirrors yet. Allow
     # longer pull progress deadline.
     "--image-pull-progress-deadline=5m",
-    "--enable-debugging-handlers=true"
-
+    "--enable-debugging-handlers=true",
+    # Turn off kernel memory cgroup notification.
+    "--experimental-kernel-memcg-notification=false"
     # These flags come from Microsoft/SDN, not sure what they do or if
     # they're needed.
     # --log-dir=c:\k --logtostderr=false
