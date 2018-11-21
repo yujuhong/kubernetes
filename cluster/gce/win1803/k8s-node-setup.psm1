@@ -520,6 +520,14 @@ function Add-InitialHnsNetwork {
   # https://github.com/Microsoft/SDN/blob/master/Kubernetes/flannel/l2bridge/start.ps1#L74
   # (or
   # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L206).
+  #
+  # daschott noted on Slack: "L2bridge networks require an external vSwitch.
+  # The first network ("External") with hardcoded values in the script is just
+  # a placeholder to create an external vSwitch. This is purely for convenience
+  # to be able to remove/modify the actual HNS network ("cbr0") or rejoin the
+  # nodes without a network blip. Creating a vSwitch takes time, causes network
+  # blips, and it makes it more likely to hit the issue where flanneld is
+  # stuck, so we want to do this as rarely as possible."
   Log "Creating initial HNS network to force creation of ${mgmtAdapterName} interface"
   # Note: RDP connection will hiccup when running this command.
   New-HNSNetwork -Type "L2Bridge" -AddressPrefix "192.168.255.0/30" `
