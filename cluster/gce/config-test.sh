@@ -217,13 +217,15 @@ CONTROLLER_MANAGER_TEST_ARGS="${CONTROLLER_MANAGER_TEST_ARGS:-} ${TEST_CLUSTER_R
 SCHEDULER_TEST_ARGS="${SCHEDULER_TEST_ARGS:-} ${TEST_CLUSTER_API_CONTENT_TYPE}"
 KUBEPROXY_TEST_ARGS="${KUBEPROXY_TEST_ARGS:-} ${TEST_CLUSTER_API_CONTENT_TYPE}"
 
-# NON_MASTER_NODE_LABELS are labels will only be applied on non-master nodes.
-NON_MASTER_NODE_LABELS="${KUBE_NON_MASTER_NODE_LABELS:-}"
+# *_NON_MASTER_NODE_LABELS are labels will only be applied on non-master nodes.
+LINUX_NON_MASTER_NODE_LABELS="${KUBE_NON_MASTER_NODE_LABELS:-}"
+WINDOWS_NON_MASTER_NODE_LABELS="${KUBE_NON_MASTER_NODE_LABELS:-}"
 
 if [[ "${PREEMPTIBLE_MASTER}" == "true" ]]; then
     NODE_LABELS="${NODE_LABELS},cloud.google.com/gke-preemptible=true"
 elif [[ "${PREEMPTIBLE_NODE}" == "true" ]]; then
-    NON_MASTER_NODE_LABELS="${NON_MASTER_NODE_LABELS},cloud.google.com/gke-preemptible=true"
+    LINUX_NON_MASTER_NODE_LABELS="${LINUX_NON_MASTER_NODE_LABELS},cloud.google.com/gke-preemptible=true"
+    WINDOWS_NON_MASTER_NODE_LABELS="${WINDOWS_NON_MASTER_NODE_LABELS},cloud.google.com/gke-preemptible=true"
 fi
 
 # Optional: Enable netd.
@@ -234,16 +236,16 @@ CUSTOM_TYPHA_DEPLOYMENT_YAML="${KUBE_CUSTOM_TYPHA_DEPLOYMENT_YAML:-}"
 
 # To avoid running netd on a node that is not configured appropriately,
 # label each Node so that the DaemonSet can run the Pods only on ready Nodes.
-# TODO(pjh): need to update this so that netd pods do not run on Windows nodes
-# when IP alias is also enabled.
+# Windows nodes do not support netd.
 if [[ ${ENABLE_NETD:-} == "true" ]]; then
-	NON_MASTER_NODE_LABELS="${NON_MASTER_NODE_LABELS:+${NON_MASTER_NODE_LABELS},}cloud.google.com/gke-netd-ready=true"
+	LINUX_NON_MASTER_NODE_LABELS="${LINUX_NON_MASTER_NODE_LABELS:+${LINUX_NON_MASTER_NODE_LABELS},}cloud.google.com/gke-netd-ready=true"
 fi
 
 # To avoid running Calico on a node that is not configured appropriately,
 # label each Node so that the DaemonSet can run the Pods only on ready Nodes.
+# Windows nodes to not support Calico.
 if [[ ${NETWORK_POLICY_PROVIDER:-} == "calico" ]]; then
-	NON_MASTER_NODE_LABELS="${NON_MASTER_NODE_LABELS:+${NON_MASTER_NODE_LABELS},}projectcalico.org/ds-ready=true"
+	LINUX_NON_MASTER_NODE_LABELS="${LINUX_NON_MASTER_NODE_LABELS:+${LINUX_NON_MASTER_NODE_LABELS},}projectcalico.org/ds-ready=true"
 fi
 
 # Enable metadata concealment by firewalling pod traffic to the metadata server
@@ -273,7 +275,7 @@ fi
 if [[ ! -z "${NODE_ACCELERATORS}" ]]; then
     FEATURE_GATES="${FEATURE_GATES},DevicePlugins=true"
     if [[ "${NODE_ACCELERATORS}" =~ .*type=([a-zA-Z0-9-]+).* ]]; then
-        NON_MASTER_NODE_LABELS="${NON_MASTER_NODE_LABELS},cloud.google.com/gke-accelerator=${BASH_REMATCH[1]}"
+        LINUX_NON_MASTER_NODE_LABELS="${LINUX_NON_MASTER_NODE_LABELS},cloud.google.com/gke-accelerator=${BASH_REMATCH[1]}"
     fi
 fi
 
