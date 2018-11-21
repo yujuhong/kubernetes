@@ -41,7 +41,7 @@ if [[ $windows_system_pods -ne 0 ]]; then
   echo "ERROR: there are kube-system pods trying to run on Windows nodes"
   echo "kubectl get pods --namespace kube-system -o wide"
   client/bin/kubectl get pods --namespace kube-system -o wide
-  #exit 1
+  exit 1
 fi
 echo "Verified that all system pods are running on Linux nodes"
 
