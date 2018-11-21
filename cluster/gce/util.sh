@@ -615,7 +615,7 @@ function write-windows-node-env {
   build-kubelet-config false "${KUBE_TEMP}/windows-node-kubelet-config.yaml"
 }
 
-function build-node-labels {
+function build-linux-node-labels {
   local master=$1
   local node_labels=""
   if [[ "${KUBE_PROXY_DAEMONSET:-}" == "true" && "${master}" != "true" ]]; then
@@ -626,8 +626,25 @@ function build-node-labels {
   if [[ -n "${NODE_LABELS:-}" ]]; then
     node_labels="${node_labels:+${node_labels},}${NODE_LABELS}"
   fi
-  if [[ -n "${NON_MASTER_NODE_LABELS:-}" && "${master}" != "true" ]]; then
-    node_labels="${node_labels:+${node_labels},}${NON_MASTER_NODE_LABELS}"
+  if [[ -n "${LINUX_NON_MASTER_NODE_LABELS:-}" && "${master}" != "true" ]]; then
+    node_labels="${node_labels:+${node_labels},}${LINUX_NON_MASTER_NODE_LABELS}"
+  fi
+  echo $node_labels
+}
+
+function build-windows-node-labels {
+  local master="false"
+  local node_labels=""
+  if [[ "${KUBE_PROXY_DAEMONSET:-}" == "true" && "${master}" != "true" ]]; then
+    # Add kube-proxy daemonset label to node to avoid situation during cluster
+    # upgrade/downgrade when there are two instances of kube-proxy running on a node.
+    node_labels="beta.kubernetes.io/kube-proxy-ds-ready=true"
+  fi
+  if [[ -n "${NODE_LABELS:-}" ]]; then
+    node_labels="${node_labels:+${node_labels},}${NODE_LABELS}"
+  fi
+  if [[ -n "${WINDOWS_NON_MASTER_NODE_LABELS:-}" && "${master}" != "true" ]]; then
+    node_labels="${node_labels:+${node_labels},}${WINDOWS_NON_MASTER_NODE_LABELS}"
   fi
   echo $node_labels
 }
@@ -759,7 +776,7 @@ function construct-linux-kubelet-flags {
     flags+=" --non-masquerade-cidr=${NON_MASQUERADE_CIDR}"
   fi
   flags+=" --volume-plugin-dir=${VOLUME_PLUGIN_DIR}"
-  local node_labels=$(build-node-labels ${master})
+  local node_labels=$(build-linux-node-labels ${master})
   if [[ -n "${node_labels:-}" ]]; then
     flags+=" --node-labels=${node_labels}"
   fi
@@ -820,8 +837,7 @@ function construct-windows-kubelet-flags {
   fi
   #flags+=" --volume-plugin-dir=${VOLUME_PLUGIN_DIR}"
 
-  echo "TODO(pjh): fork build-node-labels for Windows"
-  local node_labels=$(build-node-labels "false")
+  local node_labels=$(build-windows-node-labels)
   if [[ -n "${node_labels:-}" ]]; then
     flags+=" --node-labels=${node_labels}"
   fi
@@ -1137,7 +1153,6 @@ EOF
     done
   fi
 
-  echo "PJH: TODO: figure out how master uses kube-env, adjust it for Windows nodes too! Looks like get-linux-node-instance-metadata sets kube-env metadata label."
   if [[ "${master}" == "true" ]]; then
     # Master-only env vars.
     cat >>$file <<EOF
@@ -1313,7 +1328,7 @@ EOF
           # TODO(kubernetes/autoscaler#718): AUTOSCALER_ENV_VARS is a hotfix for cluster autoscaler,
           # which reads the kube-env to determine the shape of a node and was broken by #60020.
           # This should be removed as soon as a more reliable source of information is available!
-          local node_labels=$(build-node-labels false)
+          local node_labels=$(build-linux-node-labels false)
           local node_taints="${NODE_TAINTS:-}"
           local autoscaler_env_vars="node_labels=${node_labels};node_taints=${node_taints}"
           cat >>$file <<EOF
