@@ -82,21 +82,22 @@ Add-Type -AssemblyName System.Web
 $pollInterval = 10
 
 while($true) {
+  $r1 = ""
+  $r2 = ""
+  # Try both the new "ssh-keys" and the legacy "sshSkeys" attributes for
+  # compatibility. The Invoke-RestMethods calls will fail when these attributes
+  # do not exist, or they may fail when the connection to the metadata server
+  # gets disrupted while we set up container networking on the node.
   try {
-    # Try both the new "ssh-keys" and the legacy "sshSkeys" attributes for
-    # compatibility.
     $r1 = Invoke-RestMethod -Headers @{"Metadata-Flavor"="Google"} -Uri `
       "http://metadata.google.internal/computeMetadata/v1/project/attributes/ssh-keys"
+  } catch {}
+  try {
     $r2 = Invoke-RestMethod -Headers @{"Metadata-Flavor"="Google"} -Uri `
       "http://metadata.google.internal/computeMetadata/v1/project/attributes/sshKeys"
-    $response=$r1 + $r2
-  } catch {
-    # Invoke-RestMethod may fail when the connection to the metadata server gets
-    # disrupted while we set up container networking on the node. Just wait and
-    # try again.
-    Start-Sleep -sec $pollInterval
-    continue
-  }
+  } catch {}
+  $response= $r1 + $r2
+
   # Split the response into lines; handle both \r\n and \n line breaks.
   $tuples = $response -split "\r?\n"
 
