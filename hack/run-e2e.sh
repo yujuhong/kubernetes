@@ -25,7 +25,8 @@ export KUBE_TEST_REPO_LIST=${WORKSPACE}/repo-list.yaml
 
 # Download the list of tests to exclude.
 curl https://raw.githubusercontent.com/e2e-win/e2e-win-prow-deployment/master/exclude_conformance_test.txt -o ${WORKSPACE}/exclude_conformance_test.txt
-EXCLUDED_TESTS=$(cat ${WORKSPACE}/exclude_conformance_test.txt |
+# Ignore lines starting with "#"
+EXCLUDED_TESTS=$(grep -v "^#" ${WORKSPACE}/exclude_conformance_test.txt |
   tr -d '\r' |                # remove Windows carriage returns
   tr -s '\n' '|' |            # coalesce newlines into |
   tr -s ' ' '.' |             # coalesce spaces into .
