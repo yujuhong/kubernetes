@@ -332,10 +332,7 @@ ConvertTo-MaskLength
 
 # This function will fail if Add-InitialHnsNetwork() has not been called first.
 function Get-MgmtSubnet {
-  $netAdapter = Get-NetAdapter | Where-Object Name -Like ${mgmtAdapterName}
-  if (!${netAdapter}) {
-    throw "Failed to find a suitable network adapter, check your network settings."
-  }
+  $netAdapter = Get-MgmtNetAdapter
 
   $addr = (Get-NetIPAddress -InterfaceAlias ${netAdapter}.ifAlias `
     -AddressFamily IPv4).IPAddress
@@ -345,6 +342,16 @@ function Get-MgmtSubnet {
     (ConvertTo-DecimalIP ${addr}) -band (ConvertTo-DecimalIP ${mask})
   $mgmtSubnet = ConvertTo-DottedDecimalIP ${mgmtSubnet}
   return "${mgmtSubnet}/$(ConvertTo-MaskLength $mask)"
+}
+
+# This function will fail if Add-InitialHnsNetwork() has not been called first.
+function Get-MgmtNetAdapter{
+  $netAdapter = Get-NetAdapter | Where-Object Name -Like ${mgmtAdapterName}
+  if (!${netAdapter}) {
+    throw "Failed to find a suitable network adapter, check your network settings."
+  }
+
+  return $netAdapter
 }
 
 # Decodes the base64 $data string and writes it as binary to $file.
@@ -557,6 +564,20 @@ function Configure-HostNetworkingService {
   #netsh interface ipv4 set interface "vEthernet (Ethernet)" forwarding=enabled
   netsh interface ipv4 set interface "${vnicName}" forwarding=enabled
   Get-HNSPolicyList | Remove-HnsPolicyList
+
+  # Add a route from the management NIC to the pod CIDR.
+  #
+  # When a packet from a Kubernetes service backend arrives on the destination
+  # Windows node, the reverse SNAT will be applied and the source address of
+  # the packet gets replaced from the pod IP to the service VIP. The packet
+  # will then leave the VM and return back through hairpinning.
+  #
+  # When IP alias is enabled, IP forwarding is disabled for anti-spoofing;
+  # the packet with the service VIP will get blocked and be lost. With this
+  # route, the packet will be routed to the pod subnetwork, and not leave the
+  # VM.
+  $mgmtNetAdapter = Get-MgmtNetAdapter
+  New-NetRoute -InterfaceAlias ${mgmtNetAdapter}.ifAlias -DestinationPrefix ${env:POD_CIDR} -NextHop "0.0.0.0" -Verbose
 
   # There is an HNS bug where the route to the GCE metadata server will be
   # removed when the HNS network is created:
