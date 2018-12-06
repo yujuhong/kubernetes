@@ -53,6 +53,7 @@ pkg_tar(
 
 # FIXME: this should be configurable/auto-detected
 PLATFORM_ARCH_STRING = "linux-amd64"
+WINDOWS_ARCH_STRING= "windows-amd64"
 
 # Included in node and server tarballs.
 filegroup(
@@ -97,6 +98,18 @@ pkg_tar(
 
 pkg_tar(
     name = "kubernetes-node-%s" % PLATFORM_ARCH_STRING,
+    srcs = [":license-targets"],
+    extension = "tar.gz",
+    mode = "0644",
+    package_dir = "kubernetes",
+    tags = ["no-cache"],
+    deps = [
+        ":_node-bin",
+    ],
+)
+
+pkg_tar(
+    name = "kubernetes-node-%s" % WINDOWS_ARCH_STRING,
     srcs = [":license-targets"],
     extension = "tar.gz",
     mode = "0644",
@@ -219,6 +232,7 @@ release_filegroup(
         ":kubernetes.tar.gz",
         ":kubernetes-client-%s.tar.gz" % PLATFORM_ARCH_STRING,
         ":kubernetes-node-%s.tar.gz" % PLATFORM_ARCH_STRING,
+        ":kubernetes-node-%s.tar.gz" % WINDOWS_ARCH_STRING,
         ":kubernetes-server-%s.tar.gz" % PLATFORM_ARCH_STRING,
         ":kubernetes-manifests.tar.gz",
         ":kubernetes-src.tar.gz",
