@@ -22,7 +22,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -39,10 +38,10 @@ import (
 	algorithmpriorities "k8s.io/kubernetes/pkg/scheduler/algorithm/priorities"
 	priorityutil "k8s.io/kubernetes/pkg/scheduler/algorithm/priorities/util"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
-	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
-	"k8s.io/kubernetes/pkg/scheduler/core/equivalence"
 	schedulerinternalcache "k8s.io/kubernetes/pkg/scheduler/internal/cache"
 	internalqueue "k8s.io/kubernetes/pkg/scheduler/internal/queue"
+	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
+	plugins "k8s.io/kubernetes/pkg/scheduler/plugins/v1alpha1"
 	schedulertesting "k8s.io/kubernetes/pkg/scheduler/testing"
 )
 
@@ -51,15 +50,15 @@ var (
 	order         = []string{"false", "true", "matches", "nopods", algorithmpredicates.MatchInterPodAffinityPred}
 )
 
-func falsePredicate(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *schedulercache.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
+func falsePredicate(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *schedulernodeinfo.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
 	return false, []algorithm.PredicateFailureReason{algorithmpredicates.ErrFakePredicate}, nil
 }
 
-func truePredicate(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *schedulercache.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
+func truePredicate(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *schedulernodeinfo.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
 	return true, nil, nil
 }
 
-func matchesPredicate(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *schedulercache.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
+func matchesPredicate(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *schedulernodeinfo.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
 	node := nodeInfo.Node()
 	if node == nil {
 		return false, nil, fmt.Errorf("node not found")
@@ -70,14 +69,14 @@ func matchesPredicate(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *s
 	return false, []algorithm.PredicateFailureReason{algorithmpredicates.ErrFakePredicate}, nil
 }
 
-func hasNoPodsPredicate(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *schedulercache.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
+func hasNoPodsPredicate(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *schedulernodeinfo.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
 	if len(nodeInfo.Pods()) == 0 {
 		return true, nil, nil
 	}
 	return false, []algorithm.PredicateFailureReason{algorithmpredicates.ErrFakePredicate}, nil
 }
 
-func numericPriority(pod *v1.Pod, nodeNameToInfo map[string]*schedulercache.NodeInfo, nodes []*v1.Node) (schedulerapi.HostPriorityList, error) {
+func numericPriority(pod *v1.Pod, nodeNameToInfo map[string]*schedulernodeinfo.NodeInfo, nodes []*v1.Node) (schedulerapi.HostPriorityList, error) {
 	result := []schedulerapi.HostPriority{}
 	for _, node := range nodes {
 		score, err := strconv.Atoi(node.Name)
@@ -92,7 +91,7 @@ func numericPriority(pod *v1.Pod, nodeNameToInfo map[string]*schedulercache.Node
 	return result, nil
 }
 
-func reverseNumericPriority(pod *v1.Pod, nodeNameToInfo map[string]*schedulercache.NodeInfo, nodes []*v1.Node) (schedulerapi.HostPriorityList, error) {
+func reverseNumericPriority(pod *v1.Pod, nodeNameToInfo map[string]*schedulernodeinfo.NodeInfo, nodes []*v1.Node) (schedulerapi.HostPriorityList, error) {
 	var maxScore float64
 	minScore := math.MaxFloat64
 	reverseResult := []schedulerapi.HostPriority{}
@@ -115,18 +114,18 @@ func reverseNumericPriority(pod *v1.Pod, nodeNameToInfo map[string]*schedulercac
 	return reverseResult, nil
 }
 
-func trueMapPriority(pod *v1.Pod, meta interface{}, nodeInfo *schedulercache.NodeInfo) (schedulerapi.HostPriority, error) {
+func trueMapPriority(pod *v1.Pod, meta interface{}, nodeInfo *schedulernodeinfo.NodeInfo) (schedulerapi.HostPriority, error) {
 	return schedulerapi.HostPriority{
 		Host:  nodeInfo.Node().Name,
 		Score: 1,
 	}, nil
 }
 
-func falseMapPriority(pod *v1.Pod, meta interface{}, nodeInfo *schedulercache.NodeInfo) (schedulerapi.HostPriority, error) {
+func falseMapPriority(pod *v1.Pod, meta interface{}, nodeInfo *schedulernodeinfo.NodeInfo) (schedulerapi.HostPriority, error) {
 	return schedulerapi.HostPriority{}, errPrioritize
 }
 
-func getNodeReducePriority(pod *v1.Pod, meta interface{}, nodeNameToInfo map[string]*schedulercache.NodeInfo, result schedulerapi.HostPriorityList) error {
+func getNodeReducePriority(pod *v1.Pod, meta interface{}, nodeNameToInfo map[string]*schedulernodeinfo.NodeInfo, result schedulerapi.HostPriorityList) error {
 	for _, host := range result {
 		if host.Host == "" {
 			return fmt.Errorf("unexpected empty host name")
@@ -134,6 +133,28 @@ func getNodeReducePriority(pod *v1.Pod, meta interface{}, nodeNameToInfo map[str
 	}
 	return nil
 }
+
+// EmptyPluginSet is a test plugin set used by the default scheduler.
+type EmptyPluginSet struct{}
+
+var _ plugins.PluginSet = EmptyPluginSet{}
+
+// ReservePlugins returns a slice of default reserve plugins.
+func (r EmptyPluginSet) ReservePlugins() []plugins.ReservePlugin {
+	return []plugins.ReservePlugin{}
+}
+
+// PrebindPlugins returns a slice of default prebind plugins.
+func (r EmptyPluginSet) PrebindPlugins() []plugins.PrebindPlugin {
+	return []plugins.PrebindPlugin{}
+}
+
+// Data returns a pointer to PluginData.
+func (r EmptyPluginSet) Data() *plugins.PluginData {
+	return &plugins.PluginData{}
+}
+
+var emptyPluginSet = &EmptyPluginSet{}
 
 func makeNodeList(nodeNames []string) []*v1.Node {
 	result := make([]*v1.Node, 0, len(nodeNames))
@@ -448,12 +469,12 @@ func TestGenericScheduler(t *testing.T) {
 
 			scheduler := NewGenericScheduler(
 				cache,
-				nil,
-				internalqueue.NewSchedulingQueue(),
+				internalqueue.NewSchedulingQueue(nil),
 				test.predicates,
 				algorithm.EmptyPredicateMetadataProducer,
 				test.prioritizers,
 				algorithm.EmptyPriorityMetadataProducer,
+				emptyPluginSet,
 				[]algorithm.SchedulerExtender{},
 				nil,
 				pvcLister,
@@ -484,12 +505,12 @@ func makeScheduler(predicates map[string]algorithm.FitPredicate, nodes []*v1.Nod
 
 	s := NewGenericScheduler(
 		cache,
-		nil,
-		internalqueue.NewSchedulingQueue(),
+		internalqueue.NewSchedulingQueue(nil),
 		predicates,
 		algorithm.EmptyPredicateMetadataProducer,
 		prioritizers,
 		algorithm.EmptyPriorityMetadataProducer,
+		emptyPluginSet,
 		nil, nil, nil, nil, false, false,
 		schedulerapi.DefaultPercentageOfNodesToScore)
 	cache.UpdateNodeNameToInfoMap(s.(*genericScheduler).cachedNodeInfoMap)
@@ -704,17 +725,17 @@ func TestZeroRequest(t *testing.T) {
 			pc := algorithm.PriorityConfig{Map: selectorSpreadPriorityMap, Reduce: selectorSpreadPriorityReduce, Weight: 1}
 			priorityConfigs = append(priorityConfigs, pc)
 
-			nodeNameToInfo := schedulercache.CreateNodeNameToInfoMap(test.pods, test.nodes)
+			nodeNameToInfo := schedulernodeinfo.CreateNodeNameToInfoMap(test.pods, test.nodes)
 
-			mataDataProducer := algorithmpriorities.NewPriorityMetadataFactory(
+			metaDataProducer := algorithmpriorities.NewPriorityMetadataFactory(
 				schedulertesting.FakeServiceLister([]*v1.Service{}),
 				schedulertesting.FakeControllerLister([]*v1.ReplicationController{}),
 				schedulertesting.FakeReplicaSetLister([]*apps.ReplicaSet{}),
 				schedulertesting.FakeStatefulSetLister([]*apps.StatefulSet{}))
-			mataData := mataDataProducer(test.pod, nodeNameToInfo)
+			metaData := metaDataProducer(test.pod, nodeNameToInfo)
 
 			list, err := PrioritizeNodes(
-				test.pod, nodeNameToInfo, mataData, priorityConfigs,
+				test.pod, nodeNameToInfo, metaData, priorityConfigs,
 				schedulertesting.FakeNodeLister(test.nodes), []algorithm.SchedulerExtender{})
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
@@ -775,7 +796,7 @@ func (n FakeNodeInfo) GetNodeInfo(nodeName string) (*v1.Node, error) {
 	return &node, nil
 }
 
-func PredicateMetadata(p *v1.Pod, nodeInfo map[string]*schedulercache.NodeInfo) algorithm.PredicateMetadata {
+func PredicateMetadata(p *v1.Pod, nodeInfo map[string]*schedulernodeinfo.NodeInfo) algorithm.PredicateMetadata {
 	return algorithmpredicates.NewPredicateMetadataFactory(schedulertesting.FakePodLister{p})(p, nodeInfo)
 }
 
@@ -959,7 +980,12 @@ func TestSelectNodesForPreemption(t *testing.T) {
 			if test.addAffinityPredicate {
 				test.predicates[algorithmpredicates.MatchInterPodAffinityPred] = algorithmpredicates.NewPodAffinityPredicate(FakeNodeInfo(*nodes[0]), schedulertesting.FakePodLister(test.pods))
 			}
-			nodeNameToInfo := schedulercache.CreateNodeNameToInfoMap(test.pods, nodes)
+			nodeNameToInfo := schedulernodeinfo.CreateNodeNameToInfoMap(test.pods, nodes)
+			// newnode simulate a case that a new node is added to the cluster, but nodeNameToInfo
+			// doesn't have it yet.
+			newnode := makeNode("newnode", 1000*5, priorityutil.DefaultMemoryRequest*5)
+			newnode.ObjectMeta.Labels = map[string]string{"hostname": "newnode"}
+			nodes = append(nodes, newnode)
 			nodeToPods, err := selectNodesForPreemption(test.pod, nodeNameToInfo, nodes, test.predicates, PredicateMetadata, nil, nil)
 			if err != nil {
 				t.Error(err)
@@ -1119,7 +1145,7 @@ func TestPickOneNodeForPreemption(t *testing.T) {
 			for _, n := range test.nodes {
 				nodes = append(nodes, makeNode(n, priorityutil.DefaultMilliCPURequest*5, priorityutil.DefaultMemoryRequest*5))
 			}
-			nodeNameToInfo := schedulercache.CreateNodeNameToInfoMap(test.pods, nodes)
+			nodeNameToInfo := schedulernodeinfo.CreateNodeNameToInfoMap(test.pods, nodes)
 			candidateNodes, _ := selectNodesForPreemption(test.pod, nodeNameToInfo, nodes, test.predicates, PredicateMetadata, nil, nil)
 			node := pickOneNodeForPreemption(candidateNodes)
 			found := false
@@ -1387,13 +1413,13 @@ func TestPreempt(t *testing.T) {
 			for _, pod := range test.pods {
 				cache.AddPod(pod)
 			}
-			cachedNodeInfoMap := map[string]*schedulercache.NodeInfo{}
+			cachedNodeInfoMap := map[string]*schedulernodeinfo.NodeInfo{}
 			for _, name := range nodeNames {
 				node := makeNode(name, 1000*5, priorityutil.DefaultMemoryRequest*5)
 				cache.AddNode(node)
 
 				// Set nodeInfo to extenders to mock extenders' cache for preemption.
-				cachedNodeInfo := schedulercache.NewNodeInfo()
+				cachedNodeInfo := schedulernodeinfo.NewNodeInfo()
 				cachedNodeInfo.SetNode(node)
 				cachedNodeInfoMap[name] = cachedNodeInfo
 			}
@@ -1405,12 +1431,12 @@ func TestPreempt(t *testing.T) {
 			}
 			scheduler := NewGenericScheduler(
 				cache,
-				nil,
-				internalqueue.NewSchedulingQueue(),
+				internalqueue.NewSchedulingQueue(nil),
 				map[string]algorithm.FitPredicate{"matches": algorithmpredicates.PodFitsResources},
 				algorithm.EmptyPredicateMetadataProducer,
 				[]algorithm.PriorityConfig{{Function: numericPriority, Weight: 1}},
 				algorithm.EmptyPriorityMetadataProducer,
+				emptyPluginSet,
 				extenders,
 				nil,
 				schedulertesting.FakePersistentVolumeClaimLister{},
@@ -1455,189 +1481,5 @@ func TestPreempt(t *testing.T) {
 			}
 			close(stop)
 		})
-	}
-}
-
-// syncingMockCache delegates method calls to an actual Cache,
-// but calls to UpdateNodeNameToInfoMap synchronize with the test.
-type syncingMockCache struct {
-	schedulerinternalcache.Cache
-	cycleStart, cacheInvalidated chan struct{}
-	once                         sync.Once
-}
-
-// UpdateNodeNameToInfoMap delegates to the real implementation, but on the first call, it
-// synchronizes with the test.
-//
-// Since UpdateNodeNameToInfoMap is one of the first steps of (*genericScheduler).Schedule, we use
-// this point to signal to the test that a scheduling cycle has started.
-func (c *syncingMockCache) UpdateNodeNameToInfoMap(infoMap map[string]*schedulercache.NodeInfo) error {
-	err := c.Cache.UpdateNodeNameToInfoMap(infoMap)
-	c.once.Do(func() {
-		c.cycleStart <- struct{}{}
-		<-c.cacheInvalidated
-	})
-	return err
-}
-
-// TestCacheInvalidationRace tests that equivalence cache invalidation is correctly
-// handled when an invalidation event happens early in a scheduling cycle. Specifically, the event
-// occurs after schedulercache is snapshotted and before equivalence cache lock is acquired.
-func TestCacheInvalidationRace(t *testing.T) {
-	// Create a predicate that returns false the first time and true on subsequent calls.
-	podWillFit := false
-	var callCount int
-	testPredicate := func(pod *v1.Pod,
-		meta algorithm.PredicateMetadata,
-		nodeInfo *schedulercache.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
-		callCount++
-		if !podWillFit {
-			podWillFit = true
-			return false, []algorithm.PredicateFailureReason{algorithmpredicates.ErrFakePredicate}, nil
-		}
-		return true, nil, nil
-	}
-
-	// Set up the mock cache.
-	cache := schedulerinternalcache.New(time.Duration(0), wait.NeverStop)
-	testNode := &v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "machine1"}}
-	cache.AddNode(testNode)
-	mockCache := &syncingMockCache{
-		Cache:            cache,
-		cycleStart:       make(chan struct{}),
-		cacheInvalidated: make(chan struct{}),
-	}
-
-	ps := map[string]algorithm.FitPredicate{"testPredicate": testPredicate}
-	algorithmpredicates.SetPredicatesOrdering([]string{"testPredicate"})
-	eCache := equivalence.NewCache(algorithmpredicates.Ordering())
-	eCache.GetNodeCache(testNode.Name)
-	// Ensure that equivalence cache invalidation happens after the scheduling cycle starts, but before
-	// the equivalence cache would be updated.
-	go func() {
-		<-mockCache.cycleStart
-		pod := &v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "new-pod", UID: "new-pod"},
-			Spec:       v1.PodSpec{NodeName: "machine1"}}
-		if err := cache.AddPod(pod); err != nil {
-			t.Errorf("Could not add pod to cache: %v", err)
-		}
-		eCache.InvalidateAllPredicatesOnNode("machine1")
-		mockCache.cacheInvalidated <- struct{}{}
-	}()
-
-	// Set up the scheduler.
-	prioritizers := []algorithm.PriorityConfig{{Map: EqualPriorityMap, Weight: 1}}
-	pvcLister := schedulertesting.FakePersistentVolumeClaimLister([]*v1.PersistentVolumeClaim{})
-	pdbLister := schedulertesting.FakePDBLister{}
-	scheduler := NewGenericScheduler(
-		mockCache,
-		eCache,
-		internalqueue.NewSchedulingQueue(),
-		ps,
-		algorithm.EmptyPredicateMetadataProducer,
-		prioritizers,
-		algorithm.EmptyPriorityMetadataProducer,
-		nil, nil, pvcLister, pdbLister,
-		true, false,
-		schedulerapi.DefaultPercentageOfNodesToScore)
-
-	// First scheduling attempt should fail.
-	nodeLister := schedulertesting.FakeNodeLister(makeNodeList([]string{"machine1"}))
-	pod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-pod"}}
-	machine, err := scheduler.Schedule(pod, nodeLister)
-	if machine != "" || err == nil {
-		t.Error("First scheduling attempt did not fail")
-	}
-
-	// Second scheduling attempt should succeed because cache was invalidated.
-	_, err = scheduler.Schedule(pod, nodeLister)
-	if err != nil {
-		t.Errorf("Second scheduling attempt failed: %v", err)
-	}
-	if callCount != 2 {
-		t.Errorf("Predicate should have been called twice. Was called %d times.", callCount)
-	}
-}
-
-// TestCacheInvalidationRace2 tests that cache invalidation is correctly handled
-// when an invalidation event happens while a predicate is running.
-func TestCacheInvalidationRace2(t *testing.T) {
-	// Create a predicate that returns false the first time and true on subsequent calls.
-	var (
-		podWillFit       = false
-		callCount        int
-		cycleStart       = make(chan struct{})
-		cacheInvalidated = make(chan struct{})
-		once             sync.Once
-	)
-	testPredicate := func(pod *v1.Pod,
-		meta algorithm.PredicateMetadata,
-		nodeInfo *schedulercache.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
-		callCount++
-		once.Do(func() {
-			cycleStart <- struct{}{}
-			<-cacheInvalidated
-		})
-		if !podWillFit {
-			podWillFit = true
-			return false, []algorithm.PredicateFailureReason{algorithmpredicates.ErrFakePredicate}, nil
-		}
-		return true, nil, nil
-	}
-
-	// Set up the mock cache.
-	cache := schedulerinternalcache.New(time.Duration(0), wait.NeverStop)
-	testNode := &v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "machine1"}}
-	cache.AddNode(testNode)
-
-	ps := map[string]algorithm.FitPredicate{"testPredicate": testPredicate}
-	algorithmpredicates.SetPredicatesOrdering([]string{"testPredicate"})
-	eCache := equivalence.NewCache(algorithmpredicates.Ordering())
-	eCache.GetNodeCache(testNode.Name)
-	// Ensure that equivalence cache invalidation happens after the scheduling cycle starts, but before
-	// the equivalence cache would be updated.
-	go func() {
-		<-cycleStart
-		pod := &v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "new-pod", UID: "new-pod"},
-			Spec:       v1.PodSpec{NodeName: "machine1"}}
-		if err := cache.AddPod(pod); err != nil {
-			t.Errorf("Could not add pod to cache: %v", err)
-		}
-		eCache.InvalidateAllPredicatesOnNode("machine1")
-		cacheInvalidated <- struct{}{}
-	}()
-
-	// Set up the scheduler.
-	prioritizers := []algorithm.PriorityConfig{{Map: EqualPriorityMap, Weight: 1}}
-	pvcLister := schedulertesting.FakePersistentVolumeClaimLister([]*v1.PersistentVolumeClaim{})
-	pdbLister := schedulertesting.FakePDBLister{}
-	scheduler := NewGenericScheduler(
-		cache,
-		eCache,
-		internalqueue.NewSchedulingQueue(),
-		ps,
-		algorithm.EmptyPredicateMetadataProducer,
-		prioritizers,
-		algorithm.EmptyPriorityMetadataProducer,
-		nil, nil, pvcLister, pdbLister, true, false,
-		schedulerapi.DefaultPercentageOfNodesToScore)
-
-	// First scheduling attempt should fail.
-	nodeLister := schedulertesting.FakeNodeLister(makeNodeList([]string{"machine1"}))
-	pod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-pod"}}
-	machine, err := scheduler.Schedule(pod, nodeLister)
-	if machine != "" || err == nil {
-		t.Error("First scheduling attempt did not fail")
-	}
-
-	// Second scheduling attempt should succeed because cache was invalidated.
-	_, err = scheduler.Schedule(pod, nodeLister)
-	if err != nil {
-		t.Errorf("Second scheduling attempt failed: %v", err)
-	}
-	if callCount != 2 {
-		t.Errorf("Predicate should have been called twice. Was called %d times.", callCount)
 	}
 }

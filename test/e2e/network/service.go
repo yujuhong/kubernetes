@@ -27,7 +27,7 @@ import (
 
 	compute "google.golang.org/api/compute/v1"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -1274,7 +1274,7 @@ var _ = SIGDescribe("Services", func() {
 		By("Verifying pods for RC " + t.Name)
 		framework.ExpectNoError(framework.VerifyPods(t.Client, t.Namespace, t.Name, false, 1))
 
-		svcName := fmt.Sprintf("%v.%v.svc.cluster.local", serviceName, f.Namespace.Name)
+		svcName := fmt.Sprintf("%v.%v.svc.%v", serviceName, f.Namespace.Name, framework.TestContext.ClusterDNSDomain)
 		By("Waiting for endpoints of Service with DNS name " + svcName)
 
 		execPodName := framework.CreateExecPodOrFail(f.ClientSet, f.Namespace.Name, "execpod-", nil)
@@ -1585,7 +1585,7 @@ var _ = SIGDescribe("Services", func() {
 		svc = jig.WaitForLoadBalancerOrFail(namespace, serviceName, framework.LoadBalancerCreateTimeoutDefault)
 
 		hcName := gcecloud.MakeNodesHealthCheckName(clusterID)
-		hc, err := gceCloud.GetHttpHealthCheck(hcName)
+		hc, err := gceCloud.GetHTTPHealthCheck(hcName)
 		if err != nil {
 			framework.Failf("gceCloud.GetHttpHealthCheck(%q) = _, %v; want nil", hcName, err)
 		}
@@ -1593,7 +1593,7 @@ var _ = SIGDescribe("Services", func() {
 
 		By("modify the health check interval")
 		hc.CheckIntervalSec = gceHcCheckIntervalSeconds - 1
-		if err = gceCloud.UpdateHttpHealthCheck(hc); err != nil {
+		if err = gceCloud.UpdateHTTPHealthCheck(hc); err != nil {
 			framework.Failf("gcecloud.UpdateHttpHealthCheck(%#v) = %v; want nil", hc, err)
 		}
 
@@ -1608,7 +1608,7 @@ var _ = SIGDescribe("Services", func() {
 		By("health check should be reconciled")
 		pollInterval := framework.Poll * 10
 		if pollErr := wait.PollImmediate(pollInterval, framework.LoadBalancerCreateTimeoutDefault, func() (bool, error) {
-			hc, err := gceCloud.GetHttpHealthCheck(hcName)
+			hc, err := gceCloud.GetHTTPHealthCheck(hcName)
 			if err != nil {
 				framework.Logf("Failed to get HttpHealthCheck(%q): %v", hcName, err)
 				return false, err
@@ -2111,6 +2111,8 @@ func execAffinityTestForLBService(f *framework.Framework, cs clientset.Interface
 	svc = jig.WaitForLoadBalancerOrFail(ns, serviceName, framework.LoadBalancerCreateTimeoutDefault)
 	jig.SanityCheckService(svc, v1.ServiceTypeLoadBalancer)
 	defer func() {
+		podNodePairs, err := framework.PodNodePairs(cs, ns)
+		framework.Logf("[pod,node] pairs: %+v; err: %v", podNodePairs, err)
 		framework.StopServeHostnameService(cs, ns, serviceName)
 		lb := cloudprovider.DefaultLoadBalancerName(svc)
 		framework.Logf("cleaning load balancer resource for %s", lb)

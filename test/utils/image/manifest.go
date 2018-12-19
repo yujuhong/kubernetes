@@ -92,11 +92,12 @@ var (
 
 // Preconfigured image configs
 var (
+	CRDConversionWebhook     = Config{e2eRegistry, "crd-conversion-webhook", "1.13rev2"}
 	AdmissionWebhook         = Config{e2eRegistry, "webhook", "1.13v1"}
 	APIServer                = Config{e2eRegistry, "sample-apiserver", "1.10"}
 	AppArmorLoader           = Config{e2eRegistry, "apparmor-loader", "1.0"}
 	BusyBox                  = Config{dockerLibraryRegistry, "busybox", "1.29"}
-	CheckMetadataConcealment = Config{e2eRegistry, "metadata-concealment", "1.1.1"}
+	CheckMetadataConcealment = Config{e2eRegistry, "metadata-concealment", "1.2"}
 	CudaVectorAdd            = Config{e2eRegistry, "cuda-vector-add", "1.0"}
 	Dnsutils                 = Config{e2eRegistry, "dnsutils", "1.1"}
 	EchoServer               = Config{e2eRegistry, "echoserver", "2.2"}

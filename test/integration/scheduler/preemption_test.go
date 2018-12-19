@@ -31,12 +31,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	utilfeaturetesting "k8s.io/apiserver/pkg/util/feature/testing"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/pkg/features"
 	_ "k8s.io/kubernetes/pkg/scheduler/algorithmprovider"
 	testutils "k8s.io/kubernetes/test/utils"
 
-	"github.com/golang/glog"
+	"k8s.io/klog"
 )
 
 var lowPriority, mediumPriority, highPriority = int32(100), int32(200), int32(300)
@@ -64,7 +65,7 @@ func waitForNominatedNodeName(cs clientset.Interface, pod *v1.Pod) error {
 // TestPreemption tests a few preemption scenarios.
 func TestPreemption(t *testing.T) {
 	// Enable PodPriority feature gate.
-	utilfeature.DefaultFeatureGate.Set(fmt.Sprintf("%s=true", features.PodPriority))
+	defer utilfeaturetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodPriority, true)()
 	// Initialize scheduler.
 	context := initTest(t, "preemption")
 	defer cleanupTest(t, context)
@@ -292,7 +293,7 @@ func TestPreemption(t *testing.T) {
 // TestDisablePreemption tests disable pod preemption of scheduler works as expected.
 func TestDisablePreemption(t *testing.T) {
 	// Enable PodPriority feature gate.
-	utilfeature.DefaultFeatureGate.Set(fmt.Sprintf("%s=true", features.PodPriority))
+	defer utilfeaturetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodPriority, true)()
 	// Initialize scheduler, and disable preemption.
 	context := initTestDisablePreemption(t, "disable-preemption")
 	defer cleanupTest(t, context)
@@ -394,7 +395,7 @@ func mkPriorityPodWithGrace(tc *TestContext, name string, priority int32, grace 
 // after preemption and while the higher priority pods is not scheduled yet.
 func TestPreemptionStarvation(t *testing.T) {
 	// Enable PodPriority feature gate.
-	utilfeature.DefaultFeatureGate.Set(fmt.Sprintf("%s=true", features.PodPriority))
+	defer utilfeaturetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodPriority, true)()
 	// Initialize scheduler.
 	context := initTest(t, "preemption")
 	defer cleanupTest(t, context)
@@ -481,7 +482,7 @@ func TestPreemptionStarvation(t *testing.T) {
 			t.Errorf("Preemptor pod %v didn't get scheduled: %v", preemptor.Name, err)
 		}
 		// Cleanup
-		glog.Info("Cleaning up all pods...")
+		klog.Info("Cleaning up all pods...")
 		allPods := pendingPods
 		allPods = append(allPods, runningPods...)
 		allPods = append(allPods, preemptor)
@@ -501,7 +502,7 @@ func TestPreemptionStarvation(t *testing.T) {
 //    node name of the medium priority pod is cleared.
 func TestNominatedNodeCleanUp(t *testing.T) {
 	// Enable PodPriority feature gate.
-	utilfeature.DefaultFeatureGate.Set(fmt.Sprintf("%s=true", features.PodPriority))
+	defer utilfeaturetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodPriority, true)()
 	// Initialize scheduler.
 	context := initTest(t, "preemption")
 	defer cleanupTest(t, context)
@@ -615,7 +616,7 @@ func addPodConditionReady(pod *v1.Pod) {
 // TestPDBInPreemption tests PodDisruptionBudget support in preemption.
 func TestPDBInPreemption(t *testing.T) {
 	// Enable PodPriority feature gate.
-	utilfeature.DefaultFeatureGate.Set(fmt.Sprintf("%s=true", features.PodPriority))
+	defer utilfeaturetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodPriority, true)()
 	// Initialize scheduler.
 	context := initTest(t, "preemption-pdb")
 	defer cleanupTest(t, context)

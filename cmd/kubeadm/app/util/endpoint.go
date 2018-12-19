@@ -34,15 +34,15 @@ import (
 // - Otherwise, in case the ControlPlaneEndpoint is not defined, use the api.AdvertiseAddress + the api.BindPort.
 func GetMasterEndpoint(cfg *kubeadmapi.InitConfiguration) (string, error) {
 	// parse the bind port
-	bindPortString := strconv.Itoa(int(cfg.APIEndpoint.BindPort))
+	bindPortString := strconv.Itoa(int(cfg.LocalAPIEndpoint.BindPort))
 	if _, err := ParsePort(bindPortString); err != nil {
-		return "", errors.Wrapf(err, "invalid value %q given for api.bindPort", cfg.APIEndpoint.BindPort)
+		return "", errors.Wrapf(err, "invalid value %q given for api.bindPort", cfg.LocalAPIEndpoint.BindPort)
 	}
 
 	// parse the AdvertiseAddress
-	var ip = net.ParseIP(cfg.APIEndpoint.AdvertiseAddress)
+	var ip = net.ParseIP(cfg.LocalAPIEndpoint.AdvertiseAddress)
 	if ip == nil {
-		return "", errors.Errorf("invalid value `%s` given for api.advertiseAddress", cfg.APIEndpoint.AdvertiseAddress)
+		return "", errors.Errorf("invalid value `%s` given for api.advertiseAddress", cfg.LocalAPIEndpoint.AdvertiseAddress)
 	}
 
 	// set the master url using cfg.API.AdvertiseAddress + the cfg.API.BindPort
@@ -95,7 +95,7 @@ func ParseHostPort(hostport string) (string, string, error) {
 	// if port is defined, parse and validate it
 	if port != "" {
 		if _, err := ParsePort(port); err != nil {
-			return "", "", errors.New("port must be a valid number between 1 and 65535, inclusive")
+			return "", "", errors.Errorf("hostport %s: port %s must be a valid number between 1 and 65535, inclusive", hostport, port)
 		}
 	}
 
@@ -109,7 +109,7 @@ func ParseHostPort(hostport string) (string, string, error) {
 		return host, port, nil
 	}
 
-	return "", "", errors.New("host must be a valid IP address or a valid RFC-1123 DNS subdomain")
+	return "", "", errors.Errorf("hostport %s: host '%s' must be a valid IP address or a valid RFC-1123 DNS subdomain", hostport, host)
 }
 
 // ParsePort parses a string representing a TCP port.

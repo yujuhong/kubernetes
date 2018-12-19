@@ -82,6 +82,9 @@ spec:
       priorityClassName: system-cluster-critical
       nodeSelector:
         beta.kubernetes.io/os: linux
+      securityContext:
+        supplementalGroups: [ 65534 ]
+        fsGroup: 65534
       containers:
       - name: autoscaler
         image: k8s.gcr.io/cluster-proportional-autoscaler-amd64:1.3.0

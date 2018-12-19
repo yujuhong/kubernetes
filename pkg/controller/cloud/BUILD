@@ -10,6 +10,7 @@ go_library(
     name = "go_default_library",
     srcs = [
         "node_controller.go",
+        "node_lifecycle_controller.go",
         "pvlcontroller.go",
     ],
     importpath = "k8s.io/kubernetes/pkg/controller/cloud",
@@ -17,7 +18,6 @@ go_library(
         "//pkg/api/v1/node:go_default_library",
         "//pkg/apis/core/v1/helper:go_default_library",
         "//pkg/controller:go_default_library",
-        "//pkg/controller/util/node:go_default_library",
         "//pkg/features:go_default_library",
         "//pkg/kubelet/apis:go_default_library",
         "//pkg/scheduler/api:go_default_library",
@@ -26,6 +26,7 @@ go_library(
         "//staging/src/k8s.io/api/core/v1:go_default_library",
         "//staging/src/k8s.io/apimachinery/pkg/api/errors:go_default_library",
         "//staging/src/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
+        "//staging/src/k8s.io/apimachinery/pkg/labels:go_default_library",
         "//staging/src/k8s.io/apimachinery/pkg/runtime:go_default_library",
         "//staging/src/k8s.io/apimachinery/pkg/types:go_default_library",
         "//staging/src/k8s.io/apimachinery/pkg/util/runtime:go_default_library",
@@ -43,7 +44,7 @@ go_library(
         "//staging/src/k8s.io/client-go/util/retry:go_default_library",
         "//staging/src/k8s.io/client-go/util/workqueue:go_default_library",
         "//staging/src/k8s.io/cloud-provider:go_default_library",
-        "//vendor/github.com/golang/glog:go_default_library",
+        "//vendor/k8s.io/klog:go_default_library",
     ],
 )
 
@@ -51,6 +52,7 @@ go_test(
     name = "go_default_test",
     srcs = [
         "node_controller_test.go",
+        "node_lifecycle_controller_test.go",
         "pvlcontroller_test.go",
     ],
     embed = [":go_default_library"],
@@ -58,6 +60,7 @@ go_test(
         "//pkg/cloudprovider/providers/fake:go_default_library",
         "//pkg/controller:go_default_library",
         "//pkg/controller/testutil:go_default_library",
+        "//pkg/features:go_default_library",
         "//pkg/kubelet/apis:go_default_library",
         "//pkg/scheduler/api:go_default_library",
         "//pkg/volume/util:go_default_library",
@@ -66,16 +69,17 @@ go_test(
         "//staging/src/k8s.io/apimachinery/pkg/runtime:go_default_library",
         "//staging/src/k8s.io/apimachinery/pkg/types:go_default_library",
         "//staging/src/k8s.io/apimachinery/pkg/util/sets:go_default_library",
-        "//staging/src/k8s.io/apimachinery/pkg/util/wait:go_default_library",
         "//staging/src/k8s.io/apiserver/pkg/util/feature:go_default_library",
+        "//staging/src/k8s.io/apiserver/pkg/util/feature/testing:go_default_library",
         "//staging/src/k8s.io/client-go/informers:go_default_library",
+        "//staging/src/k8s.io/client-go/informers/core/v1:go_default_library",
         "//staging/src/k8s.io/client-go/kubernetes/fake:go_default_library",
         "//staging/src/k8s.io/client-go/kubernetes/scheme:go_default_library",
         "//staging/src/k8s.io/client-go/testing:go_default_library",
         "//staging/src/k8s.io/client-go/tools/record:go_default_library",
         "//staging/src/k8s.io/cloud-provider:go_default_library",
-        "//vendor/github.com/golang/glog:go_default_library",
         "//vendor/github.com/stretchr/testify/assert:go_default_library",
+        "//vendor/k8s.io/klog:go_default_library",
     ],
 )
 

@@ -35,14 +35,14 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/validation"
 	"k8s.io/kubernetes/cmd/kubeadm/app/constants"
 	certsphase "k8s.io/kubernetes/cmd/kubeadm/app/phases/certs"
-	"k8s.io/kubernetes/cmd/kubeadm/app/phases/certs/pkiutil"
 	controlplanephase "k8s.io/kubernetes/cmd/kubeadm/app/phases/controlplane"
 	etcdphase "k8s.io/kubernetes/cmd/kubeadm/app/phases/etcd"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/apiclient"
+	certstestutil "k8s.io/kubernetes/cmd/kubeadm/app/util/certs"
 	configutil "k8s.io/kubernetes/cmd/kubeadm/app/util/config"
 	etcdutil "k8s.io/kubernetes/cmd/kubeadm/app/util/etcd"
+	"k8s.io/kubernetes/cmd/kubeadm/app/util/pkiutil"
 	testutil "k8s.io/kubernetes/cmd/kubeadm/test"
-	certstestutil "k8s.io/kubernetes/cmd/kubeadm/test/certs"
 )
 
 const (
@@ -56,32 +56,31 @@ kind: InitConfiguration
 nodeRegistration:
   name: foo
   criSocket: ""
-apiEndpoint:
-  advertiseAddress: 1.2.3.4
+localAPIEndpoint:
+  advertiseAddress: 192.168.2.2
   bindPort: 6443
+bootstrapTokens:
+- token: ce3aa5.5ec8455bb76b379f
+  ttl: 24h
 ---
 apiVersion: kubeadm.k8s.io/v1beta1
 kind: ClusterConfiguration
 
-apiServerCertSANs: null
-apiServerExtraArgs: null
+apiServer:
+  certSANs: null
+  extraArgs: null
 certificatesDir: %s
-controllerManagerExtraArgs: null
 etcd:
   local:
     dataDir: %s
     image: ""
-featureFlags: null
 imageRepository: k8s.gcr.io
 kubernetesVersion: %s
 networking:
   dnsDomain: cluster.local
   podSubnet: ""
   serviceSubnet: 10.96.0.0/12
-schedulerExtraArgs: null
-token: ce3aa5.5ec8455bb76b379f
-tokenTTL: 24h
-unifiedControlPlaneImage: ""
+useHyperKubeImage: false
 `
 )
 
@@ -131,6 +130,11 @@ func (w *fakeWaiter) WaitForStaticPodHashChange(_, _, _ string) error {
 
 // WaitForHealthyKubelet returns a dummy nil just to implement the interface
 func (w *fakeWaiter) WaitForHealthyKubelet(_ time.Duration, _ string) error {
+	return nil
+}
+
+// WaitForKubeletAndFunc is a wrapper for WaitForHealthyKubelet that also blocks for a function
+func (w *fakeWaiter) WaitForKubeletAndFunc(f func() error) error {
 	return nil
 }
 
@@ -224,13 +228,9 @@ func (spm *fakeStaticPodPathManager) CleanupDirs() error {
 
 type fakeTLSEtcdClient struct{ TLS bool }
 
-func (c fakeTLSEtcdClient) HasTLS() bool {
-	return c.TLS
-}
-
 func (c fakeTLSEtcdClient) ClusterAvailable() (bool, error) { return true, nil }
 
-func (c fakeTLSEtcdClient) WaitForClusterAvailable(delay time.Duration, retries int, retryInterval time.Duration) (bool, error) {
+func (c fakeTLSEtcdClient) WaitForClusterAvailable(retries int, retryInterval time.Duration) (bool, error) {
 	return true, nil
 }
 
@@ -259,14 +259,9 @@ func (c fakeTLSEtcdClient) AddMember(name string, peerAddrs string) ([]etcdutil.
 
 type fakePodManifestEtcdClient struct{ ManifestDir, CertificatesDir string }
 
-func (c fakePodManifestEtcdClient) HasTLS() bool {
-	hasTLS, _ := etcdutil.PodManifestsHaveTLS(c.ManifestDir)
-	return hasTLS
-}
-
 func (c fakePodManifestEtcdClient) ClusterAvailable() (bool, error) { return true, nil }
 
-func (c fakePodManifestEtcdClient) WaitForClusterAvailable(delay time.Duration, retries int, retryInterval time.Duration) (bool, error) {
+func (c fakePodManifestEtcdClient) WaitForClusterAvailable(retries int, retryInterval time.Duration) (bool, error) {
 	return true, nil
 }
 
@@ -467,7 +462,7 @@ func TestStaticPodControlPlane(t *testing.T) {
 			t.Fatalf("couldn't read temp file: %v", err)
 		}
 
-		newcfg, err := getConfig("v1.11.0", tempCertsDir, tmpEtcdDataDir)
+		newcfg, err := getConfig("v1.13.0", tempCertsDir, tmpEtcdDataDir)
 		if err != nil {
 			t.Fatalf("couldn't create config: %v", err)
 		}
@@ -519,10 +514,11 @@ func TestStaticPodControlPlane(t *testing.T) {
 
 		if (oldHash != newHash) != rt.manifestShouldChange {
 			t.Errorf(
-				"failed StaticPodControlPlane\n%s\n\texpected manifest change: %t\n\tgot: %t",
+				"failed StaticPodControlPlane\n%s\n\texpected manifest change: %t\n\tgot: %t\n\tnewHash: %v",
 				rt.description,
 				rt.manifestShouldChange,
 				(oldHash != newHash),
+				newHash,
 			)
 		}
 		return

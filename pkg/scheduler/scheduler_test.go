@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	utilfeaturetesting "k8s.io/apiserver/pkg/util/feature/testing"
 	"k8s.io/client-go/informers"
 	clientsetfake "k8s.io/client-go/kubernetes/fake"
 	corelister "k8s.io/client-go/listers/core/v1"
@@ -40,15 +41,16 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 	"k8s.io/kubernetes/pkg/controller/volume/persistentvolume"
+	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	"k8s.io/kubernetes/pkg/scheduler/api"
 	kubeschedulerconfig "k8s.io/kubernetes/pkg/scheduler/apis/config"
-	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
 	"k8s.io/kubernetes/pkg/scheduler/core"
 	"k8s.io/kubernetes/pkg/scheduler/factory"
 	schedulerinternalcache "k8s.io/kubernetes/pkg/scheduler/internal/cache"
 	fakecache "k8s.io/kubernetes/pkg/scheduler/internal/cache/fake"
+	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
 	"k8s.io/kubernetes/pkg/scheduler/volumebinder"
 )
 
@@ -134,11 +136,11 @@ func podWithResources(id, desiredHost string, limits v1.ResourceList, requests v
 	return pod
 }
 
-func PredicateOne(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *schedulercache.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
+func PredicateOne(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *schedulernodeinfo.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
 	return true, nil, nil
 }
 
-func PriorityOne(pod *v1.Pod, nodeNameToInfo map[string]*schedulercache.NodeInfo, nodes []*v1.Node) (api.HostPriorityList, error) {
+func PriorityOne(pod *v1.Pod, nodeNameToInfo map[string]*schedulernodeinfo.NodeInfo, nodes []*v1.Node) (api.HostPriorityList, error) {
 	return []api.HostPriority{}, nil
 }
 
@@ -175,6 +177,8 @@ func TestSchedulerCreation(t *testing.T) {
 	factory.RegisterPriorityFunction("PriorityOne", PriorityOne, 1)
 	factory.RegisterAlgorithmProvider(testSource, sets.NewString("PredicateOne"), sets.NewString("PriorityOne"))
 
+	stopCh := make(chan struct{})
+	defer close(stopCh)
 	_, err := New(client,
 		informerFactory.Core().V1().Nodes(),
 		factory.NewPodInformer(client, 0),
@@ -188,6 +192,7 @@ func TestSchedulerCreation(t *testing.T) {
 		informerFactory.Storage().V1().StorageClasses(),
 		eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "scheduler"}),
 		kubeschedulerconfig.SchedulerAlgorithmSource{Provider: &testSource},
+		stopCh,
 		WithBindTimeoutSeconds(defaultBindTimeout))
 
 	if err != nil {
@@ -206,7 +211,7 @@ func TestScheduler(t *testing.T) {
 		name             string
 		injectBindError  error
 		sendPod          *v1.Pod
-		algo             algorithm.ScheduleAlgorithm
+		algo             core.ScheduleAlgorithm
 		expectErrorPod   *v1.Pod
 		expectForgetPod  *v1.Pod
 		expectAssumedPod *v1.Pod
@@ -290,6 +295,7 @@ func TestScheduler(t *testing.T) {
 					NextPod: func() *v1.Pod {
 						return item.sendPod
 					},
+					PluginSet:    &EmptyPluginSet{},
 					Recorder:     eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "scheduler"}),
 					VolumeBinder: volumebinder.NewFakeVolumeBinder(&persistentvolume.FakeVolumeBinderConfig{AllBound: true}),
 				},
@@ -419,8 +425,8 @@ func TestSchedulerNoPhantomPodAfterDelete(t *testing.T) {
 	}
 
 	// We mimic the workflow of cache behavior when a pod is removed by user.
-	// Note: if the schedulercache timeout would be super short, the first pod would expire
-	// and would be removed itself (without any explicit actions on schedulercache). Even in that case,
+	// Note: if the schedulernodeinfo timeout would be super short, the first pod would expire
+	// and would be removed itself (without any explicit actions on schedulernodeinfo). Even in that case,
 	// explicitly AddPod will as well correct the behavior.
 	firstPod.Spec.NodeName = node.Name
 	if err := scache.AddPod(firstPod); err != nil {
@@ -633,11 +639,11 @@ func setupTestScheduler(queuedPodStore *clientcache.FIFO, scache schedulerintern
 	algo := core.NewGenericScheduler(
 		scache,
 		nil,
-		nil,
 		predicateMap,
 		algorithm.EmptyPredicateMetadataProducer,
 		[]algorithm.PriorityConfig{},
 		algorithm.EmptyPriorityMetadataProducer,
+		&EmptyPluginSet{},
 		[]algorithm.SchedulerExtender{},
 		nil,
 		informerFactory.Core().V1().PersistentVolumeClaims().Lister(),
@@ -667,6 +673,7 @@ func setupTestScheduler(queuedPodStore *clientcache.FIFO, scache schedulerintern
 			Recorder:            &record.FakeRecorder{},
 			PodConditionUpdater: fakePodConditionUpdater{},
 			PodPreemptor:        fakePodPreemptor{},
+			PluginSet:           &EmptyPluginSet{},
 			VolumeBinder:        volumebinder.NewFakeVolumeBinder(&persistentvolume.FakeVolumeBinderConfig{AllBound: true}),
 		},
 	}
@@ -684,11 +691,11 @@ func setupTestSchedulerLongBindingWithRetry(queuedPodStore *clientcache.FIFO, sc
 	algo := core.NewGenericScheduler(
 		scache,
 		nil,
-		nil,
 		predicateMap,
 		algorithm.EmptyPredicateMetadataProducer,
 		[]algorithm.PriorityConfig{},
 		algorithm.EmptyPriorityMetadataProducer,
+		&EmptyPluginSet{},
 		[]algorithm.SchedulerExtender{},
 		nil,
 		informerFactory.Core().V1().PersistentVolumeClaims().Lister(),
@@ -722,6 +729,7 @@ func setupTestSchedulerLongBindingWithRetry(queuedPodStore *clientcache.FIFO, sc
 			PodConditionUpdater: fakePodConditionUpdater{},
 			PodPreemptor:        fakePodPreemptor{},
 			StopEverything:      stop,
+			PluginSet:           &EmptyPluginSet{},
 			VolumeBinder:        volumebinder.NewFakeVolumeBinder(&persistentvolume.FakeVolumeBinderConfig{AllBound: true}),
 		},
 	}
@@ -771,8 +779,7 @@ func TestSchedulerWithVolumeBinding(t *testing.T) {
 	// This can be small because we wait for pod to finish scheduling first
 	chanTimeout := 2 * time.Second
 
-	utilfeature.DefaultFeatureGate.Set("VolumeScheduling=true")
-	defer utilfeature.DefaultFeatureGate.Set("VolumeScheduling=false")
+	defer utilfeaturetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeScheduling, true)()
 
 	table := []struct {
 		name               string
