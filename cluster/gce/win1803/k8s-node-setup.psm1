@@ -22,7 +22,6 @@
 #   Import-Module -Force C:\k8s-node-setup.psm1  # -Force to override existing
 #   # Execute functions manually or run configure.ps1.
 
-$k8sHomeDir = "C:\Users\kubernetes"
 $k8sDir = "C:\etc\kubernetes"
 Export-ModuleMember -Variable k8sDir
 $infraContainer = "kubeletwin/pause"
@@ -179,7 +178,6 @@ function Set-CurrentShellEnvironmentVar {
 function Set-EnvironmentVars {
   $envVars = @{
     "K8S_DIR" = "${k8sDir}"
-    "K8S_HOME_DIR" = "${k8sHomeDir}"
     "NODE_DIR" = "${k8sDir}\node"
     "Path" = ${env:Path} + ";${k8sDir}\node"
     "LOGS_DIR" = "${k8sDir}\logs"
@@ -224,7 +222,7 @@ function Set-PrerequisiteOptions {
 
 function Create-Directories {
   Log "Creating ${env:K8S_DIR} and its subdirectories."
-  ForEach ($dir in ("${env:K8S_DIR}", "${env:NODE_DIR}", "${env:LOGS_DIR}", "${env:K8S_DIR}",
+  ForEach ($dir in ("${env:K8S_DIR}", "${env:NODE_DIR}", "${env:LOGS_DIR}",
     "${env:CNI_DIR}", "${env:CNI_CONFIG_DIR}", "${env:MANIFESTS_DIR}",
     "${env:PKI_DIR}")) {
     mkdir -Force $dir
@@ -263,12 +261,15 @@ function DownloadAndInstall-KubernetesBinaries {
 
   # Disable progress bar to dramatically increase download speed.
   $ProgressPreference = 'SilentlyContinue'
-
-  # TODO: Verify hash
-  $uri = ${kubeEnv}['NODE_BINARY_TAR_URL']
-  $filename = Split-Path -leaf $uri
-  Invoke-WebRequest $url -OutFile ${k8sHomeDir}/${filename}
-  cp ${k8sHomeDir}/kubernetes/bin/* ${env:NODE_DIR}
+  Invoke-WebRequest `
+    https://storage.googleapis.com/kubernetes-release/release/${k8sVersion}/bin/windows/amd64/kubectl.exe `
+    -OutFile ${env:NODE_DIR}\kubectl.exe
+  Invoke-WebRequest `
+    https://storage.googleapis.com/kubernetes-release/release/${k8sVersion}/bin/windows/amd64/kubelet.exe `
+    -OutFile ${env:NODE_DIR}\kubelet.exe
+  Invoke-WebRequest `
+    https://storage.googleapis.com/kubernetes-release/release/${k8sVersion}/bin/windows/amd64/kube-proxy.exe `
+    -OutFile ${env:NODE_DIR}\kube-proxy.exe
 }
 
 # TODO(pjh): this is copied from
