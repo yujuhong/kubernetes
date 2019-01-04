@@ -22,31 +22,36 @@
 # This script assumes that it is run from the root of the kubernetes repository
 # and that kubectl is present at client/bin/kubectl.
 
-# kubectl filtering is the worst.
-statuses=$(client/bin/kubectl get nodes -l beta.kubernetes.io/os=windows \
-  -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}')
-for status in $statuses; do
-  if [[ $status == "False" ]]; then
-    echo "ERROR: some Windows node has status != Ready"
-    echo "kubectl get nodes -l beta.kubernetes.io/os=windows"
-    client/bin/kubectl get nodes -l beta.kubernetes.io/os=windows
+function check_windows_nodes_are_ready {
+  # kubectl filtering is the worst.
+  statuses=$(client/bin/kubectl get nodes -l beta.kubernetes.io/os=windows \
+    -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}')
+  for status in $statuses; do
+    if [[ $status == "False" ]]; then
+      echo "ERROR: some Windows node has status != Ready"
+      echo "kubectl get nodes -l beta.kubernetes.io/os=windows"
+      client/bin/kubectl get nodes -l beta.kubernetes.io/os=windows
+      exit 1
+    fi
+  done
+  echo "Verified that all Windows nodes have status Ready"
+}
+
+function check_no_system_pods_on_windows_nodes {
+  windows_system_pods=$(client/bin/kubectl get pods --namespace kube-system \
+    -o wide | egrep "Pending|windows" | wc -w)
+  if [[ $windows_system_pods -ne 0 ]]; then
+    echo "ERROR: there are kube-system pods trying to run on Windows nodes"
+    echo "kubectl get pods --namespace kube-system -o wide"
+    client/bin/kubectl get pods --namespace kube-system -o wide
     exit 1
   fi
-done
-echo "Verified that all Windows nodes have status Ready"
+  echo "Verified that all system pods are running on Linux nodes"
+}
 
-windows_system_pods=$(client/bin/kubectl get pods --namespace kube-system \
-  -o wide | egrep "Pending|windows" | wc -w)
-if [[ $windows_system_pods -ne 0 ]]; then
-  echo "ERROR: there are kube-system pods trying to run on Windows nodes"
-  echo "kubectl get pods --namespace kube-system -o wide"
-  client/bin/kubectl get pods --namespace kube-system -o wide
-  exit 1
-fi
-echo "Verified that all system pods are running on Linux nodes"
-
-echo "Writing example deployment to windows-iis-deployment.yaml"
-cat <<EOF > windows-iis-deployment.yaml
+function run_iis_deployment {
+  echo "Writing example deployment to windows-iis-deployment.yaml"
+  cat <<EOF > windows-iis-deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -70,35 +75,40 @@ spec:
         beta.kubernetes.io/os: windows
 EOF
 
-client/bin/kubectl create -f windows-iis-deployment.yaml
+  client/bin/kubectl create -f windows-iis-deployment.yaml
 
-# It may take a while for the IIS pods to start running because the IIS
-# container (based on the large windowsservercore container) must be fetched on
-# the Windows nodes.
-timeout=120
-while [[ $timeout -gt 0 ]]; do
-  echo "Waiting for IIS pods to become Ready"
-  statuses=$(client/bin/kubectl get pods -l app=iis \
-    -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' \
-    | grep "False" | wc -w)
-  if [[ $statuses -eq 0 ]]; then
-    break
+  # It may take a while for the IIS pods to start running because the IIS
+  # container (based on the large windowsservercore container) must be fetched
+  # on the Windows nodes.
+  timeout=120
+  while [[ $timeout -gt 0 ]]; do
+    echo "Waiting for IIS pods to become Ready"
+    statuses=$(client/bin/kubectl get pods -l app=iis \
+      -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' \
+      | grep "False" | wc -w)
+    if [[ $statuses -eq 0 ]]; then
+      break
+    else
+      sleep 10
+      let timeout=timeout-10
+    fi
+  done
+
+  if [[ $timeout -gt 0 ]]; then
+    echo "All IIS pods became Ready"
   else
-    sleep 10
-    let timeout=timeout-10
+    echo "ERROR: Not all IIS pods became Ready"
+    echo "kubectl get pods -l app=iis"
+    client/bin/kubectl get pods -l app=iis
+    client/bin/kubectl delete deployment iis-deployment
+    exit 1
   fi
-done
-
-if [[ $timeout -gt 0 ]]; then
-  echo "All IIS pods became Ready"
-else
-  echo "ERROR: Not all IIS pods became Ready"
-  echo "kubectl get pods -l app=iis"
-  client/bin/kubectl get pods -l app=iis
+  echo "Removing iis-deployment"
   client/bin/kubectl delete deployment iis-deployment
-  exit 1
-fi
-echo "Removing iis-deployment"
-client/bin/kubectl delete deployment iis-deployment
+}
+
+check_windows_nodes_are_ready
+check_no_system_pods_on_windows_nodes
+run_iis_deployment
 
 exit 0
