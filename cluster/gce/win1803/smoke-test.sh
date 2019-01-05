@@ -26,6 +26,7 @@
 # and that kubectl is present at client/bin/kubectl.
 #
 # TODOs:
+#   - Implement the node-to-pod checks.
 #   - Capture stdout for each command to a file and only print it when the test
 #     fails.
 #   - Move copy-pasted code into reusable functions.
@@ -33,6 +34,7 @@
 #   - Test service connectivity by running a test pod with an http server and
 #     exposing it as a service (rather than curl-ing from existing system
 #     services that don't serve http requests).
+#   - Add test retries for certain transient errors.
 
 kubectl=client/bin/kubectl
 linux_deployment_timeout=60
@@ -485,7 +487,7 @@ function test_linux_pod_to_k8s_service {
     -o jsonpath='{.spec.clusterIP}')
   local service_port=$($kubectl get service --namespace kube-system $service \
     -o jsonpath='{.spec.ports[?(@.protocol=="TCP")].port}')
-  echo "curl-ing $service address: $service_ip:$service_port"
+  echo "curl-ing $service address from Linux pod: $service_ip:$service_port"
 
   # curl-ing the heapster service results in an expected 404 response code. The
   # curl command does not set a failure return code in this case.
@@ -566,7 +568,7 @@ function test_windows_pod_to_k8s_service {
   local service_port=$($kubectl get service --namespace kube-system $service \
     -o jsonpath='{.spec.ports[?(@.protocol=="TCP")].port}')
   local service_address="$service_ip:$service_port"
-  echo "curl-ing $service address: $service_address"
+  echo "curl-ing $service address from Windows pod: $service_address"
 
   # Performing a web request to the heapster service results in an expected 404
   # response; this code snippet filters out the expected 404 from other status
