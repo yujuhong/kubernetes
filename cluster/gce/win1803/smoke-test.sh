@@ -507,7 +507,7 @@ function test_linux_pod_to_k8s_service {
   # curl-ing the heapster service results in an expected 404 response code. The
   # curl command does not set a failure return code in this case.
   $kubectl exec $linux_command_pod -- \
-    curl -m 20 http://$service_ip:$service_port > $output_file
+    curl -m 20 http://$service_ip:$service_port &> $output_file
   if [[ $? -ne 0 ]]; then
     cleanup_deployments
     echo "Failing output:\n$(cat $output_file)"
