@@ -617,9 +617,11 @@ function Configure-CniNetworking {
     https://github.com/${githubRepo}/kubernetes/raw/${githubBranch}/cluster/gce/windows-cni-plugins.zip `
     -OutFile ${env:CNI_DIR}\windows-cni-plugins.zip
   Expand-Archive ${env:CNI_DIR}\windows-cni-plugins.zip ${env:CNI_DIR}
-  # TODO(pjh): test that the two CNI plugins that we need, win-bridge.exe and
-  # host-local.exe (for IPAM), are present in CNI_DIR.
   mv ${env:CNI_DIR}\bin\*.exe ${env:CNI_DIR}\
+  if (-not ((Test-Path ${env:CNI_DIR}\win-bridge.exe) -and `
+            (Test-Path ${env:CNI_DIR}\host-local.exe))) {
+    Log "win-bridge.exe and host-local.exe not found in ${env:CNI_DIR}" $true
+  }
   rmdir ${env:CNI_DIR}\bin
 
   $vethIp = (Get-NetAdapter | Where-Object Name -Like ${mgmtAdapterName} |`
