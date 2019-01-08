@@ -41,6 +41,7 @@
 kubectl=client/bin/kubectl
 linux_deployment_timeout=60
 windows_deployment_timeout=120
+output_file=/tmp/k8s-smoke-test.out
 
 function check_windows_nodes_are_ready {
   # kubectl filtering is the worst.
@@ -182,7 +183,7 @@ EOF
     echo "ERROR: Not all $linux_webserver_pod_label pods became Ready"
     echo "kubectl get pods -l app=$linux_webserver_pod_label"
     ${kubectl} get pods -l app=$linux_webserver_pod_label
-    ${kubectl} delete deployment $linux_webserver_deployment
+    cleanup_deployments
     exit 1
   fi
 }
@@ -258,7 +259,7 @@ EOF
     echo "ERROR: Not all $linux_command_pod_label pods became Ready"
     echo "kubectl get pods -l app=$linux_command_pod_label"
     ${kubectl} get pods -l app=$linux_command_pod_label
-    ${kubectl} delete deployment $linux_command_deployment
+    cleanup_deployments
     exit 1
   fi
 }
@@ -347,7 +348,7 @@ EOF
     echo "ERROR: Not all $windows_webserver_pod_label pods became Ready"
     echo "kubectl get pods -l app=$windows_webserver_pod_label"
     ${kubectl} get pods -l app=$windows_webserver_pod_label
-    ${kubectl} delete deployment $windows_webserver_deployment
+    cleanup_deployments
     exit 1
   fi
 }
@@ -420,7 +421,7 @@ EOF
     echo "ERROR: Not all $windows_command_pod_label pods became Ready"
     echo "kubectl get pods -l app=$windows_command_pod_label"
     ${kubectl} get pods -l app=$windows_command_pod_label
-    ${kubectl} delete deployment $windows_command_deployment
+    cleanup_deployments
     exit 1
   fi
 }
@@ -440,49 +441,61 @@ function undeploy_windows_command_pod {
 }
 
 function test_linux_node_to_linux_pod {
-  echo "TODO: test_linux_node_to_linux_pod"
+  echo "TODO: ${FUNCNAME[0]}"
 }
 
 function test_linux_node_to_windows_pod {
-  echo "TODO: test_linux_node_to_windows_pod"
+  echo "TODO: ${FUNCNAME[0]}"
 }
 
 function test_linux_pod_to_linux_pod {
+  echo "TEST: ${FUNCNAME[0]}"
   local linux_command_pod="$(get_linux_command_pod_name)"
   local linux_webserver_pod_ip="$(get_linux_webserver_pod_ip)"
-  $kubectl exec $linux_command_pod -- curl -m 20 http://$linux_webserver_pod_ip
+
+  $kubectl exec $linux_command_pod -- curl -m 20 \
+    http://$linux_webserver_pod_ip &> $output_file
   if [[ $? -ne 0 ]]; then
     cleanup_deployments
+    echo "Failing output:\n$(cat $output_file)"
     echo "FAILED: ${FUNCNAME[0]}"
     exit $?
   fi
 }
 
 function test_linux_pod_to_windows_pod {
+  echo "TEST: ${FUNCNAME[0]}"
   local linux_command_pod="$(get_linux_command_pod_name)"
   local windows_webserver_pod_ip="$(get_windows_webserver_pod_ip)"
+
   $kubectl exec $linux_command_pod -- curl -m 20 \
-    http://$windows_webserver_pod_ip:8080/read
+    http://$windows_webserver_pod_ip:8080/read &> $output_file
   if [[ $? -ne 0 ]]; then
     cleanup_deployments
+    echo "Failing output:\n$(cat $output_file)"
     echo "FAILED: ${FUNCNAME[0]}"
     exit $?
   fi
 }
 
 function test_linux_pod_to_internet {
+  echo "TEST: ${FUNCNAME[0]}"
   local linux_command_pod="$(get_linux_command_pod_name)"
   local internet_ip="8.8.8.8"  # Google DNS
+
   # This is expected to return 404 (not found).
-  $kubectl exec $linux_command_pod -- curl -m 20 http://$internet_ip
+  $kubectl exec $linux_command_pod -- curl -m 20 \
+    http://$internet_ip > $output_file
   if [[ $? -ne 0 ]]; then
     cleanup_deployments
+    echo "Failing output:\n$(cat $output_file)"
     echo "FAILED: ${FUNCNAME[0]}"
     exit $?
   fi
 }
 
 function test_linux_pod_to_k8s_service {
+  echo "TEST: ${FUNCNAME[0]}"
   local linux_command_pod="$(get_linux_command_pod_name)"
   local service="heapster"
   local service_ip=$($kubectl get service --namespace kube-system $service \
@@ -494,49 +507,59 @@ function test_linux_pod_to_k8s_service {
   # curl-ing the heapster service results in an expected 404 response code. The
   # curl command does not set a failure return code in this case.
   $kubectl exec $linux_command_pod -- \
-    curl -m 20 http://$service_ip:$service_port
+    curl -m 20 http://$service_ip:$service_port > $output_file
   if [[ $? -ne 0 ]]; then
     cleanup_deployments
+    echo "Failing output:\n$(cat $output_file)"
     echo "FAILED: ${FUNCNAME[0]}"
     exit $?
   fi
 }
 
 function test_windows_node_to_linux_pod {
-  echo "TODO: test_windows_node_to_linux_pod"
+  echo "TODO: ${FUNCNAME[0]}"
 }
 
 function test_windows_node_to_windows_pod {
-  echo "TODO: test_windows_node_to_windows_pod"
+  echo "TODO: ${FUNCNAME[0]}"
 }
 
 function test_windows_pod_to_linux_pod {
+  echo "TEST: ${FUNCNAME[0]}"
   local windows_command_pod="$(get_windows_command_pod_name)"
   local linux_webserver_pod_ip="$(get_linux_webserver_pod_ip)"
+
   $kubectl exec $windows_command_pod -- powershell.exe \
-    "curl -UseBasicParsing http://$linux_webserver_pod_ip"
+    "curl -UseBasicParsing http://$linux_webserver_pod_ip" > $output_file
   if [[ $? -ne 0 ]]; then
     cleanup_deployments
+    echo "Failing output:\n$(cat $output_file)"
     echo "FAILED: ${FUNCNAME[0]}"
     exit $?
   fi
 }
 
 function test_windows_pod_to_windows_pod {
+  echo "TEST: ${FUNCNAME[0]}"
   local windows_command_pod="$(get_windows_command_pod_name)"
   local windows_webserver_pod_ip="$(get_windows_webserver_pod_ip)"
+
   $kubectl exec $windows_command_pod -- powershell.exe \
-    "curl -UseBasicParsing http://$windows_webserver_pod_ip:8080/read"
+    "curl -UseBasicParsing http://$windows_webserver_pod_ip:8080/read" \
+    > $output_file
   if [[ $? -ne 0 ]]; then
     cleanup_deployments
+    echo "Failing output:\n$(cat $output_file)"
     echo "FAILED: ${FUNCNAME[0]}"
     exit $?
   fi
 }
 
 function test_windows_pod_to_internet {
+  echo "TEST: ${FUNCNAME[0]}"
   local windows_command_pod="$(get_windows_command_pod_name)"
   local internet_ip="8.8.8.8"
+
   # This snippet tests Internet connectivity without depending on DNS by
   # attempting to curl Google's well-known DNS IP, 8.8.8.8. On success we expect
   # to get back a 404 status code; on failure the response object will have a
@@ -554,15 +577,17 @@ function test_windows_pod_to_internet {
      } else { \`
        Write-Host \"curl $internet_ip got unexpected status code \$statusCodeInt\"
        exit 1 \`
-     }"
+     }" > $output_file
   if [[ $? -ne 0 ]]; then
     cleanup_deployments
+    echo "Failing output:\n$(cat $output_file)"
     echo "FAILED: ${FUNCNAME[0]}"
     exit $?
   fi
 }
 
 function test_windows_pod_to_k8s_service {
+  echo "TEST: ${FUNCNAME[0]}"
   local windows_command_pod="$(get_windows_command_pod_name)"
   local service="heapster"
   local service_ip=$($kubectl get service --namespace kube-system $service \
@@ -570,8 +595,8 @@ function test_windows_pod_to_k8s_service {
   local service_port=$($kubectl get service --namespace kube-system $service \
     -o jsonpath='{.spec.ports[?(@.protocol=="TCP")].port}')
   local service_address="$service_ip:$service_port"
-  echo "curl-ing $service address from Windows pod: $service_address"
 
+  echo "curl-ing $service address from Windows pod: $service_address"
   # Performing a web request to the heapster service results in an expected 404
   # response; this code snippet filters out the expected 404 from other status
   # codes that indicate failure.
@@ -588,34 +613,41 @@ function test_windows_pod_to_k8s_service {
      } else { \`
        Write-Host \"curl $service_address got unexpected status code \$statusCodeInt\"
        exit 1 \`
-     }"
+     }" > $output_file
   if [[ $? -ne 0 ]]; then
     cleanup_deployments
+    echo "Failing output:\n$(cat $output_file)"
     echo "FAILED: ${FUNCNAME[0]}"
     exit $?
   fi
 }
 
 function test_kube_dns_in_windows_pod {
+  echo "TEST: ${FUNCNAME[0]}"
   local windows_command_pod="$(get_windows_command_pod_name)"
   local service="kube-dns"
   local service_ip=$($kubectl get service --namespace kube-system $service \
     -o jsonpath='{.spec.clusterIP}')
+
   $kubectl exec $windows_command_pod -- powershell.exe \
-    "Resolve-DnsName www.bing.com -server $service_ip"
+    "Resolve-DnsName www.bing.com -server $service_ip" > $output_file
   if [[ $? -ne 0 ]]; then
     cleanup_deployments
+    echo "Failing output:\n$(cat $output_file)"
     echo "FAILED: ${FUNCNAME[0]}"
     exit $?
   fi
 }
 
 function test_dns_just_works_in_windows_pod {
+  echo "TEST: ${FUNCNAME[0]}"
   local windows_command_pod="$(get_windows_command_pod_name)"
+
   $kubectl exec $windows_command_pod -- powershell.exe \
-    "curl -UseBasicParsing http://www.bing.com"
+    "curl -UseBasicParsing http://www.bing.com" > $output_file
   if [[ $? -ne 0 ]]; then
     cleanup_deployments
+    echo "Failing output:\n$(cat $output_file)"
     echo "FAILED: ${FUNCNAME[0]}"
     exit $?
   fi
@@ -637,6 +669,7 @@ deploy_linux_command_pod
 deploy_windows_webserver_pod
 deploy_windows_command_pod
 prepare_linux_command_pod
+echo ""
 
 test_linux_node_to_linux_pod
 test_linux_node_to_windows_pod
@@ -654,6 +687,8 @@ test_windows_pod_to_internet
 test_windows_pod_to_k8s_service
 test_kube_dns_in_windows_pod
 test_dns_just_works_in_windows_pod
+echo ""
 
 cleanup_deployments
+echo "All tests passed!"
 exit 0
