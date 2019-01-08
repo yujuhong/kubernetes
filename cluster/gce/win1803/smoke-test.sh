@@ -34,7 +34,9 @@
 #   - Test service connectivity by running a test pod with an http server and
 #     exposing it as a service (rather than curl-ing from existing system
 #     services that don't serve http requests).
-#   - Add test retries for certain transient errors.
+#   - Add test retries for transient errors, such as:
+#     "error: unable to upgrade connection: Authorization error
+#     (user=kube-apiserver, verb=create, resource=nodes, subresource=proxy)"
 
 kubectl=client/bin/kubectl
 linux_deployment_timeout=60
@@ -642,6 +644,8 @@ test_linux_pod_to_linux_pod
 test_linux_pod_to_windows_pod
 test_linux_pod_to_k8s_service
 
+# Note: test_windows_node_to_k8s_service is not supported at this time.
+# https://docs.microsoft.com/en-us/virtualization/windowscontainers/kubernetes/common-problems#my-windows-node-cannot-access-my-services-using-the-service-ip
 test_windows_node_to_linux_pod
 test_windows_node_to_windows_pod
 test_windows_pod_to_linux_pod

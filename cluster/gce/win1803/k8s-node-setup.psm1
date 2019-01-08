@@ -734,7 +734,7 @@ featureGates:
   # TODO(pjh): STATIC_POD_PATH is /etc/kubernetes/manifests on Linux, no idea
   # what makes sense for Windows.
   # TODO(pjh): no idea if this HAIRPIN_MODE makes sense for Windows;
-  # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L231
+  # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L121
   # uses promiscuous-bridge (as does my kubernetes-the-hard-way).
   # TODO(pjh): does cgroupRoot make sense for Windows?
 
@@ -774,7 +774,8 @@ function Start-WorkerServices {
     "--cert-dir=${env:PKI_DIR}",
 
     # The following flags are adapted from
-    # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L227:
+    # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L117
+    # (last checked on 2019-01-07):
     "--pod-infra-container-image=${infraContainer}",
     "--resolv-conf=`"`"",
     # The kubelet currently fails when this flag is omitted on Windows.
@@ -785,15 +786,20 @@ function Start-WorkerServices {
     "--cni-bin-dir=${env:CNI_DIR}",
     "--cni-conf-dir=${env:CNI_CONFIG_DIR}",
     "--pod-manifest-path=${env:MANIFESTS_DIR}",
-    # Windows images are large and we don't have gcri mirrors yet. Allow
-    # longer pull progress deadline.
+    # Windows images are large and we don't have gcr mirrors yet. Allow longer
+    # pull progress deadline.
     "--image-pull-progress-deadline=5m",
     "--enable-debugging-handlers=true",
     # Turn off kernel memory cgroup notification.
     "--experimental-kernel-memcg-notification=false"
     # These flags come from Microsoft/SDN, not sure what they do or if
     # they're needed.
-    # --log-dir=c:\k --logtostderr=false
+    #   --log-dir=c:\k
+    #   --logtostderr=false
+    # We set these values via the kubelet config file rather than via flags:
+    #   --cluster-dns=$KubeDnsServiceIp
+    #   --cluster-domain=cluster.local
+    #   --hairpin-mode=promiscuous-bridge
   )
   $kubeletArgs = ${kubeletArgs} + ${additionalArgList}
 
