@@ -38,7 +38,8 @@
 #     "error: unable to upgrade connection: Authorization error
 #     (user=kube-apiserver, verb=create, resource=nodes, subresource=proxy)"
 
-kubectl=client/bin/kubectl
+# Override this to use a different kubectl binary.
+kubectl=kubectl
 linux_deployment_timeout=60
 windows_deployment_timeout=150
 output_file=/tmp/k8s-smoke-test.out
@@ -463,6 +464,12 @@ function test_linux_pod_to_linux_pod {
   fi
 }
 
+# TODO(pjh): this test flakily fails on brand-new clusters, not sure why.
+# % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+#                                Dload  Upload   Total   Spent    Left  Speed
+# 0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+# curl: (6) Could not resolve host:
+# command terminated with exit code 6
 function test_linux_pod_to_windows_pod {
   echo "TEST: ${FUNCNAME[0]}"
   local linux_command_pod="$(get_linux_command_pod_name)"
@@ -474,6 +481,7 @@ function test_linux_pod_to_windows_pod {
     cleanup_deployments
     echo "Failing output:\n$(cat $output_file)"
     echo "FAILED: ${FUNCNAME[0]}"
+    echo "This test seems to be flaky. TODO: investigate."
     exit $?
   fi
 }

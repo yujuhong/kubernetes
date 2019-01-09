@@ -591,7 +591,7 @@ function write-master-env {
 
   construct-linux-kubelet-flags true
   build-kube-env true "${KUBE_TEMP}/master-kube-env.yaml"
-  build-kubelet-config true "${KUBE_TEMP}/master-kubelet-config.yaml"
+  build-kubelet-config true "linux" "${KUBE_TEMP}/master-kubelet-config.yaml"
   build-kube-master-certs "${KUBE_TEMP}/kube-master-certs.yaml"
 }
 
@@ -602,7 +602,7 @@ function write-linux-node-env {
 
   construct-linux-kubelet-flags false
   build-kube-env false "${KUBE_TEMP}/linux-node-kube-env.yaml"
-  build-kubelet-config false "${KUBE_TEMP}/linux-node-kubelet-config.yaml"
+  build-kubelet-config false "linux" "${KUBE_TEMP}/linux-node-kubelet-config.yaml"
 }
 
 function write-windows-node-env {
@@ -612,7 +612,7 @@ function write-windows-node-env {
 
   construct-windows-kubelet-flags false
   build-kube-env false "${KUBE_TEMP}/windows-node-kube-env.yaml"
-  build-kubelet-config false "${KUBE_TEMP}/windows-node-kubelet-config.yaml"
+  build-kubelet-config false "windows" "${KUBE_TEMP}/windows-node-kubelet-config.yaml"
 }
 
 function build-linux-node-labels {
@@ -866,33 +866,69 @@ function construct-windows-kubelet-flags {
 # $1: if 'true', we're rendering config for a master, else a node
 function build-kubelet-config {
   local master=$1
-  local file=$2
+  local os=$2
+  local file=$3
 
   rm -f "${file}"
   {
-    declare quoted_dns_server_ip
-    declare quoted_dns_domain
-    quoted_dns_server_ip=$(yaml-quote "${DNS_SERVER_IP}")
-    if [[ "${ENABLE_NODELOCAL_DNS:-}" == "true" ]]; then
-      quoted_dns_server_ip=$(yaml-quote "${LOCAL_DNS_IP}")
+    print-common-kubelet-config
+    if [[ "${master}" == "true" ]]; then
+      print-master-kubelet-config
+    else
+      print-common-node-kubelet-config
+      if [[ "${os}" == "linux" ]]; then
+        print-linux-node-kubelet-config
+      elif [[ "${os}" == "windows" ]]; then
+        print-windows-node-kubelet-config
+      fi
     fi
-    quoted_dns_domain=$(yaml-quote "${DNS_DOMAIN}")
-    cat <<EOF
+  } > "${file}"
+}
+
+# cat the Kubelet config yaml in common between masters, linux nodes, and windows nodes
+function print-common-kubelet-config {
+  declare quoted_dns_server_ip
+  declare quoted_dns_domain
+  quoted_dns_server_ip=$(yaml-quote "${DNS_SERVER_IP}")
+  if [[ "${ENABLE_NODELOCAL_DNS:-}" == "true" ]]; then
+    quoted_dns_server_ip=$(yaml-quote "${LOCAL_DNS_IP}")
+  fi
+  quoted_dns_domain=$(yaml-quote "${DNS_DOMAIN}")
+  cat <<EOF
 kind: KubeletConfiguration
 apiVersion: kubelet.config.k8s.io/v1beta1
 cgroupRoot: /
 clusterDNS:
   - ${quoted_dns_server_ip}
 clusterDomain: ${quoted_dns_domain}
-staticPodPath: /etc/kubernetes/manifests
 readOnlyPort: 10255
 EOF
 
-    # --- begin master-specific config ---
-    if [[ "${master}" == "true" ]]; then
-        cat <<EOF
+  # Note: ENABLE_MANIFEST_URL is used by GKE
+  if [[ "${ENABLE_MANIFEST_URL:-}" == "true" ]]; then
+    declare quoted_manifest_url
+    quoted_manifest_url=$(yaml-quote "${MANIFEST_URL}")
+    cat <<EOF
+staticPodURL: ${quoted_manifest_url}
+EOF
+    yaml-map-string-stringarray 'staticPodURLHeader' "${MANIFEST_URL_HEADER}"
+  fi
+
+  if [[ -n "${EVICTION_HARD:-}" ]]; then
+    yaml-map-string-string 'evictionHard' "${EVICTION_HARD}" true '<'
+  fi
+
+  if [[ -n "${FEATURE_GATES:-}" ]]; then
+    yaml-map-string-string 'featureGates' "${FEATURE_GATES}" false '='
+  fi
+}
+
+# cat the Kubelet config yaml for masters
+function print-master-kubelet-config {
+  cat <<EOF
 enableDebuggingHandlers: false
 hairpinMode: none
+staticPodPath: /etc/kubernetes/manifests
 authentication:
   webhook:
     enabled: false
@@ -901,55 +937,66 @@ authentication:
 authorization:
   mode: AlwaysAllow
 EOF
-      if [[ "${REGISTER_MASTER_KUBELET:-false}" == "false" ]]; then
-        # Note: Standalone mode is used by GKE
-        declare quoted_master_ip_range
-        quoted_master_ip_range=$(yaml-quote "${MASTER_IP_RANGE}")
-        cat <<EOF
+  if [[ "${REGISTER_MASTER_KUBELET:-false}" == "false" ]]; then
+     # Note: Standalone mode is used by GKE
+    declare quoted_master_ip_range
+    quoted_master_ip_range=$(yaml-quote "${MASTER_IP_RANGE}")
+     cat <<EOF
 podCidr: ${quoted_master_ip_range}
 EOF
-      fi
-      # --- end master-specific config ---
-    else
-      # --- begin node-specific config ---
-      # Keep authentication.x509.clientCAFile in sync with CA_CERT_BUNDLE_PATH in configure-helper.sh
-      cat <<EOF
+  fi
+}
+
+# cat the Kubelet config yaml in common between linux nodes and windows nodes
+function print-common-node-kubelet-config {
+  cat <<EOF
 enableDebuggingHandlers: true
+EOF
+  if [[ "${HAIRPIN_MODE:-}" == "promiscuous-bridge" ]] || \
+     [[ "${HAIRPIN_MODE:-}" == "hairpin-veth" ]] || \
+     [[ "${HAIRPIN_MODE:-}" == "none" ]]; then
+      declare quoted_hairpin_mode
+      quoted_hairpin_mode=$(yaml-quote "${HAIRPIN_MODE}")
+      cat <<EOF
+hairpinMode: ${quoted_hairpin_mode}
+EOF
+  fi
+}
+
+# cat the Kubelet config yaml for linux nodes
+function print-linux-node-kubelet-config {
+  # Keep authentication.x509.clientCAFile in sync with CA_CERT_BUNDLE_PATH in configure-helper.sh
+  cat <<EOF
+staticPodPath: /etc/kubernetes/manifests
 authentication:
   x509:
     clientCAFile: /etc/srv/kubernetes/pki/ca-certificates.crt
 EOF
-      if [[ "${HAIRPIN_MODE:-}" == "promiscuous-bridge" ]] || \
-         [[ "${HAIRPIN_MODE:-}" == "hairpin-veth" ]] || \
-         [[ "${HAIRPIN_MODE:-}" == "none" ]]; then
-         declare quoted_hairpin_mode
-         quoted_hairpin_mode=$(yaml-quote "${HAIRPIN_MODE}")
-         cat <<EOF
-hairpinMode: ${quoted_hairpin_mode}
-EOF
-      fi
-      # --- end node-specific config ---
-    fi
-
-    # Note: ENABLE_MANIFEST_URL is used by GKE
-    if [[ "${ENABLE_MANIFEST_URL:-}" == "true" ]]; then
-      declare quoted_manifest_url
-      quoted_manifest_url=$(yaml-quote "${MANIFEST_URL}")
-      cat <<EOF
-staticPodURL: ${quoted_manifest_url}
-EOF
-      yaml-map-string-stringarray 'staticPodURLHeader' "${MANIFEST_URL_HEADER}"
-    fi
-
-    if [[ -n "${EVICTION_HARD:-}" ]]; then
-      yaml-map-string-string 'evictionHard' "${EVICTION_HARD}" true '<'
-    fi
-
-    if [[ -n "${FEATURE_GATES:-}" ]]; then
-      yaml-map-string-string 'featureGates' "${FEATURE_GATES}" false '='
-    fi
-  } > "${file}"
 }
+
+# cat the Kubelet config yaml for windows nodes
+function print-windows-node-kubelet-config {
+  # Notes:
+  # - We assume that the K8s dir on the windows node is C:\etc\kubernetes
+  # - We don't run any static pods on Windows nodes yet.
+
+  # TODO(mtaufen): Does it make any sense to set eviction thresholds for inodes on Windows?
+
+  # TODO(pjh, mtaufen): It may make sense to use a different hairpin mode on Windows.
+  # We're currently using hairpin-veth, but https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L121
+  # uses promiscuous-bridge.
+
+  # TODO(pjh, mtaufen): Does cgroupRoot make sense for Windows?
+
+  # Keep authentication.x509.clientCAFile in sync with CA_CERT_BUNDLE_PATH in k8s-node-setup.psm1
+  cat <<EOF
+authentication:
+  x509:
+    clientCAFile: 'C:\etc\kubernetes\pki\ca-certificates.crt'
+EOF
+}
+
+
 
 function build-kube-master-certs {
   local file=$1
