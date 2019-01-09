@@ -463,6 +463,12 @@ function test_linux_pod_to_linux_pod {
   fi
 }
 
+# TODO(pjh): this test flakily fails on brand-new clusters, not sure why.
+# % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+#                                Dload  Upload   Total   Spent    Left  Speed
+# 0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+# curl: (6) Could not resolve host:
+# command terminated with exit code 6
 function test_linux_pod_to_windows_pod {
   echo "TEST: ${FUNCNAME[0]}"
   local linux_command_pod="$(get_linux_command_pod_name)"
