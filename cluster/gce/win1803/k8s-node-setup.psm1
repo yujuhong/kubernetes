@@ -703,43 +703,12 @@ function Configure-CniNetworking {
 }
 
 function Configure-Kubelet {
-  # Linux node: /home/kubernetes/kubelet-config.yaml is built by
-  # build-kubelet-config() in util.sh, then posted to metadata server as
-  # kubelet-config.
-  Todo "building KubeletConfiguration; for Linux nodes this is done by the cluster scripts and posted to metadata server. Do the same for Windows?"
+  # The Kubelet config is built by build-kubelet-config() in cluster/gce/util.sh,
+  # and stored in the metadata server under the 'kubelet-config' key.
 
-  Set-Content ${env:KUBELET_CONFIG} `
-'kind: KubeletConfiguration
-apiVersion: kubelet.config.k8s.io/v1beta1
-cgroupRoot: /
-clusterDNS:
-  - "DNS_SERVER_IP"
-clusterDomain: "DNS_DOMAIN"
-staticPodPath: STATIC_POD_PATH
-readOnlyPort: 10255
-enableDebuggingHandlers: true
-authentication:
-  x509:
-    clientCAFile: CLIENT_CA_FILE
-hairpinMode: "HAIRPIN_MODE"
-evictionHard:
-  memory.available: "250Mi"
-  nodefs.available: "10%"
-  nodefs.inodesFree: "5%"
-featureGates:
-  ExperimentalCriticalPodAnnotation: true'.`
-  replace('DNS_SERVER_IP', ${kubeEnv}['DNS_SERVER_IP']).`
-  replace('DNS_DOMAIN', ${kubeEnv}['DNS_DOMAIN']).`
-  replace('STATIC_POD_PATH', ${env:K8S_DIR}).`
-  replace('CLIENT_CA_FILE', ${env:CA_CERT_BUNDLE_PATH}).`
-  replace('HAIRPIN_MODE', 'hairpin-veth')
-  # TODO(pjh): STATIC_POD_PATH is /etc/kubernetes/manifests on Linux, no idea
-  # what makes sense for Windows.
-  # TODO(pjh): no idea if this HAIRPIN_MODE makes sense for Windows;
-  # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L121
-  # uses promiscuous-bridge (as does my kubernetes-the-hard-way).
-  # TODO(pjh): does cgroupRoot make sense for Windows?
-
+  # Download and save Kubelet Config, and log the result
+  $kubeletConfig = Get-MetadataValue 'kubelet-config'
+  Set-Content ${env:KUBELET_CONFIG} $kubeletConfig
   Log "Kubelet config:`n$(Get-Content -Raw ${env:KUBELET_CONFIG})"
 }
 
