@@ -38,7 +38,8 @@
 #     "error: unable to upgrade connection: Authorization error
 #     (user=kube-apiserver, verb=create, resource=nodes, subresource=proxy)"
 
-kubectl=client/bin/kubectl
+# Override this to use a different kubectl binary.
+kubectl=kubectl
 linux_deployment_timeout=60
 windows_deployment_timeout=120
 output_file=/tmp/k8s-smoke-test.out
