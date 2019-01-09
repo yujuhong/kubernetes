@@ -480,6 +480,7 @@ function test_linux_pod_to_windows_pod {
     cleanup_deployments
     echo "Failing output:\n$(cat $output_file)"
     echo "FAILED: ${FUNCNAME[0]}"
+    echo "This test seems to be flaky. TODO: investigate."
     exit $?
   fi
 }
