@@ -43,10 +43,18 @@ function Get-MetadataValue {
 }
 
 try {
+  $install_logging_agent_module = Get-MetadataValue 'install-logging-agent-psm1'
+  New-Item -ItemType file C:\install-logging-agent.psm1
+  Set-Content C:\install-logging-agent.psm1 $install_logging_agent_module
+  Import-Module C:\install-logging-agent.psm1
+
   $nodeSetupModule = Get-MetadataValue 'k8s-node-setup-psm1'
   New-Item -ItemType file C:\k8s-node-setup.psm1
   Set-Content C:\k8s-node-setup.psm1 $nodeSetupModule
   Import-Module C:\k8s-node-setup.psm1
+
+  InstallAndStart-LoggingAgent
+  Log "Installed StackDriver logging agent"
 
   $installSshModule = Get-MetadataValue 'install-ssh-psm1'
   New-Item -ItemType file C:\install-ssh.psm1
