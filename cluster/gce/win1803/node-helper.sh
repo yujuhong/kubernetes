@@ -14,7 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# A library of helper functions and constant for GCI distro
+# A library of helper functions and constants for Windows nodes.
+
 #echo "PJH: TODO: is cluster/gce/gci/helper.sh needed for Windows?"
 source "${KUBE_ROOT}/cluster/gce/gci/helper.sh"
 

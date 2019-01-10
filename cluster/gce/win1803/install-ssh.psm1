@@ -12,33 +12,53 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+<#
+.SYNOPSIS
+  Library for installing and running Win32-OpenSSH.
+#>
+
 # Installs open-ssh using the instructions in
 # https://github.com/PowerShell/Win32-OpenSSH/wiki/Install-Win32-OpenSSH.
 #
 # After installation run StartProcess-WriteSshKeys to fetch ssh keys from the
 # metadata server.
-function InstallAndStart-OpenSSH{
+function InstallAndStart-OpenSSH {
   # Download open-ssh.
-  $url = "https://github.com/PowerShell/Win32-OpenSSH/releases/download/v7.7.2.0p1-Beta/OpenSSH-Win32.zip"
+  $url = ("https://github.com/PowerShell/Win32-OpenSSH/releases/download/" +
+          "v7.7.2.0p1-Beta/OpenSSH-Win32.zip")
   $ProgressPreference = 'SilentlyContinue'
   Invoke-WebRequest $url -OutFile C:\openssh-win32.zip
 
   # Unzip and install open-ssh
-  Expand-Archive c:\openssh-win32.zip -DestinationPath "C:\Program Files\OpenSSH"
-  powershell.exe -ExecutionPolicy Bypass -File "C:\Program Files\OpenSSH\OpenSSH-Win32\install-sshd.ps1"
+  Expand-Archive `
+      C:\openssh-win32.zip `
+      -DestinationPath "C:\Program Files\OpenSSH"
+  # TODO(pjh): should this have a leading '&' ?
+  powershell.exe `
+      -ExecutionPolicy Bypass `
+      -File "C:\Program Files\OpenSSH\OpenSSH-Win32\install-sshd.ps1"
 
   # Disable password-based authentication.
-  $sshd_config_default="C:\Program Files\OpenSSH\OpenSSH-Win32\sshd_config_default"
+  $sshd_config_default=("C:\Program Files\OpenSSH\OpenSSH-Win32\" +
+                        "sshd_config_default")
   $sshd_config="C:\ProgramData\ssh\sshd_config"
   New-Item -ItemType Directory -Force -Path "C:\ProgramData\ssh\"
   # SSH config files must be UTF-8 encoded:
   # https://github.com/PowerShell/Win32-OpenSSH/issues/862
   # https://github.com/PowerShell/Win32-OpenSSH/wiki/Various-Considerations
-  (Get-Content $sshd_config_default).replace('#PasswordAuthentication yes', 'PasswordAuthentication no') `
-  | Set-Content -Encoding UTF8 $sshd_config
+  (Get-Content $sshd_config_default).`
+      replace('#PasswordAuthentication yes', 'PasswordAuthentication no') |
+      Set-Content -Encoding UTF8 $sshd_config
 
   # Configure the firewall to allow inbound SSH connections
-  New-NetFirewallRule -Name sshd -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
+  New-NetFirewallRule `
+      -Name sshd `
+      -DisplayName 'OpenSSH Server (sshd)' `
+      -Enabled True `
+      -Direction Inbound `
+      -Protocol TCP `
+      -Action Allow `
+      -LocalPort 22
 
   # Start the services and configure them to automatically start on subsequent
   # boots:
@@ -66,20 +86,21 @@ function InstallAndStart-OpenSSH{
 # commonInstanceMetadata.items.ssh-keys" to check), run gcloud compute ssh with
 # that username once to add a new project-level SSH key, wait one minute for
 # StartProcess-WriteSshKeys to pick it up, then try to ssh/scp again.
-function StartProcess-WriteSshKeys{
-  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+function StartProcess-WriteSshKeys {
+  [Net.ServicePointManager]::SecurityProtocol = `
+      [Net.SecurityProtocolType]::Tls12
   Invoke-WebRequest `
-    https://gist.githubusercontent.com/pjh/9753cd14400f4e3d4567f4553ba75f1d/raw/cb7929fa78fc8f840819249785e69838f3e35d64/user-profile.psm1 `
-    -OutFile C:\user-profile.psm1
+      https://gist.githubusercontent.com/pjh/9753cd14400f4e3d4567f4553ba75f1d/raw/cb7929fa78fc8f840819249785e69838f3e35d64/user-profile.psm1 `
+      -OutFile C:\user-profile.psm1
 
-  $writeSshKeys = "C:\write-ssh-keys.ps1"
-  New-Item -ItemType file -Force ${writeSshKeys}
-  Set-Content ${writeSshKeys} `
+  $write_ssh_keys = "C:\write-ssh-keys.ps1"
+  New-Item -ItemType file -Force ${write_ssh_keys}
+  Set-Content ${write_ssh_keys} `
 'Import-Module C:\user-profile.psm1
 # For [System.Web.Security.Membership]::GeneratePassword():
 Add-Type -AssemblyName System.Web
 
-$pollInterval = 10
+$poll_interval = 10
 
 while($true) {
   $r1 = ""
@@ -90,18 +111,18 @@ while($true) {
   # gets disrupted while we set up container networking on the node.
   try {
     $r1 = Invoke-RestMethod -Headers @{"Metadata-Flavor"="Google"} -Uri `
-      "http://metadata.google.internal/computeMetadata/v1/project/attributes/ssh-keys"
+        "http://metadata.google.internal/computeMetadata/v1/project/attributes/ssh-keys"
   } catch {}
   try {
     $r2 = Invoke-RestMethod -Headers @{"Metadata-Flavor"="Google"} -Uri `
-      "http://metadata.google.internal/computeMetadata/v1/project/attributes/sshKeys"
+        "http://metadata.google.internal/computeMetadata/v1/project/attributes/sshKeys"
   } catch {}
   $response= $r1 + $r2
 
   # Split the response into lines; handle both \r\n and \n line breaks.
   $tuples = $response -split "\r?\n"
 
-  $usersToKeys = @{}
+  $users_to_keys = @{}
   foreach($line in $tuples) {
     if ([string]::IsNullOrEmpty($line)) {
       continue
@@ -109,14 +130,15 @@ while($true) {
     # The final parameter to -Split is the max number of strings to return, so
     # this only splits on the first colon.
     $username, $key = $line -Split ":",2
-    if (!$usersToKeys.ContainsKey($username)) {
-      $usersToKeys[$username] = @($key)
-    } else {
-      $keyList = $usersToKeys[$username]
-      $usersToKeys[$username] = $keyList + $key
+    if (-not $users_to_keys.ContainsKey($username)) {
+      $users_to_keys[$username] = @($key)
+    }
+    else {
+      $keyList = $users_to_keys[$username]
+      $users_to_keys[$username] = $keyList + $key
     }
   }
-  $usersToKeys.GetEnumerator() | ForEach-Object {
+  $users_to_keys.GetEnumerator() | ForEach-Object {
     $username = $_.key
 
     # We want to create an authorized_keys file in the user profile directory
@@ -146,34 +168,34 @@ while($true) {
       Add-LocalGroupMember -Group Administrators -Member $username
     } catch {}
 
-    $userDir = -join("C:\Users\", $username)
-    If (!(Test-Path $userDir)) {
+    $user_dir = "C:\Users\" + $username
+    if (-not (Test-Path $user_dir)) {
       # If for some reason Create-NewProfile failed to create the user profile
       # directory just continue on to the next user.
       continue
     }
 
-    $keysFile = -join($userDir, "\.ssh\authorized_keys")
-    New-Item -ItemType file -Force $keysFile
-    ForEach ($sshKey in $_.value) {
+    $keys_file = -join($user_dir, "\.ssh\authorized_keys")
+    New-Item -ItemType file -Force $keys_file
+    ForEach ($ssh_key in $_.value) {
       # authorized_keys and other ssh config files must be UTF-8 encoded:
       # https://github.com/PowerShell/Win32-OpenSSH/issues/862
       # https://github.com/PowerShell/Win32-OpenSSH/wiki/Various-Considerations
-      Add-Content -Encoding UTF8 $keysFile $sshKey
+      Add-Content -Encoding UTF8 $keys_file $ssh_key
     }
   }
-  Start-Sleep -sec $pollInterval
+  Start-Sleep -sec $poll_interval
 }'
-  Log "${writeSshKeys}:`n$(Get-Content -Raw ${writeSshKeys})"
+  Log-Output "${write_ssh_keys}:`n$(Get-Content -Raw ${write_ssh_keys})"
 
-  $writeKeysProcess = Start-Process `
-    -FilePath "powershell.exe" `
-    -ArgumentList @("-Command", ${writeSshKeys}) `
-    -WindowStyle Hidden -PassThru `
-    -RedirectStandardOutput "NUL" `
-    -RedirectStandardError C:\write-ssh-keys.err
-  Log "$(${writeKeysProcess} | Out-String)"
+  $write_keys_process = Start-Process `
+      -FilePath "powershell.exe" `
+      -ArgumentList @("-Command", ${write_ssh_keys}) `
+      -WindowStyle Hidden -PassThru `
+      -RedirectStandardOutput "NUL" `
+      -RedirectStandardError C:\write-ssh-keys.err
+  Log-Output "$(${write_keys_process} | Out-String)"
 }
 
-Export-ModuleMember -Function InstallAndStart-OpenSSH
-Export-ModuleMember -Function StartProcess-WriteSshKeys
+# Export all public functions:
+Export-ModuleMember -Function *-*

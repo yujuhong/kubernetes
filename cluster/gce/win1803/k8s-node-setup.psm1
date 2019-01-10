@@ -12,86 +12,104 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Some portions copied / adapter from
-# https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1
+<#
+.SYNOPSIS
+  Library for configuring Windows nodes and joining them to the cluster.
 
-# Suggested usage for dev/test:
-#   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-#   Invoke-WebRequest https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/win1803/k8s-node-setup.psm1 -OutFile C:\k8s-node-setup.psm1
-#   Invoke-WebRequest https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/win1803/configure.ps1 -OutFile C:\configure.ps1
-#   Import-Module -Force C:\k8s-node-setup.psm1  # -Force to override existing
-#   # Execute functions manually or run configure.ps1.
+.DESCRIPTION
+  Some portions copied / adapted from
+  https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1.
+.EXAMPLE
+  Suggested usage for dev/test:
+    [Net.ServicePointManager]::SecurityProtocol = `
+        [Net.SecurityProtocolType]::Tls12
+    Invoke-WebRequest `
+        https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/win1803/k8s-node-setup.psm1 `
+        -OutFile C:\k8s-node-setup.psm1
+    Invoke-WebRequest `
+        https://github.com/pjh/kubernetes/raw/windows-up/cluster/gce/win1803/configure.ps1 `
+        -OutFile C:\configure.ps1
+    Import-Module -Force C:\k8s-node-setup.psm1  # -Force to override existing
+    # Execute functions manually or run configure.ps1.
+#>
 
-$k8sDir = "C:\etc\kubernetes"
-Export-ModuleMember -Variable k8sDir
-$infraContainer = "kubeletwin/pause"
-Export-ModuleMember -Variable infraContainer
-$gceMetadataServer = "169.254.169.254"
-# The name of the primary "physical" network adapter for the Windows VM.
-$primaryNetAdapterName = "Ethernet"
+# TODO(pjh):
+#  - Try to use "approved verbs":
+#    https://docs.microsoft.com/en-us/powershell/developer/cmdlet/approved-verbs-for-windows-powershell-commands
+#  - Document functions using proper syntax:
+#    https://technet.microsoft.com/en-us/library/hh847834(v=wps.620).aspx
+
+$K8S_DIR = "C:\etc\kubernetes"
+$INFRA_CONTAINER = "kubeletwin/pause"
+$GCE_METADATA_SERVER = "169.254.169.254"
 # The "management" interface is used by the kubelet and by Windows pods to talk
 # to the rest of the Kubernetes cluster *without NAT*. This interface does not
 # exist until an initial HNS network has been created on the Windows node - see
 # Add-InitialHnsNetwork().
-$mgmtAdapterName = "vEthernet (Ethernet*"
+$MGMT_ADAPTER_NAME = "vEthernet (Ethernet*"
 
-function Log {
+function Log-Output {
   param (
-    [parameter(Mandatory=$true)] [string]$message,
-    [parameter(Mandatory=$false)] [bool]$fail = $false
+    [parameter(Mandatory=$true)] [string]$Message,
+    [switch]$Fatal
   )
   # TODO(pjh): what's correct, Write-Output or Write-Host??
-  Write-Output "${message}"
-  If (${fail}) {
+  Write-Output "${Message}"
+  if (${Fatal}) {
     Exit 1
   }
 }
 
 function Todo {
   param (
-    [parameter(Mandatory=$true)] [string]$message
+    [parameter(Mandatory=$true)] [string]$Message
   )
-  Write-Output "TODO: ${message}"
+  Write-Output "TODO: ${Message}"
 }
 
-function NotImplemented {
+function Log_NotImplemented {
   param (
-    [parameter(Mandatory=$true)] [string]$message,
-    [parameter(Mandatory=$false)] [bool]$fail = $false
+    [parameter(Mandatory=$true)] [string]$Message
   )
-  Log "Not implemented yet: ${message}" ${fail}
+  Log-Output "Not implemented yet: ${Message}" -Fatal
 }
 
 # Fails and exits if the route to the GCE metadata server is not present,
 # otherwise does nothing and emits nothing.
-function Verify-GceMetadataServerRouteIsPresent {
+function Verify_GceMetadataServerRouteIsPresent {
   Try {
-    Get-NetRoute -ErrorAction "Stop" -AddressFamily IPv4 `
-      -DestinationPrefix ${gceMetadataServer}/32 | Out-Null
+    Get-NetRoute `
+        -ErrorAction "Stop" `
+        -AddressFamily IPv4 `
+        -DestinationPrefix ${GCE_METADATA_SERVER}/32 | Out-Null
   } Catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
     # TODO(pjh): add $true arg to make this fatal.
-    Log "GCE metadata server route is not present as expected.`n$(Get-NetRoute -AddressFamily IPv4 | Out-String)"
+    Log-Output ("GCE metadata server route is not present as expected.`n" +
+                "$(Get-NetRoute -AddressFamily IPv4 | Out-String)")
   }
 }
 
-function WaitFor-GceMetadataServerRouteToBeRemoved {
+function WaitFor_GceMetadataServerRouteToBeRemoved {
   $elapsed = 0
   $timeout = 60
-  Log "Waiting up to ${timeout} seconds for GCE metadata server route to be removed"
+  Log-Output ("Waiting up to ${timeout} seconds for GCE metadata server " +
+              "route to be removed")
   while (${elapsed} -lt ${timeout}) {
     Try {
-      Get-NetRoute -ErrorAction "Stop" -AddressFamily IPv4 `
-        -DestinationPrefix ${gceMetadataServer}/32 | Out-Null
+      Get-NetRoute `
+          -ErrorAction "Stop" `
+          -AddressFamily IPv4 `
+          -DestinationPrefix ${GCE_METADATA_SERVER}/32 | Out-Null
     } Catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
       break
     }
-    ${sleeptime} = 2
+    $sleeptime = 2
     Start-Sleep ${sleeptime}
     ${elapsed} += ${sleeptime}
   }
 }
 
-function Add-GceMetadataServerRoute {
+function Add_GceMetadataServerRoute {
   # Before setting up HNS the 1803 VM has a "vEthernet (nat)" interface and a
   # "Ethernet" interface, and the route to the metadata server exists on the
   # Ethernet interface. After adding the HNS network a "vEthernet (Ethernet)"
@@ -101,35 +119,35 @@ function Add-GceMetadataServerRoute {
   # up with that, but since it's hard to know what's the right thing to do here
   # we just try to add the route on all of the network adapters.
   Get-NetAdapter | ForEach-Object {
-    $adapterIndex = $_.InterfaceIndex
-    New-NetRoute -ErrorAction SilentlyContinue `
-      -DestinationPrefix "${gceMetadataServer}/32" `
-      -InterfaceIndex ${adapterIndex} | Out-Null
+    $adapter_index = $_.InterfaceIndex
+    New-NetRoute `
+        -ErrorAction SilentlyContinue `
+        -DestinationPrefix "${GCE_METADATA_SERVER}/32" `
+        -InterfaceIndex ${adapter_index} | Out-Null
   }
-  #route /p add ${gceMetadataServer} mask 255.255.255.255 0.0.0.0 if 4 metric 1
-  #route add ${gceMetadataServer} mask 255.255.255.255 0.0.0.0
 }
 
 # TODO: rename this InstanceMetadata (as opposed to e.g. network-interfaces
 # metadata).
 function Get-MetadataValue {
   param (
-    [parameter(Mandatory=$true)] [string]$key,
-    [parameter(Mandatory=$false)] [string]$default
+    [parameter(Mandatory=$true)] [string]$Key,
+    [parameter(Mandatory=$false)] [string]$Default
   )
 
-  $url = "http://metadata.google.internal/computeMetadata/v1/instance/attributes/$key"
+  $url = ("http://metadata.google.internal/computeMetadata/v1/instance/" +
+          "attributes/$Key")
   try {
     $client = New-Object Net.WebClient
     $client.Headers.Add('Metadata-Flavor', 'Google')
     return ($client.DownloadString($url)).Trim()
   }
   catch [System.Net.WebException] {
-    if ($default) {
-      return $default
+    if ($Default) {
+      return $Default
     }
     else {
-      Write-Output "Failed to retrieve value for $key."
+      Write-Output "Failed to retrieve value for $Key."
       return $null
     }
   }
@@ -142,64 +160,63 @@ function Get-MetadataValue {
 function Download-KubeEnv {
   # Testing / debugging:
   # First:
-  #   ${kubeEnv} = Get-MetadataValue 'kube-env'
+  #   ${kube_env} = Get-MetadataValue 'kube-env'
   # or:
-  #   ${kubeEnv} = [IO.File]::ReadAllText(".\kubeEnv.txt")
-  # ${kubeEnvTable} = ConvertFrom-Yaml ${kubeEnv}
-  # ${kubeEnvTable}
-  # ${kubeEnvTable}.GetType()
+  #   ${kube_env} = [IO.File]::ReadAllText(".\kubeEnv.txt")
+  # ${kube_env_table} = ConvertFrom-Yaml ${kube_env}
+  # ${kube_env_table}
+  # ${kube_env_table}.GetType()
 
-  # The type of kubeEnv is a powershell String.
-  $kubeEnv = Get-MetadataValue 'kube-env'
-  $kubeEnvTable = ConvertFrom-Yaml ${kubeEnv}
+  # The type of kube_env is a powershell String.
+  $kube_env = Get-MetadataValue 'kube-env'
+  $kube_env_table = ConvertFrom-Yaml ${kube_env}
 
-  # TODO(pjh): instead of returning kubeEnvTable, put it in $global namespace
+  # TODO(pjh): instead of returning kube_env_table, put it in $global namespace
   # so it's accessible from all other functions?
-  return ${kubeEnvTable}
+  return ${kube_env_table}
 }
 
 function Set-MachineEnvironmentVar {
   param (
-    [parameter(Mandatory=$true)] [string]$key,
-    [parameter(Mandatory=$true)] [string]$value
+    [parameter(Mandatory=$true)] [string]$Key,
+    [parameter(Mandatory=$true)] [string]$Value
   )
-  [Environment]::SetEnvironmentVariable($key, $value, "Machine")
+  [Environment]::SetEnvironmentVariable($Key, $Value, "Machine")
 }
 
 function Set-CurrentShellEnvironmentVar {
   param (
-    [parameter(Mandatory=$true)] [string]$key,
-    [parameter(Mandatory=$true)] [string]$value
+    [parameter(Mandatory=$true)] [string]$Key,
+    [parameter(Mandatory=$true)] [string]$Value
   )
-  $expression = -join('$env:', $key, ' = "', $value, '"')
+  $expression = '$env:' + $Key + ' = "' + $Value + '"'
   Invoke-Expression ${expression}
 }
 
 function Set-EnvironmentVars {
-  $envVars = @{
-    "K8S_DIR" = "${k8sDir}"
-    "NODE_DIR" = "${k8sDir}\node"
-    "Path" = ${env:Path} + ";${k8sDir}\node"
-    "LOGS_DIR" = "${k8sDir}\logs"
-    "CNI_DIR" = "${k8sDir}\cni"
-    "CNI_CONFIG_DIR" = "${k8sDir}\cni\config"
-    "MANIFESTS_DIR" = "${k8sDir}\manifests"
-    "KUBELET_CONFIG" = "${k8sDir}\kubelet-config.yaml"
-    "KUBECONFIG" = "${k8sDir}\kubelet.kubeconfig"
-    "BOOTSTRAP_KUBECONFIG" = "${k8sDir}\kubelet.bootstrap-kubeconfig"
-    "KUBEPROXY_KUBECONFIG" = "${k8sDir}\kubeproxy.kubeconfig"
+  $env_vars = @{
+    "K8S_DIR" = "${K8S_DIR}"
+    "NODE_DIR" = "${K8S_DIR}\node"
+    "Path" = ${env:Path} + ";${K8S_DIR}\node"
+    "LOGS_DIR" = "${K8S_DIR}\logs"
+    "CNI_DIR" = "${K8S_DIR}\cni"
+    "CNI_CONFIG_DIR" = "${K8S_DIR}\cni\config"
+    "MANIFESTS_DIR" = "${K8S_DIR}\manifests"
+    "KUBELET_CONFIG" = "${K8S_DIR}\kubelet-config.yaml"
+    "KUBECONFIG" = "${K8S_DIR}\kubelet.kubeconfig"
+    "BOOTSTRAP_KUBECONFIG" = "${K8S_DIR}\kubelet.bootstrap-kubeconfig"
+    "KUBEPROXY_KUBECONFIG" = "${K8S_DIR}\kubeproxy.kubeconfig"
     "KUBE_NETWORK" = "l2bridge".ToLower()
-    "PKI_DIR" = "${k8sDir}\pki"
-    "CA_CERT_BUNDLE_PATH" = "${k8sDir}\pki\ca-certificates.crt"
-    "KUBELET_CERT_PATH" = "${k8sDir}\pki\kubelet.crt"
-    "KUBELET_KEY_PATH" = "${k8sDir}\pki\kubelet.key"
+    "PKI_DIR" = "${K8S_DIR}\pki"
+    "CA_CERT_BUNDLE_PATH" = "${K8S_DIR}\pki\ca-certificates.crt"
+    "KUBELET_CERT_PATH" = "${K8S_DIR}\pki\kubelet.crt"
+    "KUBELET_KEY_PATH" = "${K8S_DIR}\pki\kubelet.key"
   }
 
   # Set the environment variables in two ways: permanently on the machine (only
   # takes effect after a reboot), and in the current shell.
-  $envVars.GetEnumerator() | ForEach-Object{
-    $message = -join("Setting environment variable: ", $_.key, " = ",`
-                     $_.value)
+  $env_vars.GetEnumerator() | ForEach-Object{
+    $message = "Setting environment variable: " + $_.key + " = " + $_.value
     Write-Output ${message}
     Set-MachineEnvironmentVar $_.key $_.value
     Set-CurrentShellEnvironmentVar $_.key $_.value
@@ -207,21 +224,22 @@ function Set-EnvironmentVars {
 }
 
 function Set-PrerequisiteOptions {
-  Log "Disabling Windows Firewall and Windows Update service"
+  Log-Output "Disabling Windows Firewall and Windows Update service"
   Set-NetFirewallProfile -Profile Domain, Public, Private -Enabled False
   sc.exe config wuauserv start=disabled
   sc.exe stop wuauserv
 
   # Use TLS 1.2: needed for Invoke-WebRequest to github.com.
-  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  [Net.ServicePointManager]::SecurityProtocol = `
+      [Net.SecurityProtocolType]::Tls12
 
   # https://github.com/cloudbase/powershell-yaml
-  Log "Installing powershell-yaml module from external repo"
+  Log-Output "Installing powershell-yaml module from external repo"
   Install-Module -Name powershell-yaml -Force
 }
 
 function Create-Directories {
-  Log "Creating ${env:K8S_DIR} and its subdirectories."
+  Log-Output "Creating ${env:K8S_DIR} and its subdirectories."
   ForEach ($dir in ("${env:K8S_DIR}", "${env:NODE_DIR}", "${env:LOGS_DIR}",
     "${env:CNI_DIR}", "${env:CNI_CONFIG_DIR}", "${env:MANIFESTS_DIR}",
     "${env:PKI_DIR}")) {
@@ -236,17 +254,18 @@ function Download-HelperScripts {
 }
 
 function Create-PauseImage {
-  $winVersion = Get-MetadataValue 'win-version'
+  $win_version = Get-MetadataValue 'win-version'
 
   mkdir -Force ${env:K8S_DIR}\pauseimage
   New-Item -ItemType file ${env:K8S_DIR}\pauseimage\Dockerfile
-  Set-Content ${env:K8S_DIR}\pauseimage\Dockerfile `
-    "FROM microsoft/nanoserver:${winVersion}`n`nCMD cmd /c ping -t localhost"
-  docker build -t ${infraContainer} ${env:K8S_DIR}\pauseimage
+  Set-Content `
+      ${env:K8S_DIR}\pauseimage\Dockerfile `
+      "FROM microsoft/nanoserver:${win_version}`n`nCMD cmd /c ping -t localhost"
+  docker build -t ${INFRA_CONTAINER} ${env:K8S_DIR}\pauseimage
 }
 
 function DownloadAndInstall-KubernetesBinaries {
-  $k8sVersion = Get-MetadataValue 'k8s-version'
+  $k8s_version = Get-MetadataValue 'k8s-version'
 
   # TODO(pjh): in one kube-up run I got a mysterious failure when the startup
   # script tried to download the binaries here:
@@ -262,109 +281,108 @@ function DownloadAndInstall-KubernetesBinaries {
   # Disable progress bar to dramatically increase download speed.
   $ProgressPreference = 'SilentlyContinue'
   Invoke-WebRequest `
-    https://storage.googleapis.com/kubernetes-release/release/${k8sVersion}/bin/windows/amd64/kubectl.exe `
-    -OutFile ${env:NODE_DIR}\kubectl.exe
+      https://storage.googleapis.com/kubernetes-release/release/${k8s_version}/bin/windows/amd64/kubectl.exe `
+      -OutFile ${env:NODE_DIR}\kubectl.exe
   Invoke-WebRequest `
-    https://storage.googleapis.com/kubernetes-release/release/${k8sVersion}/bin/windows/amd64/kubelet.exe `
-    -OutFile ${env:NODE_DIR}\kubelet.exe
+      https://storage.googleapis.com/kubernetes-release/release/${k8s_version}/bin/windows/amd64/kubelet.exe `
+      -OutFile ${env:NODE_DIR}\kubelet.exe
   Invoke-WebRequest `
-    https://storage.googleapis.com/kubernetes-release/release/${k8sVersion}/bin/windows/amd64/kube-proxy.exe `
-    -OutFile ${env:NODE_DIR}\kube-proxy.exe
+      https://storage.googleapis.com/kubernetes-release/release/${k8s_version}/bin/windows/amd64/kube-proxy.exe `
+      -OutFile ${env:NODE_DIR}\kube-proxy.exe
 }
 
 # TODO(pjh): this is copied from
 # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L98.
 # See if there's a way to fetch or construct the "management subnet" so that
 # this is not needed.
-function
-ConvertTo-DecimalIP
+function ConvertTo_DecimalIP
 {
   param(
-    [Parameter(Mandatory = $true, Position = 0)]
+    [parameter(Mandatory = $true, Position = 0)]
     [Net.IPAddress] $IPAddress
   )
-  $i = 3; $DecimalIP = 0;
-  $IPAddress.GetAddressBytes() | % {
-    $DecimalIP += $_ * [Math]::Pow(256, $i); $i--
-  }
 
-  return [UInt32]$DecimalIP
+  $i = 3; $decimal_ip = 0;
+  $IPAddress.GetAddressBytes() | % {
+    $decimal_ip += $_ * [Math]::Pow(256, $i); $i--
+  }
+  return [UInt32]$decimal_ip
 }
 
 # TODO(pjh): this is copied from
 # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L98.
 # See if there's a way to fetch or construct the "management subnet" so that
 # this is not needed.
-function
-ConvertTo-DottedDecimalIP
+function ConvertTo_DottedDecimalIP
 {
   param(
-    [Parameter(Mandatory = $true, Position = 0)]
+    [parameter(Mandatory = $true, Position = 0)]
     [Uint32] $IPAddress
   )
 
-    $DottedIP = $(for ($i = 3; $i -gt -1; $i--)
-    {
-      $Remainder = $IPAddress % [Math]::Pow(256, $i)
-      ($IPAddress - $Remainder) / [Math]::Pow(256, $i)
-      $IPAddress = $Remainder
-    })
-
-    return [String]::Join(".", $DottedIP)
+  $dotted_ip = $(for ($i = 3; $i -gt -1; $i--) {
+    $remainder = $IPAddress % [Math]::Pow(256, $i)
+    ($IPAddress - $remainder) / [Math]::Pow(256, $i)
+    $IPAddress = $remainder
+  })
+  return [String]::Join(".", $dotted_ip)
 }
 
 # TODO(pjh): this is copied from
 # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L98.
 # See if there's a way to fetch or construct the "management subnet" so that
 # this is not needed.
-function
-ConvertTo-MaskLength
+function ConvertTo_MaskLength
 {
   param(
-    [Parameter(Mandatory = $True, Position = 0)]
+    [parameter(Mandatory = $True, Position = 0)]
     [Net.IPAddress] $SubnetMask
   )
-    $Bits = "$($SubnetMask.GetAddressBytes() | % {
-      [Convert]::ToString($_, 2)
-    } )" -replace "[\s0]"
-    return $Bits.Length
+
+  $bits = "$($SubnetMask.GetAddressBytes() | % {
+    [Convert]::ToString($_, 2)
+  } )" -replace "[\s0]"
+  return $bits.Length
 }
 
 # This function will fail if Add-InitialHnsNetwork() has not been called first.
 function Get-MgmtSubnet {
-  $netAdapter = Get-MgmtNetAdapter
+  $net_adapter = Get_MgmtNetAdapter
 
-  $addr = (Get-NetIPAddress -InterfaceAlias ${netAdapter}.ifAlias `
-    -AddressFamily IPv4).IPAddress
-  $mask = (Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object `
-    InterfaceIndex -eq $(${netAdapter}.ifIndex)).IPSubnet[0]
-  $mgmtSubnet = `
-    (ConvertTo-DecimalIP ${addr}) -band (ConvertTo-DecimalIP ${mask})
-  $mgmtSubnet = ConvertTo-DottedDecimalIP ${mgmtSubnet}
-  return "${mgmtSubnet}/$(ConvertTo-MaskLength $mask)"
+  $addr = (Get-NetIPAddress `
+      -InterfaceAlias ${net_adapter}.ifAlias `
+      -AddressFamily IPv4).IPAddress
+  $mask = (Get-WmiObject Win32_NetworkAdapterConfiguration |
+      Where-Object InterfaceIndex -eq $(${net_adapter}.ifIndex)).IPSubnet[0]
+  $mgmt_subnet = `
+    (ConvertTo_DecimalIP ${addr}) -band (ConvertTo_DecimalIP ${mask})
+  $mgmt_subnet = ConvertTo_DottedDecimalIP ${mgmt_subnet}
+  return "${mgmt_subnet}/$(ConvertTo_MaskLength $mask)"
 }
 
 # This function will fail if Add-InitialHnsNetwork() has not been called first.
-function Get-MgmtNetAdapter{
-  $netAdapter = Get-NetAdapter | Where-Object Name -Like ${mgmtAdapterName}
-  if (!${netAdapter}) {
-    throw "Failed to find a suitable network adapter, check your network settings."
+function Get_MgmtNetAdapter {
+  $net_adapter = Get-NetAdapter | Where-Object Name -Like ${MGMT_ADAPTER_NAME}
+  if (-not ${net_adapter}) {
+    throw ("Failed to find a suitable network adapter, check your network " +
+           "settings.")
   }
 
-  return $netAdapter
+  return $net_adapter
 }
 
-# Decodes the base64 $data string and writes it as binary to $file.
-function Write-PkiData() {
+# Decodes the base64 $Data string and writes it as binary to $File.
+function Write_PkiData {
   param (
-    [parameter(Mandatory=$true)] [string] $data,
-    [parameter(Mandatory=$true)] [string] $file
+    [parameter(Mandatory=$true)] [string] $Data,
+    [parameter(Mandatory=$true)] [string] $File
   )
 
   # This command writes out a PEM certificate file, analogous to "base64
   # --decode" on Linux. See https://stackoverflow.com/a/51914136/1230197.
-  [IO.File]::WriteAllBytes($file, [Convert]::FromBase64String($data))
-  Todo "need to set permissions correctly on ${file}; not sure what the Windows equivalent of 'umask 077' is"
+  [IO.File]::WriteAllBytes($File, [Convert]::FromBase64String($Data))
+  Todo ("need to set permissions correctly on ${File}; not sure what the " +
+        "Windows equivalent of 'umask 077' is")
   # Linux: owned by root, rw by user only.
   #   -rw------- 1 root root 1.2K Oct 12 00:56 ca-certificates.crt
   #   -rw------- 1 root root 1.3K Oct 12 00:56 kubelet.crt
@@ -376,36 +394,36 @@ function Write-PkiData() {
 
 # This function is analogous to create-node-pki() in gci/configure-helper.sh for
 # Linux nodes.
-# Required ${kubeEnv} keys:
+# Required ${kube_env} keys:
 #   CA_CERT
 #   KUBELET_CERT
 #   KUBELET_KEY
-function Create-NodePki() {
-  echo "Creating node pki files"
+function Create-NodePki {
+  Log-Output "Creating node pki files"
 
   # Note: create-node-pki() tests if CA_CERT_BUNDLE / KUBELET_CERT /
   # KUBELET_KEY are already set, we don't.
-  $CA_CERT_BUNDLE = ${kubeEnv}['CA_CERT']
-  $KUBELET_CERT = ${kubeEnv}['KUBELET_CERT']
-  $KUBELET_KEY = ${kubeEnv}['KUBELET_KEY']
+  $CA_CERT_BUNDLE = ${kube_env}['CA_CERT']
+  $KUBELET_CERT = ${kube_env}['KUBELET_CERT']
+  $KUBELET_KEY = ${kube_env}['KUBELET_KEY']
 
   # Wrap data arg in quotes in case it contains spaces? (does this even make
   # sense?)
-  Write-PkiData "${CA_CERT_BUNDLE}" ${env:CA_CERT_BUNDLE_PATH}
-  Write-PkiData "${KUBELET_CERT}" ${env:KUBELET_CERT_PATH}
-  Write-PkiData "${KUBELET_KEY}" ${env:KUBELET_KEY_PATH}
+  Write_PkiData "${CA_CERT_BUNDLE}" ${env:CA_CERT_BUNDLE_PATH}
+  Write_PkiData "${KUBELET_CERT}" ${env:KUBELET_CERT_PATH}
+  Write_PkiData "${KUBELET_KEY}" ${env:KUBELET_KEY_PATH}
   Get-ChildItem ${env:PKI_DIR}
 }
 
 # This is analogous to create-kubelet-kubeconfig() in gci/configure-helper.sh
 # for Linux nodes.
 # Create-NodePki() must be called first.
-# Required ${kubeEnv} keys:
+# Required ${kube_env} keys:
 #   KUBERNETES_MASTER_NAME: the apiserver IP address.
-function Create-KubeletKubeconfig() {
+function Create-KubeletKubeconfig {
   # The API server IP address comes from KUBERNETES_MASTER_NAME in kube-env, I
   # think. cluster/gce/gci/configure-helper.sh?l=2801
-  $apiserverAddress = ${kubeEnv}['KUBERNETES_MASTER_NAME']
+  $apiserverAddress = ${kube_env}['KUBERNETES_MASTER_NAME']
 
   # TODO(pjh): set these using kube-env values.
   $createBootstrapConfig = $true
@@ -440,29 +458,33 @@ current-context: service-account-context'.`
       replace('KUBELET_KEY_PATH', ${env:KUBELET_KEY_PATH}).`
       replace('APISERVER_ADDRESS', ${apiserverAddress}).`
       replace('CA_CERT_BUNDLE_PATH', ${env:CA_CERT_BUNDLE_PATH})
-    Log "kubelet bootstrap kubeconfig:`n$(Get-Content -Raw ${env:BOOTSTRAP_KUBECONFIG})"
-  } ElseIf (${fetchBootstrapConfig}) {
-    NotImplemented "fetching kubelet bootstrap-kubeconfig file from metadata" `
-      $true
+    Log-Output ("kubelet bootstrap kubeconfig:`n" +
+                "$(Get-Content -Raw ${env:BOOTSTRAP_KUBECONFIG})")
+  }
+  elseif (${fetchBootstrapConfig}) {
+    Log_NotImplemented `
+        "fetching kubelet bootstrap-kubeconfig file from metadata"
     # get-metadata-value "instance/attributes/bootstrap-kubeconfig" >
     #   /var/lib/kubelet/bootstrap-kubeconfig
-    Log "kubelet bootstrap kubeconfig:`n$(Get-Content -Raw ${env:BOOTSTRAP_KUBECONFIG})"
-  } Else {
-    NotImplemented "fetching kubelet kubeconfig file from metadata" $true
+    Log-Output ("kubelet bootstrap kubeconfig:`n" +
+                "$(Get-Content -Raw ${env:BOOTSTRAP_KUBECONFIG})")
+  }
+  else {
+    Log_NotImplemented "fetching kubelet kubeconfig file from metadata"
     # get-metadata-value "instance/attributes/kubeconfig" >
     #   /var/lib/kubelet/kubeconfig
     Get-Content -Raw ${env:KUBECONFIG}
-    Log "kubelet kubeconfig:`n$(Get-Content -Raw ${env:KUBECONFIG})"
+    Log-Output "kubelet kubeconfig:`n$(Get-Content -Raw ${env:KUBECONFIG})"
   }
 }
 
 # This is analogous to create-kubeproxy-user-kubeconfig() in
 # gci/configure-helper.sh for Linux nodes. Create-NodePki() must be called
 # first.
-# Required ${kubeEnv} keys:
+# Required ${kube_env} keys:
 #   CA_CERT
 #   KUBE_PROXY_TOKEN
-function Create-KubeproxyKubeconfig() {
+function Create-KubeproxyKubeconfig {
   # TODO: make this command and other New-Item commands silent.
   New-Item -ItemType file ${env:KUBEPROXY_KUBECONFIG}
 
@@ -486,15 +508,17 @@ contexts:
     user: kube-proxy
   name: service-account-context
 current-context: service-account-context'.`
-    replace('KUBEPROXY_TOKEN', ${kubeEnv}['KUBE_PROXY_TOKEN']).`
+    replace('KUBEPROXY_TOKEN', ${kube_env}['KUBE_PROXY_TOKEN']).`
     #replace('CA_CERT_BUNDLE_PATH', ${env:CA_CERT_BUNDLE_PATH})
-    replace('CA_CERT', ${kubeEnv}['CA_CERT'])
+    replace('CA_CERT', ${kube_env}['CA_CERT'])
 
-  Log "kubeproxy kubeconfig:`n$(Get-Content -Raw ${env:KUBEPROXY_KUBECONFIG})"
+  Log-Output ("kubeproxy kubeconfig:`n" +
+              "$(Get-Content -Raw ${env:KUBEPROXY_KUBECONFIG})")
 }
 
-function Get-IpAliasRange {
-  $url = "http://${gceMetadataServer}/computeMetadata/v1/instance/network-interfaces/0/ip-aliases/0"
+function Get_IpAliasRange {
+  $url = ("http://${GCE_METADATA_SERVER}/computeMetadata/v1/instance/" +
+          "network-interfaces/0/ip-aliases/0")
   $client = New-Object Net.WebClient
   $client.Headers.Add('Metadata-Flavor', 'Google')
   return ($client.DownloadString($url)).Trim()
@@ -503,19 +527,19 @@ function Get-IpAliasRange {
 # The pod CIDR can be accessed at $env:POD_CIDR after this function returns.
 function Set-PodCidr {
   while($true) {
-    $podCidr = Get-IpAliasRange
+    $pod_cidr = Get_IpAliasRange
     if (-not $?) {
-      Write-Output ${podCIDR}
-      Write-Output "Retrying Get-IpAliasRange..."
+      Write-Output ${pod_cIDR}
+      Write-Output "Retrying Get_IpAliasRange..."
       Start-Sleep -sec 1
       continue
     }
     break
   }
 
-  Write-Output "fetched pod CIDR (same as IP alias range): ${podCidr}"
-  Set-MachineEnvironmentVar "POD_CIDR" ${podCidr}
-  Set-CurrentShellEnvironmentVar "POD_CIDR" ${podCidr}
+  Write-Output "fetched pod CIDR (same as IP alias range): ${pod_cidr}"
+  Set-MachineEnvironmentVar "POD_CIDR" ${pod_cidr}
+  Set-CurrentShellEnvironmentVar "POD_CIDR" ${pod_cidr}
 }
 
 # This function adds an initial HNS network on the Windows node, which forces
@@ -535,42 +559,57 @@ function Add-InitialHnsNetwork {
   # nodes without a network blip. Creating a vSwitch takes time, causes network
   # blips, and it makes it more likely to hit the issue where flanneld is
   # stuck, so we want to do this as rarely as possible."
-  Log "Creating initial HNS network to force creation of ${mgmtAdapterName} interface"
+  Log-Output ("Creating initial HNS network to force creation of " +
+              "${MGMT_ADAPTER_NAME} interface")
   # Note: RDP connection will hiccup when running this command.
-  New-HNSNetwork -Type "L2Bridge" -AddressPrefix "192.168.255.0/30" `
-    -Gateway "192.168.255.1" -Name "External" -Verbose
+  New-HNSNetwork `
+      -Type "L2Bridge" `
+      -AddressPrefix "192.168.255.0/30" `
+      -Gateway "192.168.255.1" `
+      -Name "External" `
+      -Verbose
 }
 
 # Prerequisites:
 #   $env:POD_CIDR is set (by Set-PodCidr).
 #   The "management" interface exists (Add-InitialHnsNetwork).
 function Configure-HostNetworkingService {
-  $endpointName = "cbr0"
-  $vnicName = "vEthernet (${endpointName})"
+  $endpoint_name = "cbr0"
+  $vnic_name = "vEthernet (${endpoint_name})"
 
   Import-Module -Force ${env:K8S_DIR}\hns.psm1
-  Verify-GceMetadataServerRouteIsPresent
+  Verify_GceMetadataServerRouteIsPresent
 
   # For Windows nodes the pod gateway IP address is the .1 address in the pod
   # CIDR for the host, but from inside containers it's the .2 address.
-  $podGateway = `
-    ${env:POD_CIDR}.substring(0, ${env:POD_CIDR}.lastIndexOf('.')) + '.1'
-  $podEndpointGateway = `
-    ${env:POD_CIDR}.substring(0, ${env:POD_CIDR}.lastIndexOf('.')) + '.2'
-  Log "Setting up Windows node HNS networking: podCidr = ${env:POD_CIDR}, podGateway = ${podGateway}, podEndpointGateway = ${podEndpointGateway}"
+  $pod_gateway = `
+      ${env:POD_CIDR}.substring(0, ${env:POD_CIDR}.lastIndexOf('.')) + '.1'
+  $pod_endpoint_gateway = `
+      ${env:POD_CIDR}.substring(0, ${env:POD_CIDR}.lastIndexOf('.')) + '.2'
+  Log-Output ("Setting up Windows node HNS networking: " +
+              "podCidr = ${env:POD_CIDR}, podGateway = ${pod_gateway}, " +
+              "podEndpointGateway = ${pod_endpoint_gateway}")
 
   # Note: RDP connection will hiccup when running this command.
-  Todo "update Configure-HostNetworkingService so that it checks for existing HNS network and overrides/removes it."
-  $hnsNetwork = New-HNSNetwork -Type "L2Bridge" -AddressPrefix ${env:POD_CIDR} `
-    -Gateway ${podGateway} -Name ${env:KUBE_NETWORK} -Verbose
-  #$hnsNetwork = Get-HnsNetwork | ? Name -eq "${env:KUBE_NETWORK}"
-  $hnsEndpoint = New-HnsEndpoint -NetworkId ${hnsNetwork}.Id `
-    -Name ${endpointName} -IPAddress ${podEndpointGateway} `
-    -Gateway "0.0.0.0" -Verbose
-  Attach-HnsHostEndpoint -EndpointID ${hnsEndpoint}.Id -CompartmentID 1 -Verbose
-  #netsh interface ipv4 set interface "vEthernet (nat)" forwarding=enabled
-  #netsh interface ipv4 set interface "vEthernet (Ethernet)" forwarding=enabled
-  netsh interface ipv4 set interface "${vnicName}" forwarding=enabled
+  Todo ('update Configure-HostNetworkingService so that it checks for ' +
+        'existing HNS network and overrides/removes it.')
+  $hns_network = New-HNSNetwork `
+      -Type "L2Bridge" `
+      -AddressPrefix ${env:POD_CIDR} `
+      -Gateway ${pod_gateway} `
+      -Name ${env:KUBE_NETWORK} `
+      -Verbose
+  $hns_endpoint = New-HnsEndpoint `
+      -NetworkId ${hns_network}.Id `
+      -Name ${endpoint_name} `
+      -IPAddress ${pod_endpoint_gateway} `
+      -Gateway "0.0.0.0" `
+      -Verbose
+  Attach-HnsHostEndpoint `
+      -EndpointID ${hns_endpoint}.Id `
+      -CompartmentID 1 `
+      -Verbose
+  netsh interface ipv4 set interface "${vnic_name}" forwarding=enabled
   Get-HNSPolicyList | Remove-HnsPolicyList
 
   # Add a route from the management NIC to the pod CIDR.
@@ -584,8 +623,12 @@ function Configure-HostNetworkingService {
   # the packet with the service VIP will get blocked and be lost. With this
   # route, the packet will be routed to the pod subnetwork, and not leave the
   # VM.
-  $mgmtNetAdapter = Get-MgmtNetAdapter
-  New-NetRoute -InterfaceAlias ${mgmtNetAdapter}.ifAlias -DestinationPrefix ${env:POD_CIDR} -NextHop "0.0.0.0" -Verbose
+  $mgmt_net_adapter = Get_MgmtNetAdapter
+  New-NetRoute `
+      -InterfaceAlias ${mgmt_net_adapter}.ifAlias `
+      -DestinationPrefix ${env:POD_CIDR} `
+      -NextHop "0.0.0.0" `
+      -Verbose
 
   # There is an HNS bug where the route to the GCE metadata server will be
   # removed when the HNS network is created:
@@ -595,14 +638,14 @@ function Configure-HostNetworkingService {
   # then it will be removed once again. So, we first wait a long unfortunate
   # amount of time to ensure that things have quiesced, then we wait until we're
   # sure the route is really gone before re-adding it again.
-  Log "Waiting 45 seconds for host network state to quiesce"
+  Log-Output "Waiting 45 seconds for host network state to quiesce"
   Start-Sleep 45
-  WaitFor-GceMetadataServerRouteToBeRemoved
-  Log "Re-adding the GCE metadata server route"
-  Add-GceMetadataServerRoute
-  Verify-GceMetadataServerRouteIsPresent
+  WaitFor_GceMetadataServerRouteToBeRemoved
+  Log-Output "Re-adding the GCE metadata server route"
+  Add_GceMetadataServerRoute
+  Verify_GceMetadataServerRouteIsPresent
 
-  Log "Host network setup complete"
+  Log-Output "Host network setup complete"
 }
 
 # Prerequisites:
@@ -611,26 +654,29 @@ function Configure-HostNetworkingService {
 #   The "cbr0" HNS network for pod networking has been configured
 #     (Configure-HostNetworkingService).
 function Configure-CniNetworking {
-  $githubRepo = Get-MetadataValue 'github-repo'
-  $githubBranch = Get-MetadataValue 'github-branch'
+  $github_repo = Get-MetadataValue 'github-repo'
+  $github_branch = Get-MetadataValue 'github-branch'
   Invoke-WebRequest `
-    https://github.com/${githubRepo}/kubernetes/raw/${githubBranch}/cluster/gce/windows-cni-plugins.zip `
-    -OutFile ${env:CNI_DIR}\windows-cni-plugins.zip
+      https://github.com/${github_repo}/kubernetes/raw/${github_branch}/cluster/gce/windows-cni-plugins.zip `
+      -OutFile ${env:CNI_DIR}\windows-cni-plugins.zip
   Expand-Archive ${env:CNI_DIR}\windows-cni-plugins.zip ${env:CNI_DIR}
   mv ${env:CNI_DIR}\bin\*.exe ${env:CNI_DIR}\
   if (-not ((Test-Path ${env:CNI_DIR}\win-bridge.exe) -and `
             (Test-Path ${env:CNI_DIR}\host-local.exe))) {
-    Log "win-bridge.exe and host-local.exe not found in ${env:CNI_DIR}" $true
+    Log-Output `
+        "win-bridge.exe and host-local.exe not found in ${env:CNI_DIR}" `
+        -Fatal
   }
   rmdir ${env:CNI_DIR}\bin
 
-  $vethIp = (Get-NetAdapter | Where-Object Name -Like ${mgmtAdapterName} |`
-    Get-NetIPAddress -AddressFamily IPv4).IPAddress
-  $mgmtSubnet = Get-MgmtSubnet
-  Log "using mgmt IP ${vethIp} and mgmt subnet ${mgmtSubnet} for CNI config"
+  $veth_ip = (Get-NetAdapter | Where-Object Name -Like ${MGMT_ADAPTER_NAME} |
+              Get-NetIPAddress -AddressFamily IPv4).IPAddress
+  $mgmt_subnet = Get-MgmtSubnet
+  Log-Output ("using mgmt IP ${veth_ip} and mgmt subnet ${mgmt_subnet} for " +
+              "CNI config")
 
-  $l2bridgeConf = "${env:CNI_CONFIG_DIR}\l2bridge.conf"
-  New-Item -ItemType file ${l2bridgeConf}
+  $l2bridge_conf = "${env:CNI_CONFIG_DIR}\l2bridge.conf"
+  New-Item -ItemType file ${l2bridge_conf}
 
   # TODO(pjh): validate these values against CNI config on Linux node.
   #
@@ -639,10 +685,10 @@ function Configure-CniNetworking {
   #   DNS_SERVER_IP: ...
   #   DNS_DOMAIN: ...
   #   CLUSTER_CIDR: TODO: validate this against Linux kube-proxy-config.yaml.
-  #   SERVICE_CIDR: SERVICE_CLUSTER_IP_RANGE from kubeEnv?
-  #   MGMT_SUBNET: $mgmtSubnet.
+  #   SERVICE_CIDR: SERVICE_CLUSTER_IP_RANGE from kube_env?
+  #   MGMT_SUBNET: $mgmt_subnet.
   #   MGMT_IP: $vethIp.
-  Set-Content ${l2bridgeConf} `
+  Set-Content ${l2bridge_conf} `
 '{
   "cniVersion":  "0.2.0",
   "name":  "l2bridge",
@@ -692,30 +738,31 @@ function Configure-CniNetworking {
     }
   ]
 }'.replace('POD_CIDR', ${env:POD_CIDR}).`
-  replace('DNS_SERVER_IP', ${kubeEnv}['DNS_SERVER_IP']).`
-  replace('DNS_DOMAIN', ${kubeEnv}['DNS_DOMAIN']).`
+  replace('DNS_SERVER_IP', ${kube_env}['DNS_SERVER_IP']).`
+  replace('DNS_DOMAIN', ${kube_env}['DNS_DOMAIN']).`
   replace('MGMT_IP', ${vethIp}).`
-  replace('CLUSTER_CIDR', ${kubeEnv}['CLUSTER_IP_RANGE']).`
-  replace('SERVICE_CIDR', ${kubeEnv}['SERVICE_CLUSTER_IP_RANGE']).`
-  replace('MGMT_SUBNET', ${mgmtSubnet})
+  replace('CLUSTER_CIDR', ${kube_env}['CLUSTER_IP_RANGE']).`
+  replace('SERVICE_CIDR', ${kube_env}['SERVICE_CLUSTER_IP_RANGE']).`
+  replace('MGMT_SUBNET', ${mgmt_subnet})
 
-  Log "CNI config:`n$(Get-Content -Raw ${l2bridgeConf})"
+  Log-Output "CNI config:`n$(Get-Content -Raw ${l2bridge_conf})"
 }
 
 function Configure-Kubelet {
-  # The Kubelet config is built by build-kubelet-config() in cluster/gce/util.sh,
-  # and stored in the metadata server under the 'kubelet-config' key.
+  # The Kubelet config is built by build-kubelet-config() in
+  # cluster/gce/util.sh, and stored in the metadata server under the
+  # 'kubelet-config' key.
 
   # Download and save Kubelet Config, and log the result
-  $kubeletConfig = Get-MetadataValue 'kubelet-config'
-  Set-Content ${env:KUBELET_CONFIG} $kubeletConfig
-  Log "Kubelet config:`n$(Get-Content -Raw ${env:KUBELET_CONFIG})"
+  $kubelet_config = Get-MetadataValue 'kubelet-config'
+  Set-Content ${env:KUBELET_CONFIG} $kubelet_config
+  Log-Output "Kubelet config:`n$(Get-Content -Raw ${env:KUBELET_CONFIG})"
 }
 
 function Start-WorkerServices {
-  $kubeletArgsStr = ${kubeEnv}['KUBELET_ARGS']
-  $kubeletArgs = $kubeletArgsStr.Split(" ")
-  Log "kubeletArgs from metadata: ${kubeletArgs}"
+  $kubelet_args_str = ${kube_env}['KUBELET_ARGS']
+  $kubelet_args = $kubelet_args_str.Split(" ")
+  Log-Output "kubelet_args from metadata: ${kubelet_args}"
     # --v=2
     # --allow-privileged=true
     # --cloud-provider=gce
@@ -724,80 +771,80 @@ function Start-WorkerServices {
 
   # Reference:
   # https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet/#options
-  $additionalArgList = @(`
-    "--config=${env:KUBELET_CONFIG}",
+  $additional_arg_list = @(`
+      "--config=${env:KUBELET_CONFIG}",
 
-    # Path to a kubeconfig file that will be used to get client certificate for
-    # kubelet. If the file specified by --kubeconfig does not exist, the
-    # bootstrap kubeconfig is used to request a client certificate from the API
-    # server. On success, a kubeconfig file referencing the generated client
-    # certificate and key is written to the path specified by --kubeconfig. The
-    # client certificate and key file will be stored in the directory pointed
-    # by --cert-dir.
-    #
-    # See also:
-    # https://kubernetes.io/docs/reference/command-line-tools-reference/       kubelet-tls-bootstrapping/
-    "--bootstrap-kubeconfig=${env:BOOTSTRAP_KUBECONFIG}",
-    "--kubeconfig=${env:KUBECONFIG}",
+      # Path to a kubeconfig file that will be used to get client certificate
+      # for kubelet. If the file specified by --kubeconfig does not exist, the
+      # bootstrap kubeconfig is used to request a client certificate from the
+      # API server. On success, a kubeconfig file referencing the generated
+      # client certificate and key is written to the path specified by
+      # --kubeconfig. The client certificate and key file will be stored in the
+      # directory pointed by --cert-dir.
+      #
+      # See also:
+      # https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet-tls-bootstrapping/
+      "--bootstrap-kubeconfig=${env:BOOTSTRAP_KUBECONFIG}",
+      "--kubeconfig=${env:KUBECONFIG}",
 
-    # The directory where the TLS certs are located. If --tls-cert-file and
-    # --tls-private-key-file are provided, this flag will be ignored.
-    "--cert-dir=${env:PKI_DIR}",
+      # The directory where the TLS certs are located. If --tls-cert-file and
+      # --tls-private-key-file are provided, this flag will be ignored.
+      "--cert-dir=${env:PKI_DIR}",
 
-    # The following flags are adapted from
-    # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L117
-    # (last checked on 2019-01-07):
-    "--pod-infra-container-image=${infraContainer}",
-    "--resolv-conf=`"`"",
-    # The kubelet currently fails when this flag is omitted on Windows.
-    "--cgroups-per-qos=false",
-    # The kubelet currently fails when this flag is omitted on Windows.
-    "--enforce-node-allocatable=`"`"",
-    "--network-plugin=cni",
-    "--cni-bin-dir=${env:CNI_DIR}",
-    "--cni-conf-dir=${env:CNI_CONFIG_DIR}",
-    "--pod-manifest-path=${env:MANIFESTS_DIR}",
-    # Windows images are large and we don't have gcr mirrors yet. Allow longer
-    # pull progress deadline.
-    "--image-pull-progress-deadline=5m",
-    "--enable-debugging-handlers=true",
-    # Turn off kernel memory cgroup notification.
-    "--experimental-kernel-memcg-notification=false"
-    # These flags come from Microsoft/SDN, not sure what they do or if
-    # they're needed.
-    #   --log-dir=c:\k
-    #   --logtostderr=false
-    # We set these values via the kubelet config file rather than via flags:
-    #   --cluster-dns=$KubeDnsServiceIp
-    #   --cluster-domain=cluster.local
-    #   --hairpin-mode=promiscuous-bridge
+      # The following flags are adapted from
+      # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L117
+      # (last checked on 2019-01-07):
+      "--pod-infra-container-image=${INFRA_CONTAINER}",
+      "--resolv-conf=`"`"",
+      # The kubelet currently fails when this flag is omitted on Windows.
+      "--cgroups-per-qos=false",
+      # The kubelet currently fails when this flag is omitted on Windows.
+      "--enforce-node-allocatable=`"`"",
+      "--network-plugin=cni",
+      "--cni-bin-dir=${env:CNI_DIR}",
+      "--cni-conf-dir=${env:CNI_CONFIG_DIR}",
+      "--pod-manifest-path=${env:MANIFESTS_DIR}",
+      # Windows images are large and we don't have gcr mirrors yet. Allow
+      # longer pull progress deadline.
+      "--image-pull-progress-deadline=5m",
+      "--enable-debugging-handlers=true",
+      # Turn off kernel memory cgroup notification.
+      "--experimental-kernel-memcg-notification=false"
+      # These flags come from Microsoft/SDN, not sure what they do or if
+      # they're needed.
+      #   --log-dir=c:\k
+      #   --logtostderr=false
+      # We set these values via the kubelet config file rather than via flags:
+      #   --cluster-dns=$KubeDnsServiceIp
+      #   --cluster-domain=cluster.local
+      #   --hairpin-mode=promiscuous-bridge
   )
-  $kubeletArgs = ${kubeletArgs} + ${additionalArgList}
+  $kubelet_args = ${kubelet_args} + ${additional_arg_list}
 
   # These args are present in the Linux KUBELET_ARGS value of kube-env, but I
   # don't think we need them or they don't make sense on Windows.
-  $argListUnused = @(`
-    # [Experimental] Path of mounter binary. Leave empty to use the default
-    # mount.
-    "--experimental-mounter-path=/home/kubernetes/containerized_mounter/mounter",
-    # [Experimental] if set true, the kubelet will check the underlying node
-    # for required components (binaries, etc.) before performing the mount
-    "--experimental-check-node-capabilities-before-mount=true",
-    # The Kubelet will use this directory for checkpointing downloaded
-    # configurations and tracking configuration health. The Kubelet will create
-    # this directory if it does not already exist. The path may be absolute or
-    # relative; relative paths start at the Kubelet's current working
-    # directory. Providing this flag enables dynamic Kubelet configuration.
-    # Presently, you must also enable the DynamicKubeletConfig feature gate to
-    # pass this flag.
-    "--dynamic-config-dir=/var/lib/kubelet/dynamic-config",
-    # The full path of the directory in which to search for additional third
-    # party volume plugins (default
-    # "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/")
-    "--volume-plugin-dir=/home/kubernetes/flexvolume",
-    # The container runtime to use. Possible values: 'docker', 'rkt'. (default
-    # "docker")
-    "--container-runtime=docker"
+  $arg_list_unused = @(`
+      # [Experimental] Path of mounter binary. Leave empty to use the default
+      # mount.
+      "--experimental-mounter-path=/home/kubernetes/containerized_mounter/mounter",
+      # [Experimental] if set true, the kubelet will check the underlying node
+      # for required components (binaries, etc.) before performing the mount
+      "--experimental-check-node-capabilities-before-mount=true",
+      # The Kubelet will use this directory for checkpointing downloaded
+      # configurations and tracking configuration health. The Kubelet will
+      # create this directory if it does not already exist. The path may be
+      # absolute or relative; relative paths start at the Kubelet's current
+      # working directory. Providing this flag enables dynamic Kubelet
+      # configuration.  Presently, you must also enable the
+      # DynamicKubeletConfig feature gate to pass this flag.
+      "--dynamic-config-dir=/var/lib/kubelet/dynamic-config",
+      # The full path of the directory in which to search for additional third
+      # party volume plugins (default
+      # "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/")
+      "--volume-plugin-dir=/home/kubernetes/flexvolume",
+      # The container runtime to use. Possible values: 'docker', 'rkt'.
+      # (default "docker")
+      "--container-runtime=docker"
   )
 
   # kubeproxy is started on Linux nodes using
@@ -810,18 +857,18 @@ function Start-WorkerServices {
   #   --iptables-sync-period=1m --iptables-min-sync-period=10s
   #   --ipvs-sync-period=1m --ipvs-min-sync-period=10s
   # And also with various volumeMounts and "securityContext: privileged: true".
-  $apiserverAddress = ${kubeEnv}['KUBERNETES_MASTER_NAME']
-  $kubeproxyArgs = @(`
-    "--v=4",
-    "--master=https://${apiserverAddress}",
-    "--kubeconfig=${env:KUBEPROXY_KUBECONFIG}",
-    "--proxy-mode=kernelspace",
-    "--hostname-override=$(hostname)",
-    "--resource-container=`"`"",
-    "--cluster-cidr=$(${kubeEnv}['CLUSTER_IP_RANGE'])"
+  $apiserver_address = ${kube_env}['KUBERNETES_MASTER_NAME']
+  $kubeproxy_args = @(`
+      "--v=4",
+      "--master=https://${apiserver_address}",
+      "--kubeconfig=${env:KUBEPROXY_KUBECONFIG}",
+      "--proxy-mode=kernelspace",
+      "--hostname-override=$(hostname)",
+      "--resource-container=`"`"",
+      "--cluster-cidr=$(${kube_env}['CLUSTER_IP_RANGE'])"
   )
 
-  Log "Starting kubelet"
+  Log-Output "Starting kubelet"
 
   # Use Start-Process, not Start-Job; jobs are killed as soon as the shell /
   # script that invoked them terminates, whereas processes continue running.
@@ -837,14 +884,14 @@ function Start-WorkerServices {
   # -UseNewEnvironment ensures that there are no implicit dependencies
   # on the variables in this script - everything the kubelet needs should be
   # specified via flags or config files.
-  $kubeletProcess = Start-Process `
-    -FilePath "${env:NODE_DIR}\kubelet.exe" `
-    -ArgumentList ${kubeletArgs} `
-    -WindowStyle Hidden -PassThru `
-    -RedirectStandardOutput ${env:LOGS_DIR}\kubelet.out `
-    -RedirectStandardError ${env:LOGS_DIR}\kubelet.log
-  Log "$(${kubeletProcess} | Out-String)"
-  # TODO(pjh): set kubeletProcess as a global variable so that
+  $kubelet_process = Start-Process `
+      -FilePath "${env:NODE_DIR}\kubelet.exe" `
+      -ArgumentList ${kubelet_args} `
+      -WindowStyle Hidden -PassThru `
+      -RedirectStandardOutput ${env:LOGS_DIR}\kubelet.out `
+      -RedirectStandardError ${env:LOGS_DIR}\kubelet.log
+  Log-Output "$(${kubelet_process} | Out-String)"
+  # TODO(pjh): set kubelet_process as a global variable so that
   # Stop-WorkerServices can access it.
 
   # TODO(pjh): kubelet is emitting these messages:
@@ -861,29 +908,30 @@ function Start-WorkerServices {
   # Figure out how to change the directory that the kubelet monitors for new
   # pod manifests.
 
-  Log "Waiting 10 seconds for kubelet to stabilize"
+  Log-Output "Waiting 10 seconds for kubelet to stabilize"
   Start-Sleep 10
 
   # F1020 23:08:52.000083    9136 server.go:361] unable to load in-cluster
   # configuration, KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT must be
   # defined
-  Log "Starting kube-proxy"
-  $kubeproxyProcess = Start-Process `
-    -FilePath "${env:NODE_DIR}\kube-proxy.exe" `
-    -ArgumentList ${kubeproxyArgs} `
-    -WindowStyle Hidden -PassThru `
-    -RedirectStandardOutput ${env:LOGS_DIR}\kube-proxy.out `
-    -RedirectStandardError ${env:LOGS_DIR}\kube-proxy.log
-  Log "$(${kubeproxyProcess} | Out-String)"
+  Log-Output "Starting kube-proxy"
+  $kubeproxy_process = Start-Process `
+      -FilePath "${env:NODE_DIR}\kube-proxy.exe" `
+      -ArgumentList ${kubeproxy_args} `
+      -WindowStyle Hidden -PassThru `
+      -RedirectStandardOutput ${env:LOGS_DIR}\kube-proxy.out `
+      -RedirectStandardError ${env:LOGS_DIR}\kube-proxy.log
+  Log-Output "$(${kubeproxy_process} | Out-String)"
 
   # TODO(pjh): still getting errors like these in kube-proxy log:
   # E1023 04:03:58.143449    4840 reflector.go:205] k8s.io/kubernetes/pkg/client/informers/informers_generated/internalversion/factory.go:129: Failed to list *core.Endpoints: Get https://35.239.84.171/api/v1/endpoints?limit=500&resourceVersion=0: dial tcp 35.239.84.171:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond.
   # E1023 04:03:58.150266    4840 reflector.go:205] k8s.io/kubernetes/pkg/client/informers/informers_generated/internalversion/factory.go:129: Failed to list *core.Service: Get https://35.239.84.171/api/v1/services?limit=500&resourceVersion=0: dial tcp 35.239.84.171:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond.
 
-  Todo "verify that jobs are still running; print more details about the background jobs."
-  Log "$(Get-Process kube* | Out-String)"
-  Verify-GceMetadataServerRouteIsPresent
-  Log "Kubernetes components started successfully"
+  Todo ("verify that jobs are still running; print more details about the " +
+        "background jobs.")
+  Log-Output "$(Get-Process kube* | Out-String)"
+  Verify_GceMetadataServerRouteIsPresent
+  Log-Output "Kubernetes components started successfully"
 }
 
 function Stop-WorkerServices {
@@ -892,33 +940,11 @@ function Stop-WorkerServices {
 }
 
 function Verify-WorkerServices {
-  Log "kubectl get nodes:`n$(& ${env:NODE_DIR}\kubectl.exe get nodes | Out-String)"
-  Verify-GceMetadataServerRouteIsPresent
+  Log-Output ("kubectl get nodes:`n" +
+              "$(& ${env:NODE_DIR}\kubectl.exe get nodes | Out-String)")
+  Verify_GceMetadataServerRouteIsPresent
   Todo "run more verification commands."
 }
 
-Export-ModuleMember -Function Log
-Export-ModuleMember -Function Todo
-Export-ModuleMember -Function NotImplemented
-Export-ModuleMember -Function Get-MetadataValue
-Export-ModuleMember -Function Download-KubeEnv
-Export-ModuleMember -Function Set-MachineEnvironmentVar
-Export-ModuleMember -Function Set-CurrentShellEnvironmentVar
-Export-ModuleMember -Function Set-EnvironmentVars
-Export-ModuleMember -Function Set-PrerequisiteOptions
-Export-ModuleMember -Function Create-Directories
-Export-ModuleMember -Function Download-HelperScripts
-Export-ModuleMember -Function Create-PauseImage
-Export-ModuleMember -Function DownloadAndInstall-KubernetesBinaries
-Export-ModuleMember -Function Get-MgmtSubnet
-Export-ModuleMember -Function Configure-CniNetworking
-Export-ModuleMember -Function Create-NodePki
-Export-ModuleMember -Function Create-KubeletKubeconfig
-Export-ModuleMember -Function Create-KubeproxyKubeconfig
-Export-ModuleMember -Function Set-PodCidr
-Export-ModuleMember -Function Add-InitialHnsNetwork
-Export-ModuleMember -Function Configure-HostNetworkingService
-Export-ModuleMember -Function Configure-Kubelet
-Export-ModuleMember -Function Start-WorkerServices
-Export-ModuleMember -Function Stop-WorkerServices
-Export-ModuleMember -Function Verify-WorkerServices
+# Export all public functions:
+Export-ModuleMember -Function *-*

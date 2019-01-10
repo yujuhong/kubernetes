@@ -12,7 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-function Prepull-E2EImages{
+<#
+.SYNOPSIS
+  Library for pre-pulling E2E test container images on Windows nodes.
+#>
+
+
+function Prepull-E2EImages {
   $images = @(
     "e2eteam/busybox:1.29"
     "e2eteam/dnsutils:1.1"
@@ -36,4 +42,5 @@ function Prepull-E2EImages{
   }
 }
 
-Export-ModuleMember -Function Prepull-E2EImages
+# Export all public functions:
+Export-ModuleMember -Function *-*

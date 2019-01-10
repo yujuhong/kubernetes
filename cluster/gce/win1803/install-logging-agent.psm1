@@ -23,7 +23,7 @@
 # kubernetes metadata properly. The current version does not recognizes the
 # local resource key "logging.googleapis.com/local_resource_id", and fails to
 # label namespace, pod and container names on the logs.
-function InstallAndStart-LoggingAgent{
+function InstallAndStart-LoggingAgent {
   # Remove the existing storage.json file if it exists. This is a workaround
   # for the bug where the logging agent cannot start up if the file is
   # corrupted.
