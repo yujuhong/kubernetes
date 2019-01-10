@@ -756,7 +756,7 @@ function Configure-Kubelet {
   # Download and save Kubelet Config, and log the result
   $kubelet_config = Get-MetadataValue 'kubelet-config'
   Set-Content ${env:KUBELET_CONFIG} $kubelet_config
-  Log "Kubelet config:`n$(Get-Content -Raw ${env:KUBELET_CONFIG})"
+  Log-Output "Kubelet config:`n$(Get-Content -Raw ${env:KUBELET_CONFIG})"
 }
 
 function Start-WorkerServices {
