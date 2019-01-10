@@ -1042,11 +1042,14 @@ function build-kube-env {
   #echo "PJH: build-kube-env: file=${file}"
 
   local server_binary_tar_url=$SERVER_BINARY_TAR_URL
-  # Hard-code the windows node binary URL since we don't build them.
-  # TODO: change this line to the following if we can either build them or
-  # download them from elsewhere.
-  #     local node_binary_tar_url=$NODE_BINARY_TAR_URL
-  local node_binary_tar_url="https://storage.googleapis.com/kubernetes-release/release/${KUBE_VERSION:-v1.11.3}/kubernetes-node-windows-amd64.tar.gz"
+  # We don't build Windows binaries in our CI test job yet; allow overriding
+  # the setting to always use the release node binaries.
+  # TODO: Remove this when upstreaming to the kubernetes repository.
+  if [[ -n "${USE_RELEASE_NODE_BINARIES:-}" ]]; then
+    local node_binary_tar_url="https://storage.googleapis.com/kubernetes-release/release/${KUBE_VERSION:-v1.11.3}/kubernetes-node-windows-amd64.tar.gz"
+  else
+    local node_binary_tar_url=$NODE_BINARY_TAR_URL
+  fi
   local kube_manifests_tar_url="${KUBE_MANIFESTS_TAR_URL:-}"
   if [[ "${master}" == "true" && "${MASTER_OS_DISTRIBUTION}" == "ubuntu" ]] || \
      [[ "${master}" == "false" && ("${LINUX_NODE_OS_DISTRIBUTION}" == "ubuntu" || "${LINUX_NODE_OS_DISTRIBUTION}" == "custom") ]]; then
