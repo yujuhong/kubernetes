@@ -566,7 +566,7 @@ func cleanupIptablesLeftovers(ipt utiliptables.Interface) (encounteredError bool
 		}
 	}
 
-	// Flush and remove all of our chains.
+	// Flush and remove all of our chains. Flushing all chains before removing them also removes all links between chains first.
 	for _, ch := range iptablesChains {
 		if err := ipt.FlushChain(ch.table, ch.chain); err != nil {
 			if !utiliptables.IsNotFoundError(err) {
@@ -574,6 +574,10 @@ func cleanupIptablesLeftovers(ipt utiliptables.Interface) (encounteredError bool
 				encounteredError = true
 			}
 		}
+	}
+
+	// Remove all of our chains.
+	for _, ch := range iptablesChains {
 		if err := ipt.DeleteChain(ch.table, ch.chain); err != nil {
 			if !utiliptables.IsNotFoundError(err) {
 				klog.Errorf("Error removing iptables rules in ipvs proxier: %v", err)
@@ -665,7 +669,7 @@ func (proxier *Proxier) OnServiceDelete(service *v1.Service) {
 	proxier.OnServiceUpdate(service, nil)
 }
 
-// OnServiceSynced is called once all the initial even handlers were called and the state is fully propagated to local cache.
+// OnServiceSynced is called once all the initial event handlers were called and the state is fully propagated to local cache.
 func (proxier *Proxier) OnServiceSynced() {
 	proxier.mu.Lock()
 	proxier.servicesSynced = true
@@ -1024,11 +1028,9 @@ func (proxier *Proxier) syncProxyRules() {
 					serv.Timeout = uint32(svcInfo.StickyMaxAgeSeconds)
 				}
 				if err := proxier.syncService(svcNameString, serv, true); err == nil {
-					// check if service need skip endpoints that not in same host as kube-proxy
-					onlyLocal := svcInfo.SessionAffinityType == v1.ServiceAffinityClientIP && svcInfo.OnlyNodeLocalEndpoints
 					activeIPVSServices[serv.String()] = true
 					activeBindAddrs[serv.Address.String()] = true
-					if err := proxier.syncEndpoint(svcName, onlyLocal, serv); err != nil {
+					if err := proxier.syncEndpoint(svcName, svcInfo.OnlyNodeLocalEndpoints, serv); err != nil {
 						klog.Errorf("Failed to sync endpoint for service: %v, err: %v", serv, err)
 					}
 				} else {
