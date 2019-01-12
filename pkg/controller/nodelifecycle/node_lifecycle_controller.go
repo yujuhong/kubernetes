@@ -39,15 +39,15 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	appsv1informers "k8s.io/client-go/informers/apps/v1"
 	coordinformers "k8s.io/client-go/informers/coordination/v1beta1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
-	extensionsinformers "k8s.io/client-go/informers/extensions/v1beta1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
+	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	coordlisters "k8s.io/client-go/listers/coordination/v1beta1"
 	corelisters "k8s.io/client-go/listers/core/v1"
-	extensionslisters "k8s.io/client-go/listers/extensions/v1beta1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/flowcontrol"
@@ -95,9 +95,6 @@ var (
 		v1.NodeMemoryPressure: {
 			v1.ConditionTrue: schedulerapi.TaintNodeMemoryPressure,
 		},
-		v1.NodeOutOfDisk: {
-			v1.ConditionTrue: schedulerapi.TaintNodeOutOfDisk,
-		},
 		v1.NodeDiskPressure: {
 			v1.ConditionTrue: schedulerapi.TaintNodeDiskPressure,
 		},
@@ -114,7 +111,6 @@ var (
 		schedulerapi.TaintNodeUnreachable:        v1.NodeReady,
 		schedulerapi.TaintNodeNetworkUnavailable: v1.NodeNetworkUnavailable,
 		schedulerapi.TaintNodeMemoryPressure:     v1.NodeMemoryPressure,
-		schedulerapi.TaintNodeOutOfDisk:          v1.NodeOutOfDisk,
 		schedulerapi.TaintNodeDiskPressure:       v1.NodeDiskPressure,
 		schedulerapi.TaintNodePIDPressure:        v1.NodePIDPressure,
 	}
@@ -172,7 +168,7 @@ type Controller struct {
 
 	zoneStates map[string]ZoneState
 
-	daemonSetStore          extensionslisters.DaemonSetLister
+	daemonSetStore          appsv1listers.DaemonSetLister
 	daemonSetInformerSynced cache.InformerSynced
 
 	leaseLister         coordlisters.LeaseLister
@@ -229,7 +225,7 @@ type Controller struct {
 	useTaintBasedEvictions bool
 
 	// if set to true, NodeController will taint Nodes based on its condition for 'NetworkUnavailable',
-	// 'MemoryPressure', 'OutOfDisk' and 'DiskPressure'.
+	// 'MemoryPressure', 'PIDPressure' and 'DiskPressure'.
 	taintNodeByCondition bool
 
 	nodeUpdateQueue workqueue.Interface
@@ -240,7 +236,7 @@ func NewNodeLifecycleController(
 	leaseInformer coordinformers.LeaseInformer,
 	podInformer coreinformers.PodInformer,
 	nodeInformer coreinformers.NodeInformer,
-	daemonSetInformer extensionsinformers.DaemonSetInformer,
+	daemonSetInformer appsv1informers.DaemonSetInformer,
 	kubeClient clientset.Interface,
 	nodeMonitorPeriod time.Duration,
 	nodeStartupGracePeriod time.Duration,
@@ -292,7 +288,7 @@ func NewNodeLifecycleController(
 		runTaintManager:             runTaintManager,
 		useTaintBasedEvictions:      useTaintBasedEvictions && runTaintManager,
 		taintNodeByCondition:        taintNodeByCondition,
-		nodeUpdateQueue:             workqueue.New(),
+		nodeUpdateQueue:             workqueue.NewNamed("node_lifecycle_controller"),
 	}
 	if useTaintBasedEvictions {
 		klog.Infof("Controller is using taint based evictions.")
@@ -921,7 +917,6 @@ func (nc *Controller) tryUpdateNodeHealth(node *v1.Node) (time.Duration, v1.Node
 
 		// remaining node conditions should also be set to Unknown
 		remainingNodeConditionTypes := []v1.NodeConditionType{
-			v1.NodeOutOfDisk,
 			v1.NodeMemoryPressure,
 			v1.NodeDiskPressure,
 			v1.NodePIDPressure,

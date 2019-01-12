@@ -18,6 +18,7 @@ package core
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm"
+	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
 	schedulerinternalcache "k8s.io/kubernetes/pkg/scheduler/internal/cache"
 	internalqueue "k8s.io/kubernetes/pkg/scheduler/internal/queue"
@@ -336,16 +338,16 @@ var _ algorithm.SchedulerExtender = &FakeExtender{}
 
 func TestGenericSchedulerWithExtenders(t *testing.T) {
 	tests := []struct {
-		name         string
-		predicates   map[string]algorithm.FitPredicate
-		prioritizers []algorithm.PriorityConfig
-		extenders    []FakeExtender
-		nodes        []string
-		expectedHost string
-		expectsErr   bool
+		name           string
+		predicates     map[string]predicates.FitPredicate
+		prioritizers   []algorithm.PriorityConfig
+		extenders      []FakeExtender
+		nodes          []string
+		expectedResult ScheduleResult
+		expectsErr     bool
 	}{
 		{
-			predicates:   map[string]algorithm.FitPredicate{"true": truePredicate},
+			predicates:   map[string]predicates.FitPredicate{"true": truePredicate},
 			prioritizers: []algorithm.PriorityConfig{{Map: EqualPriorityMap, Weight: 1}},
 			extenders: []FakeExtender{
 				{
@@ -360,7 +362,7 @@ func TestGenericSchedulerWithExtenders(t *testing.T) {
 			name:       "test 1",
 		},
 		{
-			predicates:   map[string]algorithm.FitPredicate{"true": truePredicate},
+			predicates:   map[string]predicates.FitPredicate{"true": truePredicate},
 			prioritizers: []algorithm.PriorityConfig{{Map: EqualPriorityMap, Weight: 1}},
 			extenders: []FakeExtender{
 				{
@@ -375,7 +377,7 @@ func TestGenericSchedulerWithExtenders(t *testing.T) {
 			name:       "test 2",
 		},
 		{
-			predicates:   map[string]algorithm.FitPredicate{"true": truePredicate},
+			predicates:   map[string]predicates.FitPredicate{"true": truePredicate},
 			prioritizers: []algorithm.PriorityConfig{{Map: EqualPriorityMap, Weight: 1}},
 			extenders: []FakeExtender{
 				{
@@ -385,12 +387,16 @@ func TestGenericSchedulerWithExtenders(t *testing.T) {
 					predicates: []fitPredicate{machine1PredicateExtender},
 				},
 			},
-			nodes:        []string{"machine1", "machine2"},
-			expectedHost: "machine1",
-			name:         "test 3",
+			nodes: []string{"machine1", "machine2"},
+			expectedResult: ScheduleResult{
+				SuggestedHost:  "machine1",
+				EvaluatedNodes: 2,
+				FeasibleNodes:  1,
+			},
+			name: "test 3",
 		},
 		{
-			predicates:   map[string]algorithm.FitPredicate{"true": truePredicate},
+			predicates:   map[string]predicates.FitPredicate{"true": truePredicate},
 			prioritizers: []algorithm.PriorityConfig{{Map: EqualPriorityMap, Weight: 1}},
 			extenders: []FakeExtender{
 				{
@@ -405,7 +411,7 @@ func TestGenericSchedulerWithExtenders(t *testing.T) {
 			name:       "test 4",
 		},
 		{
-			predicates:   map[string]algorithm.FitPredicate{"true": truePredicate},
+			predicates:   map[string]predicates.FitPredicate{"true": truePredicate},
 			prioritizers: []algorithm.PriorityConfig{{Map: EqualPriorityMap, Weight: 1}},
 			extenders: []FakeExtender{
 				{
@@ -414,12 +420,16 @@ func TestGenericSchedulerWithExtenders(t *testing.T) {
 					weight:       1,
 				},
 			},
-			nodes:        []string{"machine1"},
-			expectedHost: "machine1",
-			name:         "test 5",
+			nodes: []string{"machine1"},
+			expectedResult: ScheduleResult{
+				SuggestedHost:  "machine1",
+				EvaluatedNodes: 1,
+				FeasibleNodes:  1,
+			},
+			name: "test 5",
 		},
 		{
-			predicates:   map[string]algorithm.FitPredicate{"true": truePredicate},
+			predicates:   map[string]predicates.FitPredicate{"true": truePredicate},
 			prioritizers: []algorithm.PriorityConfig{{Map: EqualPriorityMap, Weight: 1}},
 			extenders: []FakeExtender{
 				{
@@ -433,12 +443,16 @@ func TestGenericSchedulerWithExtenders(t *testing.T) {
 					weight:       5,
 				},
 			},
-			nodes:        []string{"machine1", "machine2"},
-			expectedHost: "machine2",
-			name:         "test 6",
+			nodes: []string{"machine1", "machine2"},
+			expectedResult: ScheduleResult{
+				SuggestedHost:  "machine2",
+				EvaluatedNodes: 2,
+				FeasibleNodes:  2,
+			},
+			name: "test 6",
 		},
 		{
-			predicates:   map[string]algorithm.FitPredicate{"true": truePredicate},
+			predicates:   map[string]predicates.FitPredicate{"true": truePredicate},
 			prioritizers: []algorithm.PriorityConfig{{Function: machine2Prioritizer, Weight: 20}},
 			extenders: []FakeExtender{
 				{
@@ -447,9 +461,13 @@ func TestGenericSchedulerWithExtenders(t *testing.T) {
 					weight:       1,
 				},
 			},
-			nodes:        []string{"machine1", "machine2"},
-			expectedHost: "machine2", // machine2 has higher score
-			name:         "test 7",
+			nodes: []string{"machine1", "machine2"},
+			expectedResult: ScheduleResult{
+				SuggestedHost:  "machine2",
+				EvaluatedNodes: 2,
+				FeasibleNodes:  2,
+			}, // machine2 has higher score
+			name: "test 7",
 		},
 		{
 			// Scheduler is expected to not send pod to extender in
@@ -459,7 +477,7 @@ func TestGenericSchedulerWithExtenders(t *testing.T) {
 			// If scheduler sends the pod by mistake, the test would fail
 			// because of the errors from errorPredicateExtender and/or
 			// errorPrioritizerExtender.
-			predicates:   map[string]algorithm.FitPredicate{"true": truePredicate},
+			predicates:   map[string]predicates.FitPredicate{"true": truePredicate},
 			prioritizers: []algorithm.PriorityConfig{{Function: machine2Prioritizer, Weight: 1}},
 			extenders: []FakeExtender{
 				{
@@ -468,10 +486,14 @@ func TestGenericSchedulerWithExtenders(t *testing.T) {
 					unInterested: true,
 				},
 			},
-			nodes:        []string{"machine1", "machine2"},
-			expectsErr:   false,
-			expectedHost: "machine2", // machine2 has higher score
-			name:         "test 8",
+			nodes:      []string{"machine1", "machine2"},
+			expectsErr: false,
+			expectedResult: ScheduleResult{
+				SuggestedHost:  "machine2",
+				EvaluatedNodes: 2,
+				FeasibleNodes:  2,
+			}, // machine2 has higher score
+			name: "test 8",
 		},
 		{
 			// Scheduling is expected to not fail in
@@ -479,7 +501,7 @@ func TestGenericSchedulerWithExtenders(t *testing.T) {
 			//
 			// If scheduler did not ignore the extender, the test would fail
 			// because of the errors from errorPredicateExtender.
-			predicates:   map[string]algorithm.FitPredicate{"true": truePredicate},
+			predicates:   map[string]predicates.FitPredicate{"true": truePredicate},
 			prioritizers: []algorithm.PriorityConfig{{Map: EqualPriorityMap, Weight: 1}},
 			extenders: []FakeExtender{
 				{
@@ -490,10 +512,14 @@ func TestGenericSchedulerWithExtenders(t *testing.T) {
 					predicates: []fitPredicate{machine1PredicateExtender},
 				},
 			},
-			nodes:        []string{"machine1", "machine2"},
-			expectsErr:   false,
-			expectedHost: "machine1",
-			name:         "test 9",
+			nodes:      []string{"machine1", "machine2"},
+			expectsErr: false,
+			expectedResult: ScheduleResult{
+				SuggestedHost:  "machine1",
+				EvaluatedNodes: 2,
+				FeasibleNodes:  1,
+			},
+			name: "test 9",
 		},
 	}
 
@@ -512,7 +538,7 @@ func TestGenericSchedulerWithExtenders(t *testing.T) {
 				cache,
 				queue,
 				test.predicates,
-				algorithm.EmptyPredicateMetadataProducer,
+				predicates.EmptyPredicateMetadataProducer,
 				test.prioritizers,
 				algorithm.EmptyPriorityMetadataProducer,
 				emptyPluginSet,
@@ -524,18 +550,19 @@ func TestGenericSchedulerWithExtenders(t *testing.T) {
 				false,
 				schedulerapi.DefaultPercentageOfNodesToScore)
 			podIgnored := &v1.Pod{}
-			machine, err := scheduler.Schedule(podIgnored, schedulertesting.FakeNodeLister(makeNodeList(test.nodes)))
+			result, err := scheduler.Schedule(podIgnored, schedulertesting.FakeNodeLister(makeNodeList(test.nodes)))
 			if test.expectsErr {
 				if err == nil {
-					t.Errorf("Unexpected non-error, machine %s", machine)
+					t.Errorf("Unexpected non-error, result %+v", result)
 				}
 			} else {
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 					return
 				}
-				if test.expectedHost != machine {
-					t.Errorf("Expected: %s, Saw: %s", test.expectedHost, machine)
+
+				if !reflect.DeepEqual(result, test.expectedResult) {
+					t.Errorf("Expected: %+v, Saw: %+v", test.expectedResult, result)
 				}
 			}
 		})
