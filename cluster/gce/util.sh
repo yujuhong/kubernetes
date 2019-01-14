@@ -1042,11 +1042,20 @@ function build-kube-env {
   #echo "PJH: build-kube-env: file=${file}"
 
   local server_binary_tar_url=$SERVER_BINARY_TAR_URL
+  # We don't build Windows binaries in our CI test job yet; allow overriding
+  # the setting to always use the release node binaries.
+  # TODO: Remove this when upstreaming to the kubernetes repository.
+  if [[ -n "${USE_RELEASE_NODE_BINARIES:-}" ]]; then
+    local node_binary_tar_url="https://storage.googleapis.com/kubernetes-release/release/${KUBE_VERSION:-v1.11.3}/kubernetes-node-windows-amd64.tar.gz"
+  else
+    local node_binary_tar_url=$NODE_BINARY_TAR_URL
+  fi
   local kube_manifests_tar_url="${KUBE_MANIFESTS_TAR_URL:-}"
   if [[ "${master}" == "true" && "${MASTER_OS_DISTRIBUTION}" == "ubuntu" ]] || \
      [[ "${master}" == "false" && ("${LINUX_NODE_OS_DISTRIBUTION}" == "ubuntu" || "${LINUX_NODE_OS_DISTRIBUTION}" == "custom") ]]; then
     # TODO: Support fallback .tar.gz settings on Container Linux
     server_binary_tar_url=$(split_csv "${SERVER_BINARY_TAR_URL}")
+    node_binary_tar_url=$(split_csv "${NODE_BINARY_TAR_URL}")
     kube_manifests_tar_url=$(split_csv "${KUBE_MANIFESTS_TAR_URL}")
   fi
 
@@ -1159,6 +1168,12 @@ $(echo "${CUSTOM_CALICO_NODE_DAEMONSET_YAML:-}" | sed -e "s/'/''/g")
 CUSTOM_TYPHA_DEPLOYMENT_YAML: |
 $(echo "${CUSTOM_TYPHA_DEPLOYMENT_YAML:-}" | sed -e "s/'/''/g")
 EOF
+  if [[ "${master}" == "false" ]]; then
+    cat >>$file <<EOF
+NODE_BINARY_TAR_URL: $(yaml-quote ${node_binary_tar_url})
+NODE_BINARY_TAR_HASH: $(yaml-quote ${NODE_BINARY_TAR_HASH})
+EOF
+  fi
   if [[ "${master}" == "true" && "${MASTER_OS_DISTRIBUTION}" == "gci" ]] || \
      [[ "${master}" == "false" && "${LINUX_NODE_OS_DISTRIBUTION}" == "gci" ]]  || \
      [[ "${master}" == "true" && "${MASTER_OS_DISTRIBUTION}" == "cos" ]] || \

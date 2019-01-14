@@ -23,6 +23,10 @@ done
 curl https://raw.githubusercontent.com/e2e-win/e2e-win-prow-deployment/master/repo-list -o ${WORKSPACE}/repo-list.yaml
 export KUBE_TEST_REPO_LIST=${WORKSPACE}/repo-list.yaml
 
+# Use kubelet/kube-proxy binaries from kubernetes releases.
+# TODO: remove this when upstreaming to kubernetes.
+export USE_RELEASE_NODE_BINARIES="true"
+
 # Download the list of tests to exclude.
 curl https://raw.githubusercontent.com/e2e-win/e2e-win-prow-deployment/master/exclude_conformance_test.txt -o ${WORKSPACE}/exclude_conformance_test.txt
 # Ignore lines starting with "#"

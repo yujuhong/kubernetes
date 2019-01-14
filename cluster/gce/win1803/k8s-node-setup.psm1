@@ -227,8 +227,8 @@ function Set-CurrentShellEnvironmentVar {
 function Set-EnvironmentVars {
   $env_vars = @{
     "K8S_DIR" = "${K8S_DIR}"
-    "NODE_DIR" = "${K8S_DIR}\node"
-    "Path" = ${env:Path} + ";${K8S_DIR}\node"
+    "NODE_DIR" = "${K8S_DIR}\node\bin"
+    "Path" = ${env:Path} + ";${K8S_DIR}\node\bin"
     "LOGS_DIR" = "${K8S_DIR}\logs"
     "CNI_DIR" = "${K8S_DIR}\cni"
     "CNI_CONFIG_DIR" = "${K8S_DIR}\cni\config"
@@ -323,32 +323,25 @@ function Download_FileIfNotAlreadyPresent {
 }
 
 function DownloadAndInstall-KubernetesBinaries {
-  $k8s_version = Get-InstanceMetadataValue 'k8s-version'
+  $tmp_dir = 'C:\k8s_tmp'
+  New-Item $tmp_dir -ItemType 'directory' -Force
 
-  # TODO(pjh): in one kube-up run I got a mysterious failure when the startup
-  # script tried to download the binaries here:
-  # 2018/10/24 00:34:18 windows-startup-script-ps1: Exception caught in script:
-  # 2018/10/24 00:34:18 windows-startup-script-ps1: At C:\k8s-node-setup.psm1:221 char:3
-  # 2018/10/24 00:34:18 windows-startup-script-ps1: +   Invoke-WebRequest `
-  # 2018/10/24 00:34:18 windows-startup-script-ps1: +   ~~~~~~~~~~~~~~~~~~~
-  #
-  # Not sure what happened (maybe my downloads from storage.googleapis.com were
-  # being throttled?), but perhaps we can wrap the Invoke-WebRequest calls in a
-  # download-with-retries function.
+  $uri = ${kube_env}['NODE_BINARY_TAR_URL']
+  $filename = Split-Path -leaf $uri
 
-  $download_root = ("https://storage.googleapis.com/kubernetes-release/" +
-                    "release/${k8s_version}/bin/windows/amd64")
-  # Note: these downloads will fail if there are running processes using the
-  # existing binaries.
-  Download_FileIfNotAlreadyPresent `
-      $download_root/kubectl.exe `
-      -OutFile ${env:NODE_DIR}\kubectl.exe
-  Download_FileIfNotAlreadyPresent `
-      $download_root/kubelet.exe `
-      -OutFile ${env:NODE_DIR}\kubelet.exe
-  Download_FileIfNotAlreadyPresent `
-      $download_root/kube-proxy.exe `
-      -OutFile ${env:NODE_DIR}\kube-proxy.exe
+  # Disable progress bar to increase download speed.
+  $ProgressPreference = 'SilentlyContinue'
+  Invoke-WebRequest $uri -OutFile ${tmp_dir}\${filename}
+
+  # TODO: Verify hash of the tarball.
+
+  # Change the directory to the parent directory of ${env:K8S_DIR} and untar.
+  # This (over-)writes $Pdest_dir}/kubernetes/node/bin/*.exe files.
+  $dest_dir = (get-item ${env:K8S_DIR}).Parent.Fullname
+  tar xzf ${tmp_dir}\${filename} -C ${dest_dir}
+
+  # Clean up the temporary directory
+  Remove-Item -Force -Recurse $tmp_dir
 }
 
 # TODO(pjh): this is copied from
