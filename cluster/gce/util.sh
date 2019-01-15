@@ -1046,7 +1046,7 @@ function build-kube-env {
   # the setting to always use the release node binaries.
   # TODO: Remove this when upstreaming to the kubernetes repository.
   if [[ -n "${USE_RELEASE_NODE_BINARIES:-}" ]]; then
-    local node_binary_tar_url="https://storage.googleapis.com/kubernetes-release/release/${KUBE_VERSION:-v1.11.3}/kubernetes-node-windows-amd64.tar.gz"
+    local node_binary_tar_url="https://storage.googleapis.com/kubernetes-release/release/${KUBE_VERSION:-v1.13.2}/kubernetes-node-windows-amd64.tar.gz"
   else
     local node_binary_tar_url=$NODE_BINARY_TAR_URL
   fi
