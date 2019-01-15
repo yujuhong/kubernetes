@@ -1,9 +1,10 @@
 # Starting a Windows Kubernetes cluster on GCE using kube-up
 
-## Building the cluster
+## Bring up the cluster
 
 Prerequisites: a Google Cloud Platform project.
 
+### 0. Clone the repository and check out the branch
 On a Linux machine: clone this repository under your `$GOPATH/src` directory
 then run:
 
@@ -21,20 +22,71 @@ source cluster/gce/kube-up-gce-windows-netd.env
 # if you're working with multiple projects and don't want to repeatedly switch
 # between gcloud config configurations.
 export CLOUDSDK_CORE_PROJECT=<your_project_name>
+```
 
-# Build the kubernetes binaries locally. This eliminates the need to run
-# get-kube.
+### 1. Build Kubernetes
+
+When building Kubernetes, you can choose to build all node binaries for Windows
+(`kubelet`, `kube-proxy`, and `kubectl`) from source, or simply download them
+from a specific Kubernetes versioned release. If you are developing against
+those components, please follow 1.a to build them locally. Otherwise, see 1.b.
+
+#### 1.a Build everything from source
+
+The most straightforward approach to build those binaries is to run `make
+release`. However, that builds binaries for all supported platforms, and can be
+slow. You can speed up the process by following the instructions below to only
+build the necessary binaries.
+```
+# Set the git remote name you used for pjh/kubernetes
+REMOTE=<name of your remote>
+
+# Fetch the PR: https://github.com/pjh/kubernetes/pull/43
+git fetch $REMOTE pull/43/head
+
+# Get the commit hash and cherry-pick the commit to your current branch
+BUILD_WIN_COMMIT=$(git ls-remote $REMOTE | grep refs/pull/43/head | cut -f 1)
+git cherry-pick $BUILD_WIN_COMMIT
+
+# Build binaries for both Linux and Windows
 make quick-release
 
+# Ensure locally-built binaries are used
+unset USE_RELEASE_NODE_BINARIES
+```
+
+#### 1.b Use prebuilt Windows binaries
+
+Alternatively, you can download the released Windows binaries. Note that if you
+have made changes to `kubelet`, `kube-proxy`, or `kubectl`, you will have to
+build them locally following the instructions in 1.a.
+
+```
+make quick-release
+
+# Set the variable so that everything except for the node binaries will be
+# built locally.
+export USE_RELEASE_NODE_BINARIES=true
+
+# Optionally, you can set KUBE_VERSION to choose the version of node binaries
+# to download. The default version is v1.13.2
+# export KUBE_VERSION=v1.13.2
+```
+
+### 2 Create a Kubernetes cluster
+
+You can create a regular Kubernetes cluster, or a end-to-end test cluster.
+Please make sure you set the environement variables properly following the
+instructions in the previous section.
+
+#### 2.a Create a regular Kubernetes cluster
+
+```
 # Invoke kube-up.sh with these environment variables:
 #   PROJECT: text name of your GCP project.
 #   KUBERNETES_SKIP_CONFIRM: skips any kube-up prompts.
 PROJECT=${CLOUDSDK_CORE_PROJECT} KUBERNETES_SKIP_CONFIRM=y ./cluster/kube-up.sh
 ```
-
-The result should be a Kubernetes cluster with one Linux master node, two Linux
-worker nodes and two Windows worker nodes. The Linux nodes will use the `netd`
-CNI plugin and the Windows nodes will use `wincni`.
 
 To teardown the cluster run:
 
@@ -44,6 +96,21 @@ PROJECT=${CLOUDSDK_CORE_PROJECT} KUBERNETES_SKIP_CONFIRM=y ./cluster/kube-down.s
 
 TODO(pjh): add NUM_LINUX_NODES and NUM_WINDOWS_NODES to
 kube-up-gce-windows-netd.env.
+
+#### 2.b Create a Kubernetes end-to-end (E2E) test cluster
+
+```
+PROJECT=${CLOUDSDK_CORE_PROJECT} go run ./hack/e2e.go  -- --up
+```
+This command, by default, tears down the existing E2E cluster and create a new
+one.
+
+
+No matter what type of cluster you chose to create, the result should be a
+Kubernetes cluster with one Linux master node, two Linux worker nodes and two
+Windows worker nodes. The Linux nodes will use the `netd` CNI plugin and the
+Windows nodes will use `win-bridge`.
+
 
 ## Validating the cluster
 
