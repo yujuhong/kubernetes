@@ -298,7 +298,7 @@ function Create-PauseImage {
     Set-Content `
         $dockerfile `
         ("FROM microsoft/nanoserver:${win_version}`n`n" +
-         "CMD cmd /c ping -t localhost")
+         "CMD cmd /c ping -t localhost > nul")
   }
 
   if (($(docker images -a) -like "*${INFRA_CONTAINER}*") -and
