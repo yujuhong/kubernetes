@@ -77,12 +77,12 @@ if [[ "${MASTER_OS_DISTRIBUTION}" == "cos" ]]; then
     MASTER_OS_DISTRIBUTION="gci"
 fi
 
-if [[ "${NODE_OS_DISTRIBUTION}" == "cos" ]]; then
-    NODE_OS_DISTRIBUTION="gci"
+if [[ "${LINUX_NODE_OS_DISTRIBUTION}" == "cos" ]]; then
+    LINUX_NODE_OS_DISTRIBUTION="gci"
 fi
 
 # GPUs supported in GCE do not have compatible drivers in Debian 7.
-if [[ "${NODE_OS_DISTRIBUTION}" == "debian" ]]; then
+if [[ "${LINUX_NODE_OS_DISTRIBUTION}" == "debian" ]]; then
     NODE_ACCELERATORS=""
 fi
 
@@ -209,7 +209,7 @@ TEST_CLUSTER_RESYNC_PERIOD="${TEST_CLUSTER_RESYNC_PERIOD:---min-resync-period=3m
 TEST_CLUSTER_API_CONTENT_TYPE="${TEST_CLUSTER_API_CONTENT_TYPE:-}"
 
 KUBELET_TEST_ARGS="${KUBELET_TEST_ARGS:-} --serialize-image-pulls=false ${TEST_CLUSTER_API_CONTENT_TYPE}"
-if [[ "${NODE_OS_DISTRIBUTION}" == "gci" ]] || [[ "${NODE_OS_DISTRIBUTION}" == "ubuntu" ]] || [[ "${NODE_OS_DISTRIBUTION}" == "custom" ]]; then 
+if [[ "${LINUX_NODE_OS_DISTRIBUTION}" == "gci" ]] || [[ "${LINUX_NODE_OS_DISTRIBUTION}" == "ubuntu" ]] || [[ "${LINUX_NODE_OS_DISTRIBUTION}" == "custom" ]]; then 
   NODE_KUBELET_TEST_ARGS="${NODE_KUBELET_TEST_ARGS:-} --experimental-kernel-memcg-notification=true"  
 fi 
 if [[ "${MASTER_OS_DISTRIBUTION}" == "gci" ]] || [[ "${MASTER_OS_DISTRIBUTION}" == "ubuntu" ]]; then 
@@ -302,7 +302,7 @@ ENABLE_CLUSTER_UI="${KUBE_ENABLE_CLUSTER_UI:-true}"
 #   none           - Not run node problem detector.
 #   daemonset      - Run node problem detector as daemonset.
 #   standalone     - Run node problem detector as standalone system daemon.
-if [[ "${NODE_OS_DISTRIBUTION}" == "gci" ]]; then
+if [[ "${LINUX_NODE_OS_DISTRIBUTION}" == "gci" ]]; then
   # Enable standalone mode by default for gci.
   ENABLE_NODE_PROBLEM_DETECTOR="${KUBE_ENABLE_NODE_PROBLEM_DETECTOR:-standalone}"
 else
@@ -500,5 +500,4 @@ fi
 
 # Setting the defaults for Linux nodes.
 LINUX_NODE_IMAGE=${LINUX_NODE_IMAGE:-${NODE_IMAGE}}
-LINUX_NODE_OS_DISTRIBUTION=${LINUX_NODE_OS_DISTRIBUTIO:-${NODE_OS_DISTRIBUTION}}
 LINUX_NODE_IMAGE_PROJECT=${LINUX_NODE_IMAGE_PROJECT:-${NODE_IMAGE_PROJECT}}
