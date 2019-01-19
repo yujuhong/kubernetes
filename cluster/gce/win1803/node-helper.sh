@@ -32,20 +32,20 @@ function get-windows-node-instance-metadata-from-file {
   metadata+="install-logging-agent-psm1=${KUBE_ROOT}/cluster/gce/${WINDOWS_NODE_OS_DISTRIBUTION}/install-logging-agent.psm1,"
   metadata+="prepull-images-psm1=${KUBE_ROOT}/cluster/gce/${WINDOWS_NODE_OS_DISTRIBUTION}/prepull-images.psm1,"
   metadata+="k8s-node-setup-psm1=${KUBE_ROOT}/cluster/gce/${WINDOWS_NODE_OS_DISTRIBUTION}/k8s-node-setup.psm1,"
-  # This enables logging the serial port output.
-  # https://cloud.google.com/compute/docs/instances/viewing-serial-port-output
-  metadata+="serial-port-logging-enable=true,"
   metadata+="${NODE_EXTRA_METADATA}"
   echo "${metadata}"
 }
 
 function get-windows-node-instance-metadata {
   local metadata=""
-  metadata+="serial-port-enable=1,"
-  metadata+="win-version=${WINDOWS_NODE_OS_DISTRIBUTION},"
-  metadata+="k8s-version=${KUBE_VERSION:-v1.13.2},"
+  metadata+="github-branch=${GITHUB_BRANCH},"
   metadata+="github-repo=${GITHUB_REPO},"
-  metadata+="github-branch=${GITHUB_BRANCH}"
+  metadata+="k8s-version=${KUBE_VERSION:-v1.13.2},"
+  metadata+="serial-port-enable=1,"
+  # This enables logging the serial port output.
+  # https://cloud.google.com/compute/docs/instances/viewing-serial-port-output
+  metadata+="serial-port-logging-enable=true,"
+  metadata+="win-version=${WINDOWS_NODE_OS_DISTRIBUTION}"
   echo "${metadata}"
 }
 
