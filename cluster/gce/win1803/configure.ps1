@@ -19,6 +19,9 @@
 
 $ErrorActionPreference = 'Stop'
 
+# Turn on tracing to debug
+# Set-PSDebug -Trace 1
+
 # Update TLS setting to enable Github downloads and disable progress bar to
 # increase download speed.
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12

@@ -1042,7 +1042,7 @@ function build-kube-env {
   # We don't build Windows binaries in our CI test job yet; allow overriding
   # the setting to always use the release node binaries.
   # TODO(windows): Remove this when upstreaming to the kubernetes repository.
-  if [[ -n "${USE_RELEASE_NODE_BINARIES:-}" ]]; then
+  if [[ "${USE_RELEASE_NODE_BINARIES:-false}" == "true" ]]; then
     local node_binary_tar_url="https://storage.googleapis.com/kubernetes-release/release/${KUBE_VERSION:-v1.13.2}/kubernetes-node-windows-amd64.tar.gz"
   else
     local node_binary_tar_url=$NODE_BINARY_TAR_URL

@@ -940,11 +940,12 @@ function Start-WorkerServices {
       # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1#L117
       # (last checked on 2019-01-07):
       "--pod-infra-container-image=${INFRA_CONTAINER}",
-      "--resolv-conf=`"`"",
-      # The kubelet currently fails when this flag is omitted on Windows.
+
+
+      # Both --cgroups-per-qos and --enforce-node-allocatable should be disabled on windows;
+      # the latter requires the former to be enabled to work.
       "--cgroups-per-qos=false",
-      # The kubelet currently fails when this flag is omitted on Windows.
-      "--enforce-node-allocatable=`"`"",
+
       "--network-plugin=cni",
       "--cni-bin-dir=${env:CNI_DIR}",
       "--cni-conf-dir=${env:CNI_CONFIG_DIR}",
@@ -954,15 +955,25 @@ function Start-WorkerServices {
       "--image-pull-progress-deadline=5m",
       "--enable-debugging-handlers=true",
       # Turn off kernel memory cgroup notification.
-      "--experimental-kernel-memcg-notification=false"
-      # These flags come from Microsoft/SDN, not sure what they do or if
-      # they're needed.
-      #   --log-dir=c:\k
-      #   --logtostderr=false
-      # We set these values via the kubelet config file rather than via flags:
-      #   --cluster-dns=$KubeDnsServiceIp
-      #   --cluster-domain=cluster.local
-      #   --hairpin-mode=promiscuous-bridge
+      "--experimental-kernel-memcg-notification=false",
+
+      # Configure kubelet to run as a windows service.
+      "--windows-service=true",
+
+      # TODO(mtaufen): Configure logging for kubelet running as a service.
+      # I haven't been able to figure out how to direct stdout/stderr into log
+      # files when configuring it to run via sc.exe, so we just manually override
+      # logging config here.
+      "--log-file=${env:LOGS_DIR}\kubelet.log",
+      # klog sets this to true intenrally, so need to override to false
+      # so we actually log to the file
+      "--logtostderr=false",
+
+      # Configure flags with explicit empty string values. We can't escape double-quotes,
+      # because they still break sc.exe after expansion in the binPath parameter,
+      # and single-quotes get parsed as characters instead of string delimiters.
+      "--resolv-conf=",
+      "--enforce-node-allocatable="
   )
   $kubelet_args = ${kubelet_args} + ${additional_arg_list}
 
@@ -1009,15 +1020,25 @@ function Start-WorkerServices {
       "--kubeconfig=${env:KUBEPROXY_KUBECONFIG}",
       "--proxy-mode=kernelspace",
       "--hostname-override=$(hostname)",
-      "--resource-container=`"`"",
-      "--cluster-cidr=$(${kube_env}['CLUSTER_IP_RANGE'])"
-  )
+      "--cluster-cidr=$(${kube_env}['CLUSTER_IP_RANGE'])",
 
-  if (Get-Process | Where-Object Name -eq "kubelet") {
-    Log-Output -Fatal `
-        "A kubelet process is already running, don't know what to do"
-  }
-  Log-Output "Starting kubelet"
+      # Configure kube-proxy to run as a windows service.
+      "--windows-service=true",
+
+      # TODO(mtaufen): Configure logging for kube-proxy running as a service.
+      # I haven't been able to figure out how to direct stdout/stderr into log
+      # files when configuring it to run via sc.exe, so we just manually override
+      # logging config here.
+      "--log-file=${env:LOGS_DIR}\kube-proxy.log",
+      # klog sets this to true intenrally, so need to override to false
+      # so we actually log to the file
+      "--logtostderr=false",
+
+      # Configure flags with explicit empty string values. We can't escape double-quotes,
+      # because they still break sc.exe after expansion in the binPath parameter,
+      # and single-quotes get parsed as characters instead of string delimiters.
+      "--resource-container="
+  )
 
   # Use Start-Process, not Start-Job; jobs are killed as soon as the shell /
   # script that invoked them terminates, whereas processes continue running.
@@ -1033,13 +1054,6 @@ function Start-WorkerServices {
   # -UseNewEnvironment ensures that there are no implicit dependencies
   # on the variables in this script - everything the kubelet needs should be
   # specified via flags or config files.
-  $kubelet_process = Start-Process `
-      -FilePath "${env:NODE_DIR}\kubelet.exe" `
-      -ArgumentList ${kubelet_args} `
-      -WindowStyle Hidden -PassThru `
-      -RedirectStandardOutput ${env:LOGS_DIR}\kubelet.out `
-      -RedirectStandardError ${env:LOGS_DIR}\kubelet.log
-  Log-Output "$(${kubelet_process} | Out-String)"
 
   # TODO(pjh): kubelet is emitting these messages:
   # I1023 23:44:11.761915    2468 kubelet.go:274] Adding pod path:
@@ -1055,34 +1069,45 @@ function Start-WorkerServices {
   # Figure out how to change the directory that the kubelet monitors for new
   # pod manifests.
 
+
+
+  # We configure the service to restart on failure, after 10s wait. We reset the restart
+  # count to 0 each time, so we re-use our restart/10000 action on each failure.
+  # Note it currently restarts even when explicitly stopped, you have to delete the service
+  # entry to *really* kill it (e.g. `sc.exe delete kubelet`). See issue #72900.
+  if (Get-Process | Where-Object Name -eq "kubelet") {
+    Log-Output -Fatal `
+        "A kubelet process is already running, don't know what to do"
+  }
+  Log-Output "Creating kubelet service"
+  sc.exe create kubelet binPath= "${env:NODE_DIR}\kubelet.exe ${kubelet_args}" start= demand
+  sc.exe failure kubelet reset= 0 actions= restart/10000
+  Log-Output "Starting kubelet service"
+  sc.exe start kubelet
+
   Log-Output "Waiting 10 seconds for kubelet to stabilize"
   Start-Sleep 10
 
   if (Get-Process | Where-Object Name -eq "kube-proxy") {
-    Log-Output `
-        "A kube-proxy process is already running, don't know what to do" `
-        -Fatal
+    Log-Output -Fatal `
+        "A kube-proxy process is already running, don't know what to do"
   }
+  Log-Output "Creating kube-proxy service"
+  sc.exe create kube-proxy binPath= "${env:NODE_DIR}\kube-proxy.exe ${kubeproxy_args}" start= demand
+  sc.exe failure kube-proxy reset= 0 actions= restart/10000
+  Log-Output "Starting kube-proxy service"
+  sc.exe start kube-proxy
 
   # F1020 23:08:52.000083    9136 server.go:361] unable to load in-cluster
   # configuration, KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT must be
   # defined
-  Log-Output "Starting kube-proxy"
-  $kubeproxy_process = Start-Process `
-      -FilePath "${env:NODE_DIR}\kube-proxy.exe" `
-      -ArgumentList ${kubeproxy_args} `
-      -WindowStyle Hidden -PassThru `
-      -RedirectStandardOutput ${env:LOGS_DIR}\kube-proxy.out `
-      -RedirectStandardError ${env:LOGS_DIR}\kube-proxy.log
-  Log-Output "$(${kubeproxy_process} | Out-String)"
-
   # TODO(pjh): still getting errors like these in kube-proxy log:
   # E1023 04:03:58.143449    4840 reflector.go:205] k8s.io/kubernetes/pkg/client/informers/informers_generated/internalversion/factory.go:129: Failed to list *core.Endpoints: Get https://35.239.84.171/api/v1/endpoints?limit=500&resourceVersion=0: dial tcp 35.239.84.171:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond.
   # E1023 04:03:58.150266    4840 reflector.go:205] k8s.io/kubernetes/pkg/client/informers/informers_generated/internalversion/factory.go:129: Failed to list *core.Service: Get https://35.239.84.171/api/v1/services?limit=500&resourceVersion=0: dial tcp 35.239.84.171:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond.
 
   Log_Todo ("verify that jobs are still running; print more details about " +
             "the background jobs.")
-  Log-Output "$(Get-Process kube* | Out-String)"
+  Log-Output "$(Get-Service kube* | Out-String)"
   Verify_GceMetadataServerRouteIsPresent
   Log-Output "Kubernetes components started successfully"
 }
