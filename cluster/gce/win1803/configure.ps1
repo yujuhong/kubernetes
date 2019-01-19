@@ -96,10 +96,7 @@ try {
   Log-Output "Started Stackdriver logging agent"
 
   InstallAndStart-OpenSsh
-  Log-Output "Installed OpenSSH, sshd is running"
-
   StartProcess-WriteSshKeys
-  Log-Output "Started background process to write SSH keys"
 
   Set-EnvironmentVars
   Set-PrerequisiteOptions

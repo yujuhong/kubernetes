@@ -100,18 +100,16 @@ function InstallAndStart-OpenSsh {
 }
 
 function Setup_WriteSshKeysScript {
-  if (-not ((ShouldWrite-File $USER_PROFILE_MODULE) -or
-            (ShouldWrite-File $OPENSSH_ROOT))) {
+  if (-not (ShouldWrite-File $WRITE_SSH_KEYS_SCRIPT)) {
     return
   }
 
-  [Net.ServicePointManager]::SecurityProtocol = `
-      [Net.SecurityProtocolType]::Tls12
-  # Download helper module for manipulating Windows user profiles.
-  # TODO(windows): copy the helper module into this repository.
-  Invoke-WebRequest `
-      https://gist.githubusercontent.com/pjh/9753cd14400f4e3d4567f4553ba75f1d/raw/cb7929fa78fc8f840819249785e69838f3e35d64/user-profile.psm1 `
-      -OutFile $USER_PROFILE_MODULE
+  # Fetch helper module for manipulating Windows user profiles.
+  if (ShouldWrite-File $USER_PROFILE_MODULE) {
+    $module = Get-InstanceMetadataValue 'user-profile-psm1'
+    New-Item -ItemType file -Force $USER_PROFILE_MODULE
+    Set-Content $USER_PROFILE_MODULE $module
+  }
 
   New-Item -Force -ItemType file ${WRITE_SSH_KEYS_SCRIPT}
   Set-Content ${WRITE_SSH_KEYS_SCRIPT} `
@@ -207,6 +205,7 @@ while($true) {
 }'.replace('USER_PROFILE_MODULE', $USER_PROFILE_MODULE)
   Log-Output ("${WRITE_SSH_KEYS_SCRIPT}:`n" +
               "$(Get-Content -Raw ${WRITE_SSH_KEYS_SCRIPT})")
+  Log-Output "Started background process to write SSH keys"
 }
 
 # Starts a background process that retrieves ssh keys from the metadata server

@@ -60,5 +60,31 @@ function ShouldWrite-File {
   return $true
 }
 
+# Returns the GCE instance metadata value for $Key. If the key is not present
+# in the instance metadata returns $Default if set, otherwise returns $null.
+function Get-InstanceMetadataValue {
+  param (
+    [parameter(Mandatory=$true)] [string]$Key,
+    [parameter(Mandatory=$false)] [string]$Default
+  )
+
+  $url = ("http://metadata.google.internal/computeMetadata/v1/instance/" +
+          "attributes/$Key")
+  try {
+    $client = New-Object Net.WebClient
+    $client.Headers.Add('Metadata-Flavor', 'Google')
+    return ($client.DownloadString($url)).Trim()
+  }
+  catch [System.Net.WebException] {
+    if ($Default) {
+      return $Default
+    }
+    else {
+      Log-Output "Failed to retrieve value for $Key."
+      return $null
+    }
+  }
+}
+
 # Export all public functions:
 Export-ModuleMember -Function *-*

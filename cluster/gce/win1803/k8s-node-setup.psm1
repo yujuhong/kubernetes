@@ -129,32 +129,6 @@ function Add_GceMetadataServerRoute {
   }
 }
 
-# Returns the GCE instance metadata value for $Key. If the key is not present
-# in the instance metadata returns $Default if set, otherwise returns $null.
-function Get_InstanceMetadataValue {
-  param (
-    [parameter(Mandatory=$true)] [string]$Key,
-    [parameter(Mandatory=$false)] [string]$Default
-  )
-
-  $url = ("http://metadata.google.internal/computeMetadata/v1/instance/" +
-          "attributes/$Key")
-  try {
-    $client = New-Object Net.WebClient
-    $client.Headers.Add('Metadata-Flavor', 'Google')
-    return ($client.DownloadString($url)).Trim()
-  }
-  catch [System.Net.WebException] {
-    if ($Default) {
-      return $Default
-    }
-    else {
-      Log-Output "Failed to retrieve value for $Key."
-      return $null
-    }
-  }
-}
-
 # Fetches the kube-env from the instance metadata.
 #
 # Returns: a PowerShell Hashtable object containing the key-value pairs from
@@ -162,7 +136,7 @@ function Get_InstanceMetadataValue {
 function Fetch-KubeEnv {
   # Testing / debugging:
   # First:
-  #   ${kube_env} = Get_InstanceMetadataValue 'kube-env'
+  #   ${kube_env} = Get-InstanceMetadataValue 'kube-env'
   # or:
   #   ${kube_env} = [IO.File]::ReadAllText(".\kubeEnv.txt")
   # ${kube_env_table} = ConvertFrom-Yaml ${kube_env}
@@ -170,7 +144,7 @@ function Fetch-KubeEnv {
   # ${kube_env_table}.GetType()
 
   # The type of kube_env is a powershell String.
-  $kube_env = Get_InstanceMetadataValue 'kube-env'
+  $kube_env = Get-InstanceMetadataValue 'kube-env'
   $kube_env_table = ConvertFrom-Yaml ${kube_env}
   return ${kube_env_table}
 }
@@ -300,7 +274,7 @@ function Get_ContainerVersionLabel {
 # Builds the pause image with name $INFRA_CONTAINER.
 function Create-PauseImage {
   $version_label = Get_ContainerVersionLabel `
-      $(Get_InstanceMetadataValue 'win-version')
+      $(Get-InstanceMetadataValue 'win-version')
   $pause_dir = "${env:K8S_DIR}\pauseimage"
   $dockerfile = "$pause_dir\Dockerfile"
   mkdir -Force $pause_dir
@@ -805,8 +779,8 @@ function Configure-HostNetworkingService {
 #   CLUSTER_IP_RANGE
 #   SERVICE_CLUSTER_IP_RANGE
 function Configure-CniNetworking {
-  $github_repo = Get_InstanceMetadataValue 'github-repo'
-  $github_branch = Get_InstanceMetadataValue 'github-branch'
+  $github_repo = Get-InstanceMetadataValue 'github-repo'
+  $github_branch = Get-InstanceMetadataValue 'github-branch'
 
   if ((ShouldWrite-File ${env:CNI_DIR}\win-bridge.exe) -or
       (ShouldWrite-File ${env:CNI_DIR}\host-local.exe)) {
@@ -918,7 +892,7 @@ function Configure-Kubelet {
   # The Kubelet config is built by build-kubelet-config() in
   # cluster/gce/util.sh, and stored in the metadata server under the
   # 'kubelet-config' key.
-  $kubelet_config = Get_InstanceMetadataValue 'kubelet-config'
+  $kubelet_config = Get-InstanceMetadataValue 'kubelet-config'
   Set-Content ${env:KUBELET_CONFIG} $kubelet_config
   Log-Output "Kubelet config:`n$(Get-Content -Raw ${env:KUBELET_CONFIG})"
 }
