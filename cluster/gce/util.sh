@@ -843,6 +843,11 @@ function construct-windows-kubelet-flags {
     flags+=" --node-labels=${node_labels}"
   fi
 
+  # Apply Windows-only node taints.
+  if [[ -n "${WINDOWS_NODE_TAINTS:-}" ]]; then
+    flags+=" --register-with-taints=${WINDOWS_NODE_TAINTS}"
+  fi
+
   # Many of these flags were adapted from
   # https://github.com/Microsoft/SDN/blob/master/Kubernetes/windows/start-kubelet.ps1.
   flags+=" --config=${WINDOWS_KUBELET_CONFIG_FILE}"
