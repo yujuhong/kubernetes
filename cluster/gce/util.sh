@@ -647,6 +647,9 @@ function build-linux-node-labels {
   if [[ -n "${NODE_LABELS:-}" ]]; then
     node_labels="${node_labels:+${node_labels},}${NODE_LABELS}"
   fi
+  if [[ -n "${LINUX_NODE_LABELS:-}" ]]; then
+    node_labels="${node_labels:+${node_labels},}${LINUX_NODE_LABELS}"
+  fi
   if [[ -n "${LINUX_NON_MASTER_NODE_LABELS:-}" && "${master}" != "true" ]]; then
     node_labels="${node_labels:+${node_labels},}${LINUX_NON_MASTER_NODE_LABELS}"
   fi
@@ -656,13 +659,7 @@ function build-linux-node-labels {
 # TODO(windows): coalesce common Linux+Windows node labels in a separate
 # function used for both.
 function build-windows-node-labels {
-  local master="false"
   local node_labels=""
-  if [[ "${KUBE_PROXY_DAEMONSET:-}" == "true" && "${master}" != "true" ]]; then
-    # Add kube-proxy daemonset label to node to avoid situation during cluster
-    # upgrade/downgrade when there are two instances of kube-proxy running on a node.
-    node_labels="beta.kubernetes.io/kube-proxy-ds-ready=true"
-  fi
   if [[ -n "${NODE_LABELS:-}" ]]; then
     node_labels="${node_labels:+${node_labels},}${NODE_LABELS}"
   fi
