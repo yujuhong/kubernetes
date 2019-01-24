@@ -300,7 +300,6 @@ function find-tar() {
   local -r tarball=$1
   locations=(
     "${KUBE_ROOT}/server/${tarball}"
-    "${KUBE_ROOT}/kubernetes/server/${tarball}"
     "${KUBE_ROOT}/_output/release-tars/${tarball}"
     "${KUBE_ROOT}/bazel-bin/build/release-tars/${tarball}"
   )
