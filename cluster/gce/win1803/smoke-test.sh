@@ -264,6 +264,11 @@ spec:
         image: e2eteam/nettest:1.0
       nodeSelector:
         beta.kubernetes.io/os: windows
+      tolerations:
+      - effect: NoSchedule
+        key: node.kubernetes.io/os
+        operator: Equal
+        value: windows
 EOF
 
   ${kubectl} create -f $windows_webserver_deployment.yaml
@@ -337,6 +342,11 @@ spec:
         image: e2eteam/nettest:1.0
       nodeSelector:
         beta.kubernetes.io/os: windows
+      tolerations:
+      - effect: NoSchedule
+        key: node.kubernetes.io/os
+        operator: Equal
+        value: windows
 EOF
 
   ${kubectl} create -f $windows_command_deployment.yaml
