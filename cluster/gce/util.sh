@@ -754,9 +754,6 @@ function yaml-map-string-string {
 function construct-common-kubelet-flags {
   local flags="${KUBELET_TEST_LOG_LEVEL:-"--v=2"} ${KUBELET_TEST_ARGS:-}"
   flags+=" --cloud-provider=gce"
-  if [[ -n "${NODE_TAINTS:-}" ]]; then
-    flags+=" --register-with-taints=${NODE_TAINTS}"
-  fi
   # TODO(mtaufen): ROTATE_CERTIFICATES seems unused; delete it?
   if [[ -n "${ROTATE_CERTIFICATES:-}" ]]; then
     flags+=" --rotate-certificates=true"
@@ -827,6 +824,9 @@ function construct-linux-kubelet-flags {
   if [[ -n "${CONTAINER_RUNTIME_ENDPOINT:-}" ]]; then
     flags+=" --container-runtime-endpoint=${CONTAINER_RUNTIME_ENDPOINT}"
   fi
+  if [[ -n "${NODE_TAINTS:-}" ]]; then
+    flags+=" --register-with-taints=${NODE_TAINTS}"
+  fi
 
   KUBELET_ARGS="${flags}"
 }
@@ -841,6 +841,17 @@ function construct-windows-kubelet-flags {
   local node_labels=$(build-windows-node-labels)
   if [[ -n "${node_labels:-}" ]]; then
     flags+=" --node-labels=${node_labels}"
+  fi
+
+  # Concatenate common and windows-only node taints and apply them.
+  local node_taints="${NODE_TAINTS:-}"
+  if [[ -n "${node_taints}" && -n "${WINDOWS_NODE_TAINTS:-}" ]]; then
+    node_taints+=":${WINDOWS_NODE_TAINTS}"
+  else
+    node_taints="${WINDOWS_NODE_TAINTS:-}"
+  fi
+  if [[ -n "${node_taints}" ]]; then
+    flags+=" --register-with-taints=${node_taints}"
   fi
 
   # Many of these flags were adapted from

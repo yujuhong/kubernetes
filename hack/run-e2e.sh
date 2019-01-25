@@ -19,13 +19,16 @@ for node in $LINUX_NODES; do
   kubectl taint node $node node-under-test=false:NoSchedule
 done
 
+# Untaint the windows nodes to allow test workloads without tolerations to be
+# scheduled onto them.
+WINDOWS_NODES=$(kubectl get nodes -l beta.kubernetes.io/os=windows -o name)
+for node in $WINDOWS_NODES; do
+  kubectl taint node $node node.kubernetes.io/os:NoSchedule-
+done
+
 # Download and set the list of test image repositories to use.
 curl https://raw.githubusercontent.com/kubernetes-sigs/windows-testing/master/images/image-repo-list-ws1803 -o ${WORKSPACE}/repo-list.yaml
 export KUBE_TEST_REPO_LIST=${WORKSPACE}/repo-list.yaml
-
-# Use kubelet/kube-proxy binaries from kubernetes releases.
-# TODO: remove this when upstreaming to kubernetes.
-export USE_RELEASE_NODE_BINARIES="true"
 
 # Download the list of tests to exclude.
 curl https://raw.githubusercontent.com/e2e-win/e2e-win-prow-deployment/master/exclude_conformance_test.txt -o ${WORKSPACE}/exclude_conformance_test.txt

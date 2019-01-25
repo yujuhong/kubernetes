@@ -497,3 +497,7 @@ fi
 # Setting the defaults for Linux nodes.
 LINUX_NODE_IMAGE=${LINUX_NODE_IMAGE:-${NODE_IMAGE}}
 LINUX_NODE_IMAGE_PROJECT=${LINUX_NODE_IMAGE_PROJECT:-${NODE_IMAGE_PROJECT}}
+
+# Taint Windows nodes by default to prevent Linux workloads from being
+# scheduled onto them.
+WINDOWS_NODE_TAINTS="${WINDOWS_NODE_TAINTS:-node.kubernetes.io/os=windows:NoSchedule}"
