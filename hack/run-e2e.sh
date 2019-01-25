@@ -20,7 +20,7 @@ for node in $LINUX_NODES; do
 done
 
 # Download and set the list of test image repositories to use.
-curl https://raw.githubusercontent.com/windows-testing/master/images/image-repo-list-ws1803 -o ${WORKSPACE}/repo-list.yaml
+curl https://raw.githubusercontent.com/kubernetes-sigs/windows-testing/master/images/image-repo-list-ws1803 -o ${WORKSPACE}/repo-list.yaml
 export KUBE_TEST_REPO_LIST=${WORKSPACE}/repo-list.yaml
 
 # Use kubelet/kube-proxy binaries from kubernetes releases.
