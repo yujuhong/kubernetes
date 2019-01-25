@@ -391,12 +391,18 @@ function ConvertTo_MaskLength
 }
 
 # Returns the "management" subnet on which the Windows pods+kubelet will
-# communicate with the rest of the Kubernetes cluster without NAT.
+# communicate with the rest of the Kubernetes cluster without NAT. In GCE this
+# is the subnet that VM internal IPs are allocated from.
 #
 # This function will fail if Add_InitialHnsNetwork() has not been called first.
 function Get_MgmtSubnet {
   $net_adapter = Get_MgmtNetAdapter
 
+  # TODO(pjh): applying the primary interface's subnet mask to its IP address
+  # *should* give us the GCE network subnet that VM IP addresses are being
+  # allocated from... however it might be more accurate or straightforward to
+  # just fetch the IP address range for the VPC subnet that the kube-up script
+  # creates (kubernetes-subnet-default).
   $addr = (Get-NetIPAddress `
       -InterfaceAlias ${net_adapter}.ifAlias `
       -AddressFamily IPv4).IPAddress
@@ -808,23 +814,23 @@ function Configure-CniNetworking {
     return
   }
 
-  $veth_ip = (Get-NetAdapter | Where-Object Name -Like ${MGMT_ADAPTER_NAME} |
+  $mgmt_ip = (Get_MgmtNetAdapter |
               Get-NetIPAddress -AddressFamily IPv4).IPAddress
   $mgmt_subnet = Get_MgmtSubnet
-  Log-Output ("using mgmt IP ${veth_ip} and mgmt subnet ${mgmt_subnet} for " +
+  Log-Output ("using mgmt IP ${mgmt_ip} and mgmt subnet ${mgmt_subnet} for " +
               "CNI config")
 
-  # TODO(windows): validate these values against CNI config on Linux node.
-
-  # TODO(windows): add explanatory comments.
   # Explanation of the CNI config values:
-  #   POD_CIDR: ...
-  #   DNS_SERVER_IP: ...
-  #   DNS_DOMAIN: ...
-  #   CLUSTER_CIDR: TODO: validate this against Linux kube-proxy-config.yaml.
-  #   SERVICE_CIDR: SERVICE_CLUSTER_IP_RANGE from kube_env?
-  #   MGMT_SUBNET: $mgmt_subnet.
-  #   MGMT_IP: $vethIp.
+  #   CLUSTER_CIDR: the cluster CIDR from which pod CIDRs are allocated.
+  #   POD_CIDR: the pod CIDR assigned to this node.
+  #   MGMT_SUBNET: the subnet on which the Windows pods + kubelet will
+  #     communicate with the rest of the cluster without NAT (i.e. the subnet
+  #     that VM internal IPs are allocated from).
+  #   MGMT_IP: the IP address assigned to the node's primary network interface
+  #     (i.e. the internal IP of the GCE VM).
+  #   SERVICE_CIDR: the CIDR used for kubernetes services.
+  #   DNS_SERVER_IP: the cluster's DNS server IP address.
+  #   DNS_DOMAIN: the cluster's DNS domain, e.g. "cluster.local".
   New-Item -Force -ItemType file ${l2bridge_conf} | Out-Null
   Set-Content ${l2bridge_conf} `
 '{
@@ -878,7 +884,7 @@ function Configure-CniNetworking {
 }'.replace('POD_CIDR', ${env:POD_CIDR}).`
   replace('DNS_SERVER_IP', ${kube_env}['DNS_SERVER_IP']).`
   replace('DNS_DOMAIN', ${kube_env}['DNS_DOMAIN']).`
-  replace('MGMT_IP', ${vethIp}).`
+  replace('MGMT_IP', ${mgmt_ip}).`
   replace('CLUSTER_CIDR', ${kube_env}['CLUSTER_IP_RANGE']).`
   replace('SERVICE_CIDR', ${kube_env}['SERVICE_CLUSTER_IP_RANGE']).`
   replace('MGMT_SUBNET', ${mgmt_subnet})
