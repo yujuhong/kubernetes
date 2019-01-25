@@ -39,7 +39,7 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-KUBE_ROOT=$(cd $(dirname "${BASH_SOURCE}")/.. && pwd)
+KUBE_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
 KUBERNETES_RELEASE_URL="${KUBERNETES_RELEASE_URL:-https://dl.k8s.io}"
 
@@ -51,7 +51,7 @@ function detect_kube_release() {
   echo "PJH: looking for ${KUBE_ROOT}/version file."
   if [[ ! -e "${KUBE_ROOT}/version" ]]; then
     echo "Can't determine Kubernetes release." >&2
-    echo "${BASH_SOURCE} should only be run from a prebuilt Kubernetes release." >&2
+    echo "${BASH_SOURCE[0]} should only be run from a prebuilt Kubernetes release." >&2
     echo "Did you mean to use get-kube.sh instead?" >&2
     exit 1
   fi
@@ -60,7 +60,8 @@ function detect_kube_release() {
 }
 
 function detect_client_info() {
-  local kernel=$(uname -s)
+  local kernel machine
+  kernel="$(uname -s)"
   case "${kernel}" in
     Darwin)
       CLIENT_PLATFORM="darwin"
@@ -77,7 +78,7 @@ function detect_client_info() {
 
   # TODO: migrate the kube::util::host_platform function out of hack/lib and
   # use it here.
-  local machine=$(uname -m)
+  machine="$(uname -m)"
   case "${machine}" in
     x86_64*|i?86_64*|amd64*)
       CLIENT_ARCH="amd64"
@@ -93,7 +94,7 @@ function detect_client_info() {
       ;;
     s390x*)
       CLIENT_ARCH="s390x"
-      ;;	  
+      ;;
     *)
       echo "Unknown, unsupported architecture (${machine})." >&2
       echo "Supported architectures x86_64, i686, arm, arm64, s390x." >&2
@@ -133,9 +134,10 @@ function download_tarball() {
     exit 4
   fi
   echo
-  local md5sum=$(md5sum_file "${download_path}/${file}")
+  local md5sum sha1sum
+  md5sum=$(md5sum_file "${download_path}/${file}")
   echo "md5sum(${file})=${md5sum}"
-  local sha1sum=$(sha1sum_file "${download_path}/${file}")
+  sha1sum=$(sha1sum_file "${download_path}/${file}")
   echo "sha1sum(${file})=${sha1sum}"
   echo
   # TODO: add actual verification
@@ -152,8 +154,8 @@ function extract_arch_tarball() {
   # Tarball looks like kubernetes/{client,server}/bin/BINARY"
   tar -xzf "${tarfile}" --strip-components 3 -C "${platforms_dir}"
   # Create convenience symlink
-  ln -sf "${platforms_dir}" "$(dirname ${tarfile})/bin"
-  echo "Add '$(dirname ${tarfile})/bin' to your PATH to use newly-installed binaries."
+  ln -sf "${platforms_dir}" "$(dirname "${tarfile}")/bin"
+  echo "Add '$(dirname "${tarfile}")/bin' to your PATH to use newly-installed binaries."
 }
 
 detect_kube_release
@@ -214,7 +216,7 @@ fi
 
 if [[ -z "${KUBERNETES_SKIP_CONFIRM-}" ]]; then
   echo "Is this ok? [Y]/n"
-  read confirm
+  read -r confirm
   if [[ "${confirm}" =~ ^[nN]$ ]]; then
     echo "Aborting."
     exit 1
