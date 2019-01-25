@@ -56,7 +56,7 @@ function InstallAndStart-LoggingAgent {
 
   Log-Output 'Install Stackdriver...'
   # Create a temporary directory for download.
-  New-Item 'C:\stackdriver_tmp' -ItemType 'directory' -Force
+  New-Item 'C:\stackdriver_tmp' -ItemType 'directory' -Force | Out-Null
 
   # Download the agent.
   $url = ("https://dl.google.com/cloudagents/windows/StackdriverLogging-v1-8.exe")
@@ -89,7 +89,7 @@ function InstallAndStart-LoggingAgent {
   # try creating again just in case.
   New-Item "$STACKDRIVER_ROOT\LoggingAgent\config.d" `
       -ItemType 'directory' `
-      -Force
+      -Force | Out-Null
   $FLUENTD_CONFIG | Out-File `
       -FilePath "$STACKDRIVER_ROOT\LoggingAgent\config.d\k8s_containers.conf" `
       -Encoding ASCII

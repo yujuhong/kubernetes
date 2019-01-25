@@ -288,7 +288,7 @@ function Create-PauseImage {
   $dockerfile = "$pause_dir\Dockerfile"
   mkdir -Force $pause_dir
   if (ShouldWrite-File $dockerfile) {
-    New-Item -Force -ItemType file $dockerfile
+    New-Item -Force -ItemType file $dockerfile | Out-Null
     Set-Content `
         $dockerfile `
         ("FROM microsoft/nanoserver:${version_label}`n`n" +
@@ -316,7 +316,7 @@ function DownloadAndInstall-KubernetesBinaries {
   }
 
   $tmp_dir = 'C:\k8s_tmp'
-  New-Item -Force -ItemType 'directory' $tmp_dir
+  New-Item -Force -ItemType 'directory' $tmp_dir | Out-Null
 
   $uri = ${kube_env}['NODE_BINARY_TAR_URL']
   $filename = Split-Path -leaf $uri
@@ -486,7 +486,7 @@ function Create-KubeletKubeconfig {
     if (-not (ShouldWrite-File ${env:BOOTSTRAP_KUBECONFIG})) {
       return
     }
-    New-Item -Force -ItemType file ${env:BOOTSTRAP_KUBECONFIG}
+    New-Item -Force -ItemType file ${env:BOOTSTRAP_KUBECONFIG} | Out-Null
     # TODO(mtaufen): is user "kubelet" correct? Other examples use e.g.
     #   "system:node:$(hostname)".
     Set-Content ${env:BOOTSTRAP_KUBECONFIG} `
@@ -540,8 +540,7 @@ function Create-KubeproxyKubeconfig {
     return
   }
 
-  # TODO(windows): make this command and other New-Item commands silent.
-  New-Item -Force -ItemType file ${env:KUBEPROXY_KUBECONFIG}
+  New-Item -Force -ItemType file ${env:KUBEPROXY_KUBECONFIG} | Out-Null
 
   # In configure-helper.sh kubelet kubeconfig uses certificate-authority while
   # kubeproxy kubeconfig uses certificate-authority-data, ugh. Does it matter?
@@ -826,7 +825,7 @@ function Configure-CniNetworking {
   #   SERVICE_CIDR: SERVICE_CLUSTER_IP_RANGE from kube_env?
   #   MGMT_SUBNET: $mgmt_subnet.
   #   MGMT_IP: $vethIp.
-  New-Item -Force -ItemType file ${l2bridge_conf}
+  New-Item -Force -ItemType file ${l2bridge_conf} | Out-Null
   Set-Content ${l2bridge_conf} `
 '{
   "cniVersion":  "0.2.0",

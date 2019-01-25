@@ -75,7 +75,7 @@ function InstallAndStart-OpenSsh {
   # Disable password-based authentication.
   $sshd_config_default = "$OPENSSH_ROOT\OpenSSH-Win32\sshd_config_default"
   $sshd_config = 'C:\ProgramData\ssh\sshd_config'
-  New-Item -Force -ItemType Directory -Path "C:\ProgramData\ssh\"
+  New-Item -Force -ItemType Directory -Path "C:\ProgramData\ssh\" | Out-Null
   # SSH config files must be UTF-8 encoded:
   # https://github.com/PowerShell/Win32-OpenSSH/issues/862
   # https://github.com/PowerShell/Win32-OpenSSH/wiki/Various-Considerations
@@ -107,11 +107,11 @@ function Setup_WriteSshKeysScript {
   # Fetch helper module for manipulating Windows user profiles.
   if (ShouldWrite-File $USER_PROFILE_MODULE) {
     $module = Get-InstanceMetadataValue 'user-profile-psm1'
-    New-Item -ItemType file -Force $USER_PROFILE_MODULE
+    New-Item -ItemType file -Force $USER_PROFILE_MODULE | Out-Null
     Set-Content $USER_PROFILE_MODULE $module
   }
 
-  New-Item -Force -ItemType file ${WRITE_SSH_KEYS_SCRIPT}
+  New-Item -Force -ItemType file ${WRITE_SSH_KEYS_SCRIPT} | Out-Null
   Set-Content ${WRITE_SSH_KEYS_SCRIPT} `
 'Import-Module -Force USER_PROFILE_MODULE
 # For [System.Web.Security.Membership]::GeneratePassword():
@@ -193,7 +193,7 @@ while($true) {
     }
 
     $keys_file = -join($user_dir, "\.ssh\authorized_keys")
-    New-Item -ItemType file -Force $keys_file
+    New-Item -ItemType file -Force $keys_file | Out-Null
     ForEach ($ssh_key in $_.value) {
       # authorized_keys and other ssh config files must be UTF-8 encoded:
       # https://github.com/PowerShell/Win32-OpenSSH/issues/862

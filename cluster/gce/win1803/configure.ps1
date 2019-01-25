@@ -72,7 +72,7 @@ function FetchAndImport-ModuleFromMetadata {
     }
     Log-Output "Warning: C:\$Filename already exists, will overwrite it."
   }
-  New-Item -ItemType file -Force C:\$Filename
+  New-Item -ItemType file -Force C:\$Filename | Out-Null
   Set-Content C:\$Filename $module
   Import-Module -Force C:\$Filename
 }
@@ -82,7 +82,7 @@ try {
   # module includes variables and functions that any other function may depend
   # on.
   $module = Get-InstanceMetadataValue 'common-psm1'
-  New-Item -ItemType file -Force C:\common.psm1
+  New-Item -ItemType file -Force C:\common.psm1 | Out-Null
   Set-Content C:\common.psm1 $module
   Import-Module -Force C:\common.psm1
 
