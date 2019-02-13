@@ -261,7 +261,7 @@ spec:
     spec:
       containers:
       - name: nettest
-        image: e2eteam/nettest:1.0
+        image: claudiubelu/nettest:1.0
       nodeSelector:
         beta.kubernetes.io/os: windows
       tolerations:
@@ -339,7 +339,7 @@ spec:
     spec:
       containers:
       - name: nettest
-        image: e2eteam/nettest:1.0
+        image: claudiubelu/nettest:1.0
       nodeSelector:
         beta.kubernetes.io/os: windows
       tolerations:
