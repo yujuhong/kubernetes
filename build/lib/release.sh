@@ -154,6 +154,7 @@ function kube::release::package_client_tarballs() {
 # Package up all of the node binaries
 function kube::release::package_node_tarballs() {
   local platform
+  echo $KUBE_NODE_PLATFORMS
   for platform in "${KUBE_NODE_PLATFORMS[@]}"; do
     local platform_tag=${platform/\//-} # Replace a "/" for a "-"
     local arch=$(basename "${platform}")
