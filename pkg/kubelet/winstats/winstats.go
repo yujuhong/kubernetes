@@ -113,10 +113,10 @@ func (c *StatsClient) createRootContainerInfo() (*cadvisorapiv2.ContainerInfo, e
 		return nil, err
 	}
 
-	netAdapterStats, err := getNetAdapterStats()
-	if err != nil {
-		return nil, err
-	}
+	//	netAdapterStats, err := getNetAdapterStats()
+	//	if err != nil {
+	//		return nil, err
+	//	}
 
 	var stats []*cadvisorapiv2.ContainerStats
 	stats = append(stats, &cadvisorapiv2.ContainerStats{
@@ -130,9 +130,9 @@ func (c *StatsClient) createRootContainerInfo() (*cadvisorapiv2.ContainerInfo, e
 			WorkingSet: nodeMetrics.memoryPrivWorkingSetBytes,
 			Usage:      nodeMetrics.memoryCommittedBytes,
 		},
-		Network: &cadvisorapiv2.NetworkStats{
-			Interfaces: netAdapterStats,
-		},
+		//		Network: &cadvisorapiv2.NetworkStats{
+		//			Interfaces: netAdapterStats,
+		//		},
 	})
 
 	nodeInfo := c.client.getNodeInfo()
