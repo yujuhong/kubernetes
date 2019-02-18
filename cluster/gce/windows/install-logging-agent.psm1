@@ -61,13 +61,13 @@ function InstallAndStart-LoggingAgent {
   # Download the agent.
   # TODO: Need to verify that the download has succeded (if not, retry) and the
   # file is not corrupted.
-  $url = ("https://dl.google.com/cloudagents/windows/StackdriverLogging-v1-9.exe")
+  $url = ("https://dl.google.com/cloudagents/windows/StackdriverLogging-v1-8.exe")
   $ProgressPreference = 'SilentlyContinue'
-  Invoke-Webrequest $url -OutFile C:\stackdriver_tmp\StackdriverLogging-v1-9.exe
+  Invoke-Webrequest $url -OutFile C:\stackdriver_tmp\StackdriverLogging-v1-8.exe
 
   # Start the installer silently. This automatically starts the
   # "StackdriverLogging" service.
-  Start-Process 'C:\stackdriver_tmp\StackdriverLogging-v1-9.exe' `
+  Start-Process 'C:\stackdriver_tmp\StackdriverLogging-v1-8.exe' `
       -ArgumentList "/S" `
       -Wait
 
