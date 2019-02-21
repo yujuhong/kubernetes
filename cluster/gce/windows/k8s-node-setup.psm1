@@ -221,12 +221,13 @@ function Set-PrerequisiteOptions {
   sc.exe config wuauserv start=disabled
   sc.exe stop wuauserv
 
-  # Windows Defender periodically consumes 100% of the CPU.
-  # TODO(pjh): this (all of a sudden, wtf?) started failing with "The term
-  # 'Set-MpPreference' is not recognized...". Investigate and fix or remove.
-  #Log-Output "Disabling Windows Defender service"
-  #Set-MpPreference -DisableRealtimeMonitoring $true
-  #Uninstall-WindowsFeature -Name 'Windows-Defender'
+  # Windows Defender periodically consumes 100% of the CPU, so disable realtime
+  # scanning.
+  # TODO(pjh): do we need to reboot the node in order to fully disable the
+  # Windows Defender service?
+  Log-Output "Disabling Windows Defender service"
+  Set-MpPreference -DisableRealtimeMonitoring $true
+  Uninstall-WindowsFeature -Name 'Windows-Defender'
 
   # Use TLS 1.2: needed for Invoke-WebRequest downloads from github.com.
   [Net.ServicePointManager]::SecurityProtocol = `
