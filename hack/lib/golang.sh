@@ -208,7 +208,10 @@ kube::golang::setup_platforms() {
   elif [[ "${KUBE_FASTBUILD:-}" == "true" ]]; then
     KUBE_SERVER_PLATFORMS=(linux/amd64)
     readonly KUBE_SERVER_PLATFORMS
-    KUBE_NODE_PLATFORMS=(linux/amd64)
+    KUBE_NODE_PLATFORMS=(
+      linux/amd64
+      windows/amd64
+    )
     readonly KUBE_NODE_PLATFORMS
     if [[ "${KUBE_BUILDER_OS:-}" == "darwin"* ]]; then
       KUBE_TEST_PLATFORMS=(
@@ -224,7 +227,10 @@ kube::golang::setup_platforms() {
     else
       KUBE_TEST_PLATFORMS=(linux/amd64)
       readonly KUBE_TEST_PLATFORMS
-      KUBE_CLIENT_PLATFORMS=(linux/amd64)
+      KUBE_CLIENT_PLATFORMS=(
+        linux/amd64
+        windows/amd64
+      )
       readonly KUBE_CLIENT_PLATFORMS
     fi
   else
